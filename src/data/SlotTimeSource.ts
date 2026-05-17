@@ -340,7 +340,13 @@ export class SlotTimeSource implements DataSource {
     });
 
     socket.on('race:stats-snapshot', (snap: RaceStatsSnapshot) => {
-      for (const l of this.snapshotListeners) l(snap);
+      // Enriquecemos con la baseUrl del servidor para que el cliente
+      // pueda reconstruir URLs (ej. la del Excel comparativa) más tarde.
+      const enriched: RaceStatsSnapshot = {
+        ...snap,
+        serverBaseUrl: `http://${this.server.host}:${this.server.port}`,
+      };
+      for (const l of this.snapshotListeners) l(enriched);
     });
   }
 

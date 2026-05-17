@@ -2,8 +2,12 @@
 // participante). Lee del store local — no necesita servidor online.
 
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View,
+} from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Directory, File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 import { getSnapshot } from '../data/historyStore';
 import type { RaceStatsSnapshot } from '../data/types';
@@ -33,10 +37,36 @@ function formatDate(iso: string | null | undefined): string {
 export default function HistoryDetailScreen({ route }: Props) {
   const { raceId } = route.params;
   const [snap, setSnap] = useState<RaceStatsSnapshot | null | undefined>(undefined);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     getSnapshot(raceId).then(setSnap);
   }, [raceId]);
+
+  async function downloadExcel() {
+    if (!snap?.excelPath || !snap.serverBaseUrl) return;
+    setDownloading(true);
+    try {
+      const url = `${snap.serverBaseUrl}${snap.excelPath}`;
+      const filename = `${(snap.name || 'carrera').replace(/[^\w-]+/g, '_')}.xlsx`;
+      const dir = new Directory(Paths.cache);
+      const file = await File.downloadFileAsync(url, new File(dir, filename));
+      const can = await Sharing.isAvailableAsync();
+      if (!can) {
+        Alert.alert('Compartir no disponible', 'Tu dispositivo no soporta compartir archivos.');
+        return;
+      }
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        dialogTitle: snap.name,
+        UTI: 'org.openxmlformats.spreadsheetml.sheet',
+      });
+    } catch (e) {
+      Alert.alert('Error', (e as Error)?.message ?? String(e));
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (snap === undefined) {
     return (
@@ -62,6 +92,18 @@ export default function HistoryDetailScreen({ route }: Props) {
       <Text style={styles.subtitle}>
         {snap.format === 'team' ? 'Por equipos' : 'Individual'} · {formatDate(snap.finishedAt)}
       </Text>
+
+      {snap.excelPath && snap.serverBaseUrl && (
+        <TouchableOpacity
+          style={[styles.excelBtn, downloading && styles.excelBtnDisabled]}
+          onPress={downloadExcel}
+          disabled={downloading}
+        >
+          <Text style={styles.excelBtnText}>
+            {downloading ? 'Descargando…' : 'Descargar Excel comparativa'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <FlatList
         data={snap.standings}
@@ -101,4 +143,11 @@ const styles = StyleSheet.create({
   pos:     { color: '#f6c90e', fontSize: 22, fontWeight: '800' },
   rowName: { color: '#fff', fontSize: 17, fontWeight: '600' },
   rowMeta: { color: '#9aa3ad', fontSize: 12, marginTop: 4 },
+
+  excelBtn: {
+    marginTop: 16, paddingVertical: 12, paddingHorizontal: 16,
+    backgroundColor: '#1f5f2a', borderRadius: 8, alignItems: 'center',
+  },
+  excelBtnDisabled: { opacity: 0.5 },
+  excelBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

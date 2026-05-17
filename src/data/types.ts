@@ -111,6 +111,12 @@ export interface RaceStatsSnapshot {
   format: 'team' | 'individual';
   startedAt: string;
   finishedAt: string;
+  /** Ruta relativa al export Excel (combinar con la baseUrl del server). */
+  excelPath?: string;
+  /** Sólo se rellena en cliente al persistir: la baseUrl del servidor del
+   *  que vino el snapshot, para poder reconstruir la URL del Excel
+   *  después aunque cambies de servidor. */
+  serverBaseUrl?: string;
   standings: {
     position: number;
     entityId: number | string;
