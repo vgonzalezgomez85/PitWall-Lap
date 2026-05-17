@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "slotime-mobile",
-    "slug": "slotime-mobile",
+    "name": "Voltrace Lap",
+    "slug": "slot-timer-pro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +13,17 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "SlotTime se conecta al cronómetro de tu pista (DS-300 o InfoLap) en la WiFi local para mostrar los tiempos en vivo.",
+        "NSBonjourServices": [
+          "_voltrace-manager._tcp"
+        ],
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      },
+      "bundleIdentifier": "com.anonymous.slot-timer-pro"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,6 +34,9 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-audio"
+    ]
   }
 }

@@ -1,0 +1,204 @@
+// Contrato común entre las dos fuentes de datos de la app (SlotTime e
+// Infolap). La UI consume DataSource sin saber qué fuente está detrás.
+//
+// Cada fuente publica:
+//   • un objeto RaceInfo estático tras conectar (lista de participantes
+//     para el selector)
+//   • un stream de LiveState (snapshot del estado actual del piloto)
+//   • un stream de SourceEvent (eventos discretos: vuelta cerrada, cambio
+//     de posición, último minuto, etc.) que alimenta la capa de voz
+//
+// La capacidad de cada fuente difiere; ver `SourceCapabilities` y la
+// matriz documentada en project_slottime_mobile.md.
+
+export type SourceKind = 'slottime' | 'infolap';
+
+export interface Participant {
+  /** SlotTime: team.id o driver.id; Infolap: el código `#001..#999`. */
+  id: string;
+  name: string;
+  /** Color UI. SlotTime lo expone; Infolap no → undefined. */
+  color?: string;
+}
+
+export interface ParticipantPlan extends Participant {
+  /** Plan completo de mangas (sólo SlotTime). */
+  mangas: {
+    tandaNum: number;
+    mangaNum: number;
+    lane: number;
+    isRest: boolean;
+  }[];
+}
+
+export interface RaceInfo {
+  source: SourceKind;
+  /** Nombre legible de la carrera (SlotTime) o "InfoLap" si no hay otro. */
+  name: string;
+  /** Formato. Infolap se mapea siempre a 'individual'. */
+  format: 'team' | 'individual';
+  participants: Participant[];
+  /** Sólo SlotTime: planning completo por participante. */
+  participantsPlan?: ParticipantPlan[];
+  capabilities: SourceCapabilities;
+}
+
+/** Qué señales puede entregar cada fuente. La UI/voz se degrada según esto. */
+export interface SourceCapabilities {
+  lapTimes: boolean;          // tiempo de cada vuelta
+  positions: boolean;         // posición + cambios
+  gaps: boolean;              // gap delante/detrás
+  raceTimeRemaining: boolean; // último minuto / 30 s
+  laneAverages: boolean;      // media de carril / proyectada
+  multiMangaPlan: boolean;    // planning entre mangas
+  history: boolean;           // carreras pasadas
+}
+
+/** Estado actual del piloto seleccionado. */
+export interface LiveState {
+  status:
+    | 'pre-race'         // aún no empezó ninguna manga
+    | 'my-turn'          // estoy corriendo ahora
+    | 'resting'          // mi turno descansa esta manga
+    | 'race-finished'    // carrera completa
+    | 'disconnected';    // perdimos contacto con el servidor
+
+  myLane: number | null;
+  lapCount: number;
+  lastLapMs: number | null;
+  bestLapMs: number | null;
+  avgLapMs: number | null;        // sólo SlotTime
+  position: number | null;        // sólo SlotTime
+  totalParticipants: number | null;
+  remainingMs: number | null;     // sólo SlotTime
+  gapAheadMs: number | null;      // sólo SlotTime (calculado en cliente)
+  gapBehindMs: number | null;
+  aheadName: string | null;
+  behindName: string | null;
+  currentMangaNum: number | null;
+  /** Si estoy en descanso, info de mi próxima manga. */
+  nextMangaInfo?: { mangaNum: number; lane: number };
+}
+
+/** Eventos discretos. La capa de voz los traduce a locuciones. */
+export type SourceEvent =
+  | { type: 'lap-completed';     lapTimeMs: number | null; lapCount: number }
+  | { type: 'position-changed';  from: number; to: number }
+  | { type: 'race-started' }
+  | { type: 'last-minute' }
+  | { type: 'last-30s' }
+  | { type: 'race-finished' }
+  | { type: 'manga-changed';     newMangaNum: number; newLane: number | null }
+  // Sólo SlotTime: vuelta cuyo tiempo era < Pt (mínimo). El servidor
+  // intenta reasignar automáticamente al carril "overdue" más probable.
+  | { type: 'lap-ghost';         lane: number; lapTimeMs: number }
+  // Sólo SlotTime: vuelta fantasma se ha transferido a otro carril.
+  // Si `toLane === myLane` mi propio contador acaba de incrementarse.
+  | { type: 'lap-reassigned';    fromLane: number; toLane: number; lapTimeMs: number }
+  | { type: 'connection-lost' }
+  | { type: 'connection-restored' };
+
+/**
+ * Dossier completo de estadísticas que el servidor SlotTime empuja al cliente
+ * cuando una carrera entera termina (todas las mangas completadas). La app
+ * persiste esto en AsyncStorage para que el histórico funcione offline.
+ *
+ * Sólo SlotTime emite snapshots. Infolap nunca llamará al callback.
+ */
+export interface RaceStatsSnapshot {
+  raceId: number | string;
+  name: string;
+  format: 'team' | 'individual';
+  startedAt: string;
+  finishedAt: string;
+  standings: {
+    position: number;
+    entityId: number | string;
+    entityType: 'team' | 'driver';
+    name: string;
+    color?: string;
+    totalLaps: number;
+    bestLapMs: number | null;
+    avgLapMs: number | null;
+    totalTimeMs: number | null;
+    mangasRaced: number;
+  }[];
+  // Opcional v1: detalle por manga. Puede llegar luego en v1.1.
+  mangas?: {
+    mangaNum: number;
+    tandaNum: number;
+    durationMs: number;
+    laneResults: {
+      lane: number;
+      entityName: string;
+      laps: number;
+      bestLapMs: number | null;
+    }[];
+  }[];
+}
+
+export interface DataSource {
+  readonly kind: SourceKind;
+
+  /** Conecta y devuelve la info estática de la sesión. */
+  connect(): Promise<RaceInfo>;
+
+  /** Cierra el socket / UDP, limpia listeners. */
+  disconnect(): void;
+
+  /** El usuario eligió un participante; la fuente filtra eventos para él. */
+  selectParticipant(id: string): void;
+
+  /** Suscribirse al stream de estado. Devuelve función de unsubscribe. */
+  onStateChange(cb: (state: LiveState) => void): () => void;
+
+  /** Suscribirse al stream de eventos discretos. */
+  onEvent(cb: (event: SourceEvent) => void): () => void;
+
+  /**
+   * Recibe el dossier final cuando termina la carrera. Sólo SlotTime emite
+   * snapshots; Infolap nunca llama al callback. La UI guarda el snapshot en
+   * el histórico local.
+   */
+  onRaceStatsSnapshot(cb: (snapshot: RaceStatsSnapshot) => void): () => void;
+}
+
+/** Helper: construir el snapshot vacío inicial. */
+export function emptyLiveState(): LiveState {
+  return {
+    status: 'pre-race',
+    myLane: null,
+    lapCount: 0,
+    lastLapMs: null,
+    bestLapMs: null,
+    avgLapMs: null,
+    position: null,
+    totalParticipants: null,
+    remainingMs: null,
+    gapAheadMs: null,
+    gapBehindMs: null,
+    aheadName: null,
+    behindName: null,
+    currentMangaNum: null,
+  };
+}
+
+export const SLOTTIME_CAPABILITIES: SourceCapabilities = {
+  lapTimes: true,
+  positions: true,
+  gaps: true,
+  raceTimeRemaining: true,
+  laneAverages: true,
+  multiMangaPlan: true,
+  history: true,
+};
+
+export const INFOLAP_CAPABILITIES: SourceCapabilities = {
+  lapTimes: true,
+  positions: false,
+  gaps: false,
+  raceTimeRemaining: false,
+  laneAverages: false,
+  multiMangaPlan: false,
+  history: false,
+};
