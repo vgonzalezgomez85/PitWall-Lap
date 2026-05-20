@@ -87,11 +87,10 @@ public class BackgroundTtsModule: Module {
     do {
       let player = try AVAudioPlayer(contentsOf: url)
       player.numberOfLoops = -1  // infinite
-      // Volumen 0.5 a 40 Hz amplitud 0.05 — perceptible muy bajo como
-      // zumbido grave si el iPhone está pegado al oído, inaudible en
-      // bolsillo o sobre mesa. iOS lo ve como reproducción "real" y NO
-      // suspende la app en background.
-      player.volume = 0.5
+      // Silencio total. iOS sigue considerando la sesión "playback"
+      // activa mientras el player esté en loop, así que la app no se
+      // suspende en background aunque las muestras sean 0.
+      player.volume = 0.0
       player.prepareToPlay()
       player.play()
       self.keepAlivePlayer = player
@@ -135,16 +134,13 @@ public class BackgroundTtsModule: Module {
     writeStr("data")
     writeU32(UInt32(dataSize))
 
-    // Tono senoidal de 40Hz, amplitud 0.05 (escalado a int16)
-    let amplitude = Double(Int16.max) * 0.05
-    for i in 0..<numSamples {
-      let t = Double(i) / Double(sampleRate)
-      let v = Int16(amplitude * sin(2.0 * .pi * 40.0 * t))
-      var le = v.littleEndian
+    // Silencio puro: todas las muestras a 0.
+    for _ in 0..<numSamples {
+      var le: Int16 = 0
       withUnsafeBytes(of: &le) { data.append(contentsOf: $0) }
     }
 
-    let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("bgtts-silent.wav")
+    let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("bgtts-silent-v2.wav")
     do {
       try data.write(to: url)
       return url

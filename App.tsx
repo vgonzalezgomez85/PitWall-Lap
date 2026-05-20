@@ -15,6 +15,8 @@ import SelectScreen      from './src/screens/SelectScreen';
 import MyTurnScreen      from './src/screens/MyTurnScreen';
 import HistoryScreen     from './src/screens/HistoryScreen';
 import HistoryDetailScreen from './src/screens/HistoryDetailScreen';
+import TrainingScreen     from './src/screens/TrainingScreen';
+import StintDetailScreen  from './src/screens/StintDetailScreen';
 import type { RootStackParamList } from './src/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -41,6 +43,8 @@ function AppInner() {
         <Stack.Screen name="MyTurn"        component={MyTurnScreen} />
         <Stack.Screen name="History"       component={HistoryScreen} />
         <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
+        <Stack.Screen name="Training"      component={TrainingScreen} />
+        <Stack.Screen name="StintDetail"   component={StintDetailScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

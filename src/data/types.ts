@@ -33,6 +33,8 @@ export interface ParticipantPlan extends Participant {
 
 export interface RaceInfo {
   source: SourceKind;
+  /** 'training' cuando la fuente SlotTime corre en modo entrenamiento. */
+  mode?: 'race' | 'training';
   /** Nombre legible de la carrera (SlotTime) o "InfoLap" si no hay otro. */
   name: string;
   /** Formato. Infolap se mapea siempre a 'individual'. */

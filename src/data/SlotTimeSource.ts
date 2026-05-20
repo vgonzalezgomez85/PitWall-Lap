@@ -211,6 +211,7 @@ export class SlotTimeSource implements DataSource {
 
     return {
       source: 'slottime',
+      mode: 'training',
       name: 'Entrenamiento',
       format: 'individual',
       participants: this.participants.map(p => ({ id: p.id, name: p.name, color: p.color })),

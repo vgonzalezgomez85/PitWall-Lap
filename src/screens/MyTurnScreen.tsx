@@ -3,10 +3,16 @@
 // La voz se activa con `useVoice()` y se controla en vivo con los botones
 // inferiores. Los toggles son persistentes (AsyncStorage).
 
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useState } from 'react';
+import {
+  Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useDataSource } from '../data/sourceContext';
+import { useStintRecorder } from '../data/useStintRecorder';
+import { saveStint, type StintSetup } from '../data/trainingStore';
 import { useVoice } from '../voice/useVoice';
 import type { VoiceSettings } from '../voice/settings';
 import BackButton from '../ui/BackButton';
@@ -34,8 +40,42 @@ export default function MyTurnScreen(_props: Props) {
   void _props;
   const { state, raceInfo } = useDataSource();
   const { settings, toggle } = useVoice();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const isSlotTime = raceInfo?.source === 'slottime';
+  const isTraining = raceInfo?.mode === 'training';
+
+  // Grabación de stints (solo modo entrenamiento).
+  const recorder = useStintRecorder();
+  const [pending, setPending] = useState<number[] | null>(null);
+  const [setup, setSetup] = useState<StintSetup>({});
+
+  const recLaps = recorder.laps;
+  const recBest = recLaps.length ? Math.min(...recLaps) : null;
+  const recAvg = recLaps.length
+    ? Math.round(recLaps.reduce((a, b) => a + b, 0) / recLaps.length)
+    : null;
+
+  function onStop() {
+    const laps = recorder.stop();
+    if (laps.length === 0) {
+      Alert.alert('Stint vacío', 'No se registró ninguna vuelta. Nada que guardar.');
+      return;
+    }
+    setSetup({});
+    setPending(laps);
+  }
+
+  async function confirmSave() {
+    if (!pending) return;
+    const n = pending.length;
+    await saveStint(pending, state.myLane ?? null, setup);
+    setPending(null);
+    Alert.alert('Stint guardado', `${n} ${n === 1 ? 'vuelta' : 'vueltas'} guardadas.`, [
+      { text: 'Ver entrenamientos', onPress: () => navigation.push('Training') },
+      { text: 'OK', style: 'cancel' },
+    ]);
+  }
 
   // ── Vista de descanso ──────────────────────────────────────────────────
   // Cuando el piloto seleccionado NO corre en la manga actual (status
@@ -116,6 +156,40 @@ export default function MyTurnScreen(_props: Props) {
         </View>
       )}
 
+      {/* ── Entreno GO (solo modo entrenamiento) ───────────────────────── */}
+      {isTraining && (
+        <>
+          <Text style={styles.section}>Registro de entrenamiento</Text>
+          <Pressable
+            onPress={() => (recorder.recording ? onStop() : recorder.start())}
+            style={[styles.goBtn, recorder.recording ? styles.goBtnStop : styles.goBtnStart]}
+          >
+            <Text style={styles.goBtnText}>
+              {recorder.recording ? '■  Detener y guardar' : '▶  Entreno GO'}
+            </Text>
+          </Pressable>
+          {recorder.recording && (
+            <View style={styles.row}>
+              <View style={styles.col}>
+                <Text style={styles.label}>Vueltas</Text>
+                <Text style={styles.medTime}>{recLaps.length}</Text>
+              </View>
+              <View style={styles.col}>
+                <Text style={styles.label}>Mejor</Text>
+                <Text style={styles.medTime}>{fmt(recBest)}</Text>
+              </View>
+              <View style={styles.col}>
+                <Text style={styles.label}>Media</Text>
+                <Text style={styles.medTime}>{fmt(recAvg)}</Text>
+              </View>
+            </View>
+          )}
+          <Pressable style={styles.linkBtn} onPress={() => navigation.push('Training')}>
+            <Text style={styles.linkBtnText}>Ver mis entrenamientos</Text>
+          </Pressable>
+        </>
+      )}
+
       {/* ── Voice toggles ──────────────────────────────────────────────── */}
       <Text style={styles.section}>Voz</Text>
       <View style={styles.togglesRow}>
@@ -133,7 +207,75 @@ export default function MyTurnScreen(_props: Props) {
           </>
         )}
       </View>
+
+      {/* ── Modal: datos del stint al detener ──────────────────────────── */}
+      <Modal
+        visible={pending != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPending(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Guardar stint</Text>
+            <Text style={styles.modalSub}>
+              {pending?.length ?? 0} vueltas · datos del coche (opcionales)
+            </Text>
+            <SetupField
+              label="Modelo de coche"
+              value={setup.carModel}
+              onChange={v => setSetup(s => ({ ...s, carModel: v }))}
+            />
+            <SetupField
+              label="Motor"
+              value={setup.motor}
+              onChange={v => setSetup(s => ({ ...s, motor: v }))}
+            />
+            <SetupField
+              label="Neumático"
+              value={setup.tire}
+              onChange={v => setSetup(s => ({ ...s, tire: v }))}
+            />
+            <SetupField
+              label="Medida de llanta"
+              value={setup.rim}
+              onChange={v => setSetup(s => ({ ...s, rim: v }))}
+            />
+            <View style={styles.modalBtns}>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnGhost]}
+                onPress={() => setPending(null)}
+              >
+                <Text style={styles.modalBtnGhostText}>Descartar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={confirmSave}
+              >
+                <Text style={styles.modalBtnPrimaryText}>Guardar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
+  );
+}
+
+function SetupField({
+  label, value, onChange,
+}: { label: string; value?: string; onChange: (v: string) => void }) {
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={value ?? ''}
+        onChangeText={onChange}
+        placeholder="—"
+        placeholderTextColor="#4a525e"
+      />
+    </View>
   );
 }
 
@@ -187,4 +329,32 @@ const styles = StyleSheet.create({
   // Vista de descanso
   restTitle: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 4 },
   restSub:   { color: '#9aa3ad', fontSize: 14, marginTop: 8 },
+
+  // Entreno GO
+  goBtn: { paddingVertical: 18, borderRadius: 10, alignItems: 'center' },
+  goBtnStart: { backgroundColor: '#1f5f2a' },
+  goBtnStop:  { backgroundColor: '#7a2230' },
+  goBtnText:  { color: '#fff', fontSize: 18, fontWeight: '800' },
+  linkBtn: { marginTop: 14, paddingVertical: 8, alignItems: 'center' },
+  linkBtnText: { color: '#f6c90e', fontSize: 14, fontWeight: '600' },
+
+  // Modal de guardado
+  modalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center', padding: 24,
+  },
+  modalCard: { backgroundColor: '#141923', borderRadius: 12, padding: 20 },
+  modalTitle: { color: '#f6c90e', fontSize: 20, fontWeight: '800' },
+  modalSub: { color: '#9aa3ad', fontSize: 13, marginTop: 4 },
+  input: {
+    marginTop: 4, backgroundColor: '#0a0d13', borderRadius: 8,
+    borderWidth: 1, borderColor: '#3a4350',
+    color: '#fff', fontSize: 16, paddingHorizontal: 12, paddingVertical: 10,
+  },
+  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  modalBtnGhost: { borderWidth: 1, borderColor: '#3a4350' },
+  modalBtnGhostText: { color: '#cfd5dc', fontSize: 15, fontWeight: '600' },
+  modalBtnPrimary: { backgroundColor: '#f6c90e' },
+  modalBtnPrimaryText: { color: '#0a0d13', fontSize: 15, fontWeight: '700' },
 });

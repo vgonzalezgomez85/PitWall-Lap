@@ -151,6 +151,12 @@ export default function DiscoveryScreen({ navigation }: Props) {
         >
           <Text style={styles.historyLinkText}>Ver carreras pasadas</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.historyLink}
+          onPress={() => navigation.push('Training')}
+        >
+          <Text style={styles.historyLinkText}>Mis entrenamientos</Text>
+        </TouchableOpacity>
       </View>
     );
   }

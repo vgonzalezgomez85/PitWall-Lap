@@ -41,8 +41,15 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       case 'lap-completed': {
         if (!s.sayLaps) return;
         const t = speakTime(e.lapTimeMs);
-        console.log('[Voice] speak: Vuelta', e.lapCount, t);
-        speak(`Vuelta ${e.lapCount}, ${t}`);
+        const ms = e.lapTimeMs;
+        const prevBest = bestLapRef.current;
+        const isFastest =
+          ms != null && e.lapCount > 1 && (prevBest == null || ms < prevBest);
+        if (ms != null && (prevBest == null || ms < prevBest)) {
+          bestLapRef.current = ms;
+        }
+        console.log('[Voice] speak lap:', e.lapCount, t, isFastest ? '(rápida)' : '');
+        speak(isFastest ? `Vuelta rápida, ${t}` : t);
         break;
       }
       case 'position-changed': {
@@ -58,6 +65,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         if (s.sayLast30s) speak('Últimos treinta segundos');
         break;
       case 'manga-changed':
+        bestLapRef.current = null;
         if (e.newLane != null) speak(`Tu turno, carril ${e.newLane}`);
         break;
       case 'race-finished':
@@ -108,6 +116,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   // minuto (el ticker corre cada 5s).
   const lastAvgMinuteRef = useRef<number>(-1);
   const lastGapMinuteRef = useRef<number>(-1);
+  const bestLapRef       = useRef<number | null>(null);
 
   // El keep-alive en background lo hace el módulo nativo `BackgroundTts`
   // vía AVAudioEngine (loop infinito de ruido inaudible). Aquí solo
@@ -120,6 +129,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   useEffect(() => {
     lastAvgMinuteRef.current = -1;
     lastGapMinuteRef.current = -1;
+    bestLapRef.current = null;
   }, [raceInfo?.source]);
 
   return { settings, toggle, update, ready };
