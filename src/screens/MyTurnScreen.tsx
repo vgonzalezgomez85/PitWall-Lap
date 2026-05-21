@@ -38,12 +38,24 @@ function fmtRemaining(ms: number | null): string {
 
 export default function MyTurnScreen(_props: Props) {
   void _props;
-  const { state, raceInfo } = useDataSource();
+  const { state, raceInfo, source } = useDataSource();
   const { settings, toggle } = useVoice();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const isSlotTime = raceInfo?.source === 'slottime';
+  const isInfolap = raceInfo?.source === 'infolap';
   const isTraining = raceInfo?.mode === 'training';
+
+  // Seguimiento de rival (solo InfoLap).
+  const [rivalPickerOpen, setRivalPickerOpen] = useState(false);
+  const rivalChoices = (raceInfo?.participants ?? []).filter(
+    (_p, i) => i + 1 !== state.myLane,
+  );
+
+  function pickRival(id: string | null) {
+    source?.setRival?.(id);
+    setRivalPickerOpen(false);
+  }
 
   // Grabación de stints (solo modo entrenamiento).
   const recorder = useStintRecorder();
@@ -156,6 +168,39 @@ export default function MyTurnScreen(_props: Props) {
         </View>
       )}
 
+      {/* ── Seguir a otro piloto (solo InfoLap) ────────────────────────── */}
+      {isInfolap && (
+        <>
+          <Text style={styles.section}>Seguir a otro piloto</Text>
+          {state.rivalName ? (
+            <View style={styles.block}>
+              <Text style={styles.label}>Siguiendo a</Text>
+              <Text style={styles.medTime}>{state.rivalName}</Text>
+              <Text style={[styles.label, { marginTop: 12 }]}>Gap estimado</Text>
+              <Text style={styles.medTime}>
+                {state.rivalGapMs == null
+                  ? '—'
+                  : state.rivalGapMs >= 0
+                    ? `+${fmt(state.rivalGapMs)} por delante`
+                    : `−${fmt(-state.rivalGapMs)} por detrás`}
+              </Text>
+              <View style={styles.rivalBtns}>
+                <Pressable style={styles.rivalBtn} onPress={() => setRivalPickerOpen(true)}>
+                  <Text style={styles.rivalBtnText}>Cambiar</Text>
+                </Pressable>
+                <Pressable style={styles.rivalBtn} onPress={() => pickRival(null)}>
+                  <Text style={styles.rivalBtnText}>Dejar de seguir</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable style={styles.followBtn} onPress={() => setRivalPickerOpen(true)}>
+              <Text style={styles.followBtnText}>Elegir piloto a seguir</Text>
+            </Pressable>
+          )}
+        </>
+      )}
+
       {/* ── Entreno GO (solo modo entrenamiento) ───────────────────────── */}
       {isTraining && (
         <>
@@ -258,6 +303,45 @@ export default function MyTurnScreen(_props: Props) {
           </View>
         </View>
       </Modal>
+
+      {/* ── Modal: elegir piloto a seguir ──────────────────────────────── */}
+      <Modal
+        visible={rivalPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRivalPickerOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Piloto a seguir</Text>
+            <Text style={styles.modalSub}>
+              Te avisaremos cada minuto y medio si te acercas o te alejas.
+            </Text>
+            {rivalChoices.length === 0 ? (
+              <Text style={[styles.modalSub, { marginTop: 16 }]}>
+                No hay otros pilotos disponibles.
+              </Text>
+            ) : (
+              rivalChoices.map(p => (
+                <Pressable
+                  key={p.id}
+                  style={styles.rivalPick}
+                  onPress={() => pickRival(p.id)}
+                >
+                  <View style={[styles.rivalDot, { backgroundColor: p.color ?? '#8b949e' }]} />
+                  <Text style={styles.rivalPickText}>{p.name}</Text>
+                </Pressable>
+              ))
+            )}
+            <Pressable
+              style={[styles.modalBtn, styles.modalBtnGhost, { marginTop: 16 }]}
+              onPress={() => setRivalPickerOpen(false)}
+            >
+              <Text style={styles.modalBtnGhostText}>Cerrar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -357,4 +441,23 @@ const styles = StyleSheet.create({
   modalBtnGhostText: { color: '#cfd5dc', fontSize: 15, fontWeight: '600' },
   modalBtnPrimary: { backgroundColor: '#f6c90e' },
   modalBtnPrimaryText: { color: '#0a0d13', fontSize: 15, fontWeight: '700' },
+
+  // Seguir a otro piloto
+  followBtn: {
+    paddingVertical: 14, borderRadius: 10, alignItems: 'center',
+    borderWidth: 1, borderColor: '#3a4350',
+  },
+  followBtnText: { color: '#cfd5dc', fontSize: 15, fontWeight: '600' },
+  rivalBtns: { flexDirection: 'row', gap: 12, marginTop: 16 },
+  rivalBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center',
+    borderWidth: 1, borderColor: '#3a4350',
+  },
+  rivalBtnText: { color: '#cfd5dc', fontSize: 14, fontWeight: '600' },
+  rivalPick: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1c2330',
+  },
+  rivalDot: { width: 14, height: 14, borderRadius: 7 },
+  rivalPickText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

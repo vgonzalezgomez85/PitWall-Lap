@@ -117,6 +117,40 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         }
       }
 
+      // InfoLap: rival seguido — aviso de acercamiento cada minuto y medio.
+      if (st.rivalName && st.rivalGapMs != null) {
+        const now = Date.now();
+        // Si cambió el rival, reiniciamos la referencia.
+        if (rivalNameRef.current !== st.rivalName) {
+          rivalNameRef.current = st.rivalName;
+          rivalCheckMsRef.current = now;
+          rivalGapRef.current = st.rivalGapMs;
+        } else if (now - rivalCheckMsRef.current >= 90_000) {
+          const prev = rivalGapRef.current;
+          const curr = st.rivalGapMs;
+          rivalCheckMsRef.current = now;
+          rivalGapRef.current = curr;
+          if (prev != null) {
+            const ahead = curr >= 0;
+            const closing = Math.abs(curr) < Math.abs(prev);
+            const gapTxt = speakTime(Math.abs(curr));
+            if (Math.abs(Math.abs(curr) - Math.abs(prev)) < 50) {
+              speak(`Mantienes distancia con ${st.rivalName}, ${gapTxt}`);
+            } else if (ahead) {
+              speak(closing
+                ? `${st.rivalName} te recorta, a ${gapTxt}`
+                : `Te alejas de ${st.rivalName}, ${gapTxt}`);
+            } else {
+              speak(closing
+                ? `Te acercas a ${st.rivalName}, a ${gapTxt}`
+                : `${st.rivalName} se aleja, a ${gapTxt}`);
+            }
+          }
+        }
+      } else {
+        rivalNameRef.current = null;
+      }
+
       // Gaps: cada N minutos en punto.
       if (s.sayGapsEveryMin > 0 && minute % s.sayGapsEveryMin === 0) {
         if (lastGapMinuteRef.current !== minute) {
@@ -141,6 +175,11 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   const bestLapRef           = useRef<number | null>(null);
   // Tiempos de todas las vueltas del piloto en la manga/carrera actual.
   const raceLapsRef          = useRef<number[]>([]);
+  // Seguimiento del rival: nombre actual, instante del último aviso y
+  // gap medido en ese aviso (para comparar acercamiento/alejamiento).
+  const rivalNameRef         = useRef<string | null>(null);
+  const rivalCheckMsRef      = useRef<number>(0);
+  const rivalGapRef          = useRef<number | null>(null);
 
   // El keep-alive en background lo hace el módulo nativo `BackgroundTts`
   // vía AVAudioEngine (loop infinito de ruido inaudible). Aquí solo
@@ -156,6 +195,8 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
     lastRaceAvgMinuteRef.current = -1;
     bestLapRef.current = null;
     raceLapsRef.current = [];
+    rivalNameRef.current = null;
+    rivalGapRef.current = null;
   }, [raceInfo?.source]);
 
   return { settings, toggle, update, ready };

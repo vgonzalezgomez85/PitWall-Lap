@@ -80,6 +80,14 @@ export interface LiveState {
   currentMangaNum: number | null;
   /** Si estoy en descanso, info de mi próxima manga. */
   nextMangaInfo?: { mangaNum: number; lane: number };
+
+  // ── Rival seguido (sólo InfoLap) ──────────────────────────────────────
+  /** Nombre del piloto que estoy siguiendo, o null si no sigo a nadie. */
+  rivalName?: string | null;
+  /** Gap estimado al rival en ms. >0 = voy por delante, <0 = voy detrás. */
+  rivalGapMs?: number | null;
+  /** Vueltas completadas por el rival. */
+  rivalLapCount?: number | null;
 }
 
 /** Eventos discretos. La capa de voz los traduce a locuciones. */
@@ -157,6 +165,12 @@ export interface DataSource {
   /** El usuario eligió un participante; la fuente filtra eventos para él. */
   selectParticipant(id: string): void;
 
+  /**
+   * Sólo InfoLap: seguir a otro piloto para los avisos de acercamiento.
+   * `null` deja de seguir a nadie. Otras fuentes no lo implementan.
+   */
+  setRival?(id: string | null): void;
+
   /** Suscribirse al stream de estado. Devuelve función de unsubscribe. */
   onStateChange(cb: (state: LiveState) => void): () => void;
 
@@ -188,6 +202,9 @@ export function emptyLiveState(): LiveState {
     aheadName: null,
     behindName: null,
     currentMangaNum: null,
+    rivalName: null,
+    rivalGapMs: null,
+    rivalLapCount: null,
   };
 }
 

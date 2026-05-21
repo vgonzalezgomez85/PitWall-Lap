@@ -133,8 +133,13 @@ export class InfolapSource implements DataSource {
   private laneLapCount = new Map<number, number>();
   /** lane → nombre del piloto (de los paquetes de estado). */
   private laneName = new Map<number, string>();
+  /** lane → suma de todos los tiempos de vuelta vistos (para la media). */
+  private laneSumMs = new Map<number, number>();
   /** participantes resueltos en el discovery, en orden. */
   private participants: Participant[] = [];
+
+  /** Carril del rival que se está siguiendo, o null. */
+  private rivalLane: number | null = null;
 
   constructor(opts: InfolapOptions = {}) {
     this.opts = opts;
@@ -235,6 +240,8 @@ export class InfolapSource implements DataSource {
     this.laneLastSeq.clear();
     this.laneLapCount.clear();
     this.laneName.clear();
+    this.laneSumMs.clear();
+    this.rivalLane = null;
   }
 
   selectParticipant(id: string): void {
@@ -243,6 +250,8 @@ export class InfolapSource implements DataSource {
     // el índice del participante elegido y usamos lane = idx + 1.
     const idx = this.participants.findIndex(p => p.id === id);
     this.selectedLane = idx >= 0 ? idx + 1 : null;
+    // Al cambiar de piloto propio dejamos de seguir al rival anterior.
+    this.rivalLane = null;
     // Resetear estado: ahora pintamos sólo lo del carril seleccionado.
     const lapCount = this.laneLapCount.get(this.selectedLane ?? -1) ?? 0;
     const lastLapMs = this.laneLastMs.get(this.selectedLane ?? -1) ?? null;
@@ -258,6 +267,56 @@ export class InfolapSource implements DataSource {
     };
     void myName;
     this.emitState();
+  }
+
+  /** Seguir (o dejar de seguir) a otro piloto para los avisos de gap. */
+  setRival(id: string | null): void {
+    if (id == null) {
+      this.rivalLane = null;
+    } else {
+      const idx = this.participants.findIndex(p => p.id === id);
+      this.rivalLane = idx >= 0 ? idx + 1 : null;
+    }
+    this.applyRivalToState();
+    this.emitState();
+  }
+
+  /** Media de los tiempos de vuelta vistos para un carril, o null. */
+  private laneAvgMs(lane: number): number | null {
+    const count = this.laneLapCount.get(lane) ?? 0;
+    const sum = this.laneSumMs.get(lane) ?? 0;
+    return count > 0 ? sum / count : null;
+  }
+
+  /** Recalcula los campos del rival en `currentState` (sin emitir). */
+  private applyRivalToState(): void {
+    const myLane = this.selectedLane;
+    const rLane = this.rivalLane;
+    if (myLane == null || rLane == null) {
+      this.currentState = {
+        ...this.currentState,
+        rivalName: null, rivalGapMs: null, rivalLapCount: null,
+      };
+      return;
+    }
+    const myCount = this.laneLapCount.get(myLane) ?? 0;
+    const rivalCount = this.laneLapCount.get(rLane) ?? 0;
+    // Ritmo de referencia para traducir vueltas a tiempo: media de las
+    // medias disponibles; si aún no hay media, el último tiempo visto.
+    const paces = [this.laneAvgMs(myLane), this.laneAvgMs(rLane)]
+      .filter((p): p is number => p != null);
+    const pace: number | null = paces.length
+      ? paces.reduce((a, b) => a + b, 0) / paces.length
+      : (this.laneLastMs.get(myLane) ?? this.laneLastMs.get(rLane) ?? null);
+    const gapMs = pace != null ? (myCount - rivalCount) * pace : null;
+    const rivalName = this.laneName.get(rLane)
+      ?? this.participants[rLane - 1]?.name ?? `Carril ${rLane}`;
+    this.currentState = {
+      ...this.currentState,
+      rivalName,
+      rivalGapMs: gapMs,
+      rivalLapCount: rivalCount,
+    };
   }
 
   onStateChange(cb: (s: LiveState) => void): () => void {
@@ -327,6 +386,7 @@ export class InfolapSource implements DataSource {
     this.laneLastMs.set(pkt.lane, pkt.lastLapMs);
     const newCount = (this.laneLapCount.get(pkt.lane) ?? 0) + 1;
     this.laneLapCount.set(pkt.lane, newCount);
+    this.laneSumMs.set(pkt.lane, (this.laneSumMs.get(pkt.lane) ?? 0) + pkt.lastLapMs);
 
     if (this.selectedLane === pkt.lane) {
       const best = this.currentState.bestLapMs;
@@ -337,8 +397,13 @@ export class InfolapSource implements DataSource {
         lastLapMs: pkt.lastLapMs,
         bestLapMs: newBest,
       };
+      this.applyRivalToState();
       this.emitState();
       this.emitEvent({ type: 'lap-completed', lapTimeMs: pkt.lastLapMs, lapCount: newCount });
+    } else if (this.rivalLane === pkt.lane) {
+      // El rival ha cruzado: actualizar el gap aunque no sea mi carril.
+      this.applyRivalToState();
+      this.emitState();
     }
   }
 
