@@ -26,8 +26,10 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   // re-renders del callback).
   const settingsRef = useRef(settings);
   const stateRef    = useRef(state);
+  const isInfolapRef = useRef(false);
   settingsRef.current = settings;
   stateRef.current    = state;
+  isInfolapRef.current = raceInfo?.source === 'infolap';
 
   // ── Eventos discretos ──────────────────────────────────────────────────
   useSourceEvent(e => {
@@ -39,6 +41,8 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
 
     switch (e.type) {
       case 'lap-completed': {
+        // Acumular para la media de carrera (independiente de sayLaps).
+        if (e.lapTimeMs != null) raceLapsRef.current.push(e.lapTimeMs);
         if (!s.sayLaps) return;
         const t = speakTime(e.lapTimeMs);
         const ms = e.lapTimeMs;
@@ -66,6 +70,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         break;
       case 'manga-changed':
         bestLapRef.current = null;
+        raceLapsRef.current = [];
         if (e.newLane != null) speak(`Tu turno, carril ${e.newLane}`);
         break;
       case 'race-finished':
@@ -87,6 +92,22 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       const st = stateRef.current;
       if (!s.enabled || st.status !== 'my-turn') return;
       const minute = Math.floor((Date.now() / 1000) / 60);
+
+      // InfoLap: media acumulada de la carrera, cada minuto.
+      if (isInfolapRef.current && lastRaceAvgMinuteRef.current !== minute) {
+        // El primer tick solo fija el minuto base; así el primer aviso
+        // llega tras un minuto completo, no nada más entrar.
+        if (lastRaceAvgMinuteRef.current === -1) {
+          lastRaceAvgMinuteRef.current = minute;
+        } else {
+          lastRaceAvgMinuteRef.current = minute;
+          const laps = raceLapsRef.current;
+          if (laps.length > 0) {
+            const avg = laps.reduce((a, b) => a + b, 0) / laps.length;
+            speak(`Media de carrera ${speakTime(avg)}`);
+          }
+        }
+      }
 
       // Medias: cada N minutos en punto.
       if (s.sayAveragesEveryMin > 0 && minute % s.sayAveragesEveryMin === 0) {
@@ -114,9 +135,12 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
 
   // Refs para evitar disparar el mismo aviso varias veces dentro del mismo
   // minuto (el ticker corre cada 5s).
-  const lastAvgMinuteRef = useRef<number>(-1);
-  const lastGapMinuteRef = useRef<number>(-1);
-  const bestLapRef       = useRef<number | null>(null);
+  const lastAvgMinuteRef     = useRef<number>(-1);
+  const lastGapMinuteRef     = useRef<number>(-1);
+  const lastRaceAvgMinuteRef = useRef<number>(-1);
+  const bestLapRef           = useRef<number | null>(null);
+  // Tiempos de todas las vueltas del piloto en la manga/carrera actual.
+  const raceLapsRef          = useRef<number[]>([]);
 
   // El keep-alive en background lo hace el módulo nativo `BackgroundTts`
   // vía AVAudioEngine (loop infinito de ruido inaudible). Aquí solo
@@ -129,7 +153,9 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   useEffect(() => {
     lastAvgMinuteRef.current = -1;
     lastGapMinuteRef.current = -1;
+    lastRaceAvgMinuteRef.current = -1;
     bestLapRef.current = null;
+    raceLapsRef.current = [];
   }, [raceInfo?.source]);
 
   return { settings, toggle, update, ready };

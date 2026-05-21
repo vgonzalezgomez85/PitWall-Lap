@@ -59,7 +59,8 @@ export function fmtTime(ms: number | null): string {
 
 export function speakTime(ms: number | null): string {
   if (ms == null) return 'sin tiempo';
-  const totalCs = Math.round(ms / 10);
+  // Centésimas truncadas (no redondeadas): 8739ms → "8 con 73", no "8 con 74".
+  const totalCs = Math.floor(ms / 10);
   const s = Math.floor(totalCs / 100);
   const cs = totalCs % 100;
   if (cs === 0) return `${s} segundos`;
