@@ -33,14 +33,12 @@ const PROBE_TIMEOUT_MS  = 6000;
 
 // El Gestor de Carreras de Tic Tac Slot rechaza silenciosamente los probes
 // cuyo identificador `Cxxx` no coincide con el último octeto de la IP del
-// cliente. Calculamos el ID exacto a partir de la IP local
-// (vía expo-network); si por algún motivo no hay IP (web/sim), caemos a
-// brute force de los 254 IDs como fallback.
+// cliente. Calculamos el ID exacto a partir de la IP local (vía
+// expo-network) y enviamos un único probe — sin el ID correcto el Gestor
+// no responde.
 function buildProbe(lastOctet: number): Buffer {
   return Buffer.from(`InfoLap:C${String(lastOctet).padStart(3, '0')}`, 'ascii');
 }
-const BRUTE_FORCE_PROBES: Buffer[] = [];
-for (let i = 1; i <= 254; i++) BRUTE_FORCE_PROBES.push(buildProbe(i));
 
 // ── Parsers puros (testables sin red) ─────────────────────────────────────
 
@@ -123,9 +121,9 @@ export class InfolapSource implements DataSource {
   private socket: UdpSocket | null = null;
   private probeTimer: ReturnType<typeof setInterval> | null = null;
   private selectedLane: number | null = null;
-  /** Probes a enviar cada PROBE_INTERVAL_MS. Lista pequeña (1) si hemos
-   *  resuelto nuestra IP local; o lista completa de 254 si no. */
-  private probePayloads: Buffer[] = BRUTE_FORCE_PROBES;
+  /** Probe a enviar cada PROBE_INTERVAL_MS — un único `InfoLap:Cxxx`
+   *  construido a partir del último octeto de la IP local. */
+  private probePayloads: Buffer[] = [];
   private stateListeners: ((s: LiveState) => void)[] = [];
   private eventListeners: ((e: SourceEvent) => void)[] = [];
   private currentState: LiveState = emptyLiveState();
@@ -133,10 +131,9 @@ export class InfolapSource implements DataSource {
   /** lane → último tiempo visto (para detectar cuándo cambia). */
   private laneLastMs = new Map<number, number | null>();
   /** lane → última secuencia procesada. Sirve para deduplicar paquetes
-   *  duplicados (cuando el brute force genera 254 phantom clients y el
-   *  Gestor reenvía el mismo estado N veces) y para contar vueltas con
-   *  tiempo idéntico (cada vuelta nueva trae seq nuevo aunque el ms no
-   *  cambie). */
+   *  (el Gestor reenvía cada estado N veces — opción "Reenviar paquetes
+   *  de datos") y para contar vueltas con tiempo idéntico (cada vuelta
+   *  nueva trae seq nuevo aunque el ms no cambie). */
   private laneLastSeq = new Map<number, number>();
   /** lane → contador de vueltas que hemos visto cambiar. */
   private laneLapCount = new Map<number, number>();
@@ -162,10 +159,8 @@ export class InfolapSource implements DataSource {
   async connect(): Promise<RaceInfo> {
     console.log('[Infolap] connect() start');
 
-    // Detectar la IP local del dispositivo para mandar SÓLO el probe con
-    // el `Cxxx` que matcheará el filtro del Gestor — sin esto el server
-    // ve 254 phantom clients. Si no podemos detectarla (red rara, fallo),
-    // caemos a brute force.
+    // Detectar la IP local del dispositivo: el `Cxxx` del probe debe
+    // coincidir con su último octeto o el Gestor no responde.
     try {
       const ip = await Network.getIpAddressAsync();
       const lastOctet = parseInt(ip.split('.').pop() ?? '', 10);
@@ -173,10 +168,14 @@ export class InfolapSource implements DataSource {
         this.probePayloads = [buildProbe(lastOctet)];
         console.log('[Infolap] local IP', ip, '→ probe ID C' + String(lastOctet).padStart(3, '0'));
       } else {
-        console.log('[Infolap] could not parse last octet from IP', ip, '→ brute force');
+        console.log('[Infolap] could not parse last octet from IP', ip);
       }
     } catch (e) {
-      console.log('[Infolap] getIpAddressAsync failed → brute force:', e);
+      console.log('[Infolap] getIpAddressAsync failed:', e);
+    }
+
+    if (this.probePayloads.length === 0) {
+      throw new Error('infolap-no-local-ip');
     }
 
     return new Promise<RaceInfo>((resolve, reject) => {
@@ -451,7 +450,7 @@ export class InfolapSource implements DataSource {
     // Cada paquete del Gestor para un carril trae un sequence counter único.
     // Una vuelta nueva → sequence nuevo (aunque el tiempo en ms sea idéntico
     // al de la vuelta anterior). Paquetes con el mismo sequence son
-    // duplicados (resultado de los 254 phantom clients del brute force).
+    // duplicados (el Gestor reenvía cada estado N veces).
     const prevSeq = this.laneLastSeq.get(pkt.lane);
     if (prevSeq === pkt.sequence) return;   // duplicado → ignorar
     this.laneLastSeq.set(pkt.lane, pkt.sequence);
