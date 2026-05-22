@@ -82,6 +82,8 @@ export interface LiveState {
   nextMangaInfo?: { mangaNum: number; lane: number };
 
   // ── Rival seguido (sólo InfoLap) ──────────────────────────────────────
+  /** Nombre del piloto propio seleccionado. */
+  selfName?: string | null;
   /** Nombre del piloto que estoy siguiendo, o null si no sigo a nadie. */
   rivalName?: string | null;
   /** Gap estimado al rival en ms. >0 = voy por delante, <0 = voy detrás. */
@@ -202,6 +204,7 @@ export function emptyLiveState(): LiveState {
     aheadName: null,
     behindName: null,
     currentMangaNum: null,
+    selfName: null,
     rivalName: null,
     rivalGapMs: null,
     rivalLapCount: null,

@@ -140,6 +140,11 @@ export class InfolapSource implements DataSource {
 
   /** Carril del rival que se está siguiendo, o null. */
   private rivalLane: number | null = null;
+  /** Nombres del piloto propio y del rival. El carril real se resuelve
+   *  emparejando estos nombres con el `driverName` de los paquetes —
+   *  el orden de la lista de discovery NO coincide con el nº de carril. */
+  private selectedName: string | null = null;
+  private rivalSelectedName: string | null = null;
 
   constructor(opts: InfolapOptions = {}) {
     this.opts = opts;
@@ -242,30 +247,32 @@ export class InfolapSource implements DataSource {
     this.laneName.clear();
     this.laneSumMs.clear();
     this.rivalLane = null;
+    this.selectedName = null;
+    this.rivalSelectedName = null;
   }
 
   selectParticipant(id: string): void {
-    // En Infolap el id es "#NNN" y se asume que el orden de discovery
-    // corresponde 1:1 con los carriles (Piloto 1 → lane 1, etc.). Buscamos
-    // el índice del participante elegido y usamos lane = idx + 1.
-    const idx = this.participants.findIndex(p => p.id === id);
-    this.selectedLane = idx >= 0 ? idx + 1 : null;
+    // El nº de carril NO se corresponde con la posición del piloto en la
+    // lista de discovery. Resolvemos el carril real emparejando el nombre
+    // del piloto con el `driverName` de los paquetes de estado (puede que
+    // aún no haya llegado ninguno → se resuelve luego en ingestPacket).
+    const p = this.participants.find(x => x.id === id);
+    this.selectedName = p?.name ?? null;
+    this.selectedLane = this.laneForName(this.selectedName);
     // Al cambiar de piloto propio dejamos de seguir al rival anterior.
     this.rivalLane = null;
-    // Resetear estado: ahora pintamos sólo lo del carril seleccionado.
-    const lapCount = this.laneLapCount.get(this.selectedLane ?? -1) ?? 0;
-    const lastLapMs = this.laneLastMs.get(this.selectedLane ?? -1) ?? null;
-    const myName = this.participants.find(p => p.id === id)?.name ?? null;
+    this.rivalSelectedName = null;
+    const lane = this.selectedLane;
     this.currentState = {
       ...emptyLiveState(),
       status: 'my-turn',
-      myLane: this.selectedLane,
-      lapCount,
-      lastLapMs,
+      myLane: lane,
+      selfName: this.selectedName,
+      lapCount: lane != null ? this.laneLapCount.get(lane) ?? 0 : 0,
+      lastLapMs: lane != null ? this.laneLastMs.get(lane) ?? null : null,
       bestLapMs: null,
       totalParticipants: this.participants.length,
     };
-    void myName;
     this.emitState();
   }
 
@@ -273,12 +280,62 @@ export class InfolapSource implements DataSource {
   setRival(id: string | null): void {
     if (id == null) {
       this.rivalLane = null;
+      this.rivalSelectedName = null;
     } else {
-      const idx = this.participants.findIndex(p => p.id === id);
-      this.rivalLane = idx >= 0 ? idx + 1 : null;
+      const p = this.participants.find(x => x.id === id);
+      this.rivalSelectedName = p?.name ?? null;
+      this.rivalLane = this.laneForName(this.rivalSelectedName);
     }
     this.applyRivalToState();
     this.emitState();
+  }
+
+  /** Normaliza un nombre para emparejar discovery vs paquetes. */
+  private norm(s: string): string {
+    return s.trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  /** Busca el carril cuyo `driverName` coincide con `name`. El paquete
+   *  recorta el nombre a 20 chars, así que aceptamos coincidencia por
+   *  prefijo en cualquiera de los dos sentidos. */
+  private laneForName(name: string | null): number | null {
+    if (!name) return null;
+    const target = this.norm(name);
+    if (!target) return null;
+    for (const [lane, dn] of this.laneName) {
+      const n = this.norm(dn);
+      if (n && (n === target || n.startsWith(target) || target.startsWith(n))) {
+        return lane;
+      }
+    }
+    return null;
+  }
+
+  /** Re-resuelve carril propio/rival cuando llega un paquete nuevo y
+   *  todavía no se conocía el carril de alguno de ellos. */
+  private resolveLanes(): void {
+    let changed = false;
+    if (this.selectedLane == null && this.selectedName) {
+      const lane = this.laneForName(this.selectedName);
+      if (lane != null) {
+        this.selectedLane = lane;
+        this.currentState = {
+          ...this.currentState,
+          myLane: lane,
+          lapCount: this.laneLapCount.get(lane) ?? 0,
+          lastLapMs: this.laneLastMs.get(lane) ?? null,
+        };
+        changed = true;
+      }
+    }
+    if (this.rivalLane == null && this.rivalSelectedName) {
+      const lane = this.laneForName(this.rivalSelectedName);
+      if (lane != null) { this.rivalLane = lane; changed = true; }
+    }
+    if (changed) {
+      this.applyRivalToState();
+      this.emitState();
+    }
   }
 
   /** Media de los tiempos de vuelta vistos para un carril, o null. */
@@ -310,7 +367,7 @@ export class InfolapSource implements DataSource {
       : (this.laneLastMs.get(myLane) ?? this.laneLastMs.get(rLane) ?? null);
     const gapMs = pace != null ? (myCount - rivalCount) * pace : null;
     const rivalName = this.laneName.get(rLane)
-      ?? this.participants[rLane - 1]?.name ?? `Carril ${rLane}`;
+      ?? this.rivalSelectedName ?? `Carril ${rLane}`;
     this.currentState = {
       ...this.currentState,
       rivalName,
@@ -370,7 +427,11 @@ export class InfolapSource implements DataSource {
   }
 
   private ingestPacket(pkt: InfolapStatePacket): void {
-    if (pkt.driverName) this.laneName.set(pkt.lane, pkt.driverName);
+    if (pkt.driverName) {
+      this.laneName.set(pkt.lane, pkt.driverName);
+      // Con el nombre nuevo quizá podamos resolver mi carril / el del rival.
+      this.resolveLanes();
+    }
 
     // Sentinel "EF54AB1" → carril sin vuelta válida todavía. Ignorar.
     if (pkt.lastLapMs === null) return;

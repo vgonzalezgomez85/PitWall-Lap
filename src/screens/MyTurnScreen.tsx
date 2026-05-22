@@ -49,7 +49,7 @@ export default function MyTurnScreen(_props: Props) {
   // Seguimiento de rival (solo InfoLap).
   const [rivalPickerOpen, setRivalPickerOpen] = useState(false);
   const rivalChoices = (raceInfo?.participants ?? []).filter(
-    (_p, i) => i + 1 !== state.myLane,
+    p => p.name !== state.selfName,
   );
 
   function pickRival(id: string | null) {
