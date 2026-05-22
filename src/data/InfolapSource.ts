@@ -160,6 +160,8 @@ export class InfolapSource implements DataSource {
    *  el orden de la lista de discovery NO coincide con el nº de carril. */
   private selectedName: string | null = null;
   private rivalSelectedName: string | null = null;
+  /** Nº de manga, incrementado en cada rotación de carriles detectada. */
+  private mangaCount = 1;
 
   constructor(opts: InfolapOptions = {}) {
     this.opts = opts;
@@ -281,6 +283,7 @@ export class InfolapSource implements DataSource {
     this.rivalLane = null;
     this.selectedName = null;
     this.rivalSelectedName = null;
+    this.mangaCount = 1;
   }
 
   selectParticipant(id: string): void {
@@ -327,9 +330,15 @@ export class InfolapSource implements DataSource {
     return s.trim().toLowerCase().replace(/\s+/g, ' ');
   }
 
-  /** Busca el carril cuyo `driverName` coincide con `name`. El paquete
-   *  recorta el nombre a 20 chars, así que aceptamos coincidencia por
-   *  prefijo en cualquiera de los dos sentidos. */
+  /** ¿Dos nombres se refieren al mismo piloto? El paquete recorta el
+   *  nombre a 20 chars, así que aceptamos coincidencia por prefijo. */
+  private nameMatches(a: string, b: string): boolean {
+    const x = this.norm(a), y = this.norm(b);
+    if (!x || !y) return false;
+    return x === y || x.startsWith(y) || y.startsWith(x);
+  }
+
+  /** Busca el carril cuyo `driverName` coincide con `name`. */
   private laneForName(name: string | null): number | null {
     if (!name) return null;
     const target = this.norm(name);
@@ -344,6 +353,31 @@ export class InfolapSource implements DataSource {
       if (n && (n.startsWith(target) || target.startsWith(n))) return lane;
     }
     return null;
+  }
+
+  /** Rotación de carriles (nueva manga): mi piloto ha aparecido en otro
+   *  carril, lo que significa que todos los pilotos han rotado. Reseteamos
+   *  los contadores de todos los carriles y seguimos a mi piloto y al
+   *  rival a sus nuevos carriles. */
+  private handleLaneRotation(newLane: number): void {
+    this.mangaCount += 1;
+    this.laneLapCount.clear();
+    this.laneSumMs.clear();
+    this.laneLastSeq.clear();
+    this.laneLastMs.clear();
+    this.selectedLane = newLane;
+    // El carril del rival se re-resolverá cuando llegue su paquete.
+    this.rivalLane = this.laneForName(this.rivalSelectedName);
+    this.currentState = {
+      ...this.currentState,
+      myLane: newLane,
+      lapCount: 0,
+      lastLapMs: null,
+      bestLapMs: null,
+    };
+    this.applyRivalToState();
+    this.emitEvent({ type: 'manga-changed', newMangaNum: this.mangaCount, newLane });
+    this.emitState();
   }
 
   /** Re-resuelve carril propio/rival cuando llega un paquete nuevo y
@@ -464,6 +498,24 @@ export class InfolapSource implements DataSource {
   private ingestPacket(pkt: InfolapStatePacket): void {
     if (pkt.driverName) {
       this.laneName.set(pkt.lane, pkt.driverName);
+
+      // Mi piloto ha aparecido en otro carril → rotación de carriles
+      // (nueva manga). Le seguimos a su carril nuevo.
+      if (this.selectedName && this.selectedLane != null
+          && this.selectedLane !== pkt.lane
+          && this.nameMatches(pkt.driverName, this.selectedName)) {
+        this.handleLaneRotation(pkt.lane);
+      }
+
+      // El rival también puede haber rotado de carril.
+      if (this.rivalSelectedName && this.rivalLane != null
+          && this.rivalLane !== pkt.lane
+          && this.nameMatches(pkt.driverName, this.rivalSelectedName)) {
+        this.rivalLane = pkt.lane;
+        this.applyRivalToState();
+        this.emitState();
+      }
+
       // Con el nombre nuevo quizá podamos resolver mi carril / el del rival.
       this.resolveLanes();
     }
