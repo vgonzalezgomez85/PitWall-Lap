@@ -44,13 +44,22 @@ for (let i = 1; i <= 254; i++) BRUTE_FORCE_PROBES.push(buildProbe(i));
 
 // ── Parsers puros (testables sin red) ─────────────────────────────────────
 
-/** Parsea el payload de discovery `"OK <name>;#<id>..."`. */
+/**
+ * Parsea el payload de discovery del Gestor Tic Tac Slot.
+ *
+ * Formato real (capturado): `"OK <n1>;#<id1><n2>;#<id2>..."` — entries
+ * `<nombre>;#<id>` concatenadas SIN separador, y el id es de EXACTAMENTE
+ * 3 dígitos. Ej.: `OK 6;#0015;#0024;#0033;#0042;#0051;#006` son 6 pilotos
+ * de nombre "6","5","4","3","2","1" con ids 001..006.
+ *
+ * Es imprescindible fijar el id a `\d{3}`: si el nombre del piloto
+ * siguiente es numérico (aquí lo son), un `\d+` codicioso se comería esa
+ * cifra y desalinearía toda la lista.
+ */
 export function parseDiscoveryResponse(payload: string): Participant[] {
   if (!payload.startsWith('OK ')) return [];
   const body = payload.slice(3);
-  // Entries son `<name>;#<id>` concatenadas sin separador entre entries; el
-  // `;#` actúa como delimitador interno.
-  const re = /([^]+?);#(\d+)/g;
+  const re = /([^]+?);#(\d{3})/g;
   const out: Participant[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) {
@@ -302,11 +311,14 @@ export class InfolapSource implements DataSource {
     if (!name) return null;
     const target = this.norm(name);
     if (!target) return null;
+    // Primero coincidencia exacta (evita que "1" empareje con "10").
+    for (const [lane, dn] of this.laneName) {
+      if (this.norm(dn) === target) return lane;
+    }
+    // Luego por prefijo (el protocolo recorta el nombre a 20 chars).
     for (const [lane, dn] of this.laneName) {
       const n = this.norm(dn);
-      if (n && (n === target || n.startsWith(target) || target.startsWith(n))) {
-        return lane;
-      }
+      if (n && (n.startsWith(target) || target.startsWith(n))) return lane;
     }
     return null;
   }
