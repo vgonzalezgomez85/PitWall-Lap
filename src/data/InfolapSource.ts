@@ -33,12 +33,20 @@ const PROBE_TIMEOUT_MS  = 6000;
 
 // El Gestor de Carreras de Tic Tac Slot rechaza silenciosamente los probes
 // cuyo identificador `Cxxx` no coincide con el último octeto de la IP del
-// cliente. Calculamos el ID exacto a partir de la IP local (vía
-// expo-network) y enviamos un único probe — sin el ID correcto el Gestor
-// no responde.
+// cliente. Calculamos el ID a partir de la IP local (vía expo-network) y
+// enviamos un único probe. Pero esa IP no siempre es la correcta — p.ej.
+// un iPhone que comparte su Personal Hotspot estando en 4G devuelve la IP
+// celular, no la 172.20.10.x de la red local. Por eso, si el probe único
+// no obtiene respuesta, escalamos a un barrido de los 254 IDs. En cuanto
+// llega la respuesta de discovery se deja de sondear (el protocolo no
+// requiere más probes), así que el barrido es momentáneo.
 function buildProbe(lastOctet: number): Buffer {
   return Buffer.from(`InfoLap:C${String(lastOctet).padStart(3, '0')}`, 'ascii');
 }
+const BRUTE_FORCE_PROBES: Buffer[] = [];
+for (let i = 1; i <= 254; i++) BRUTE_FORCE_PROBES.push(buildProbe(i));
+// Si el probe único no responde en este plazo, escalamos al barrido.
+const PROBE_ESCALATE_MS = 2500;
 
 // ── Parsers puros (testables sin red) ─────────────────────────────────────
 
@@ -121,9 +129,10 @@ export class InfolapSource implements DataSource {
   private socket: UdpSocket | null = null;
   private probeTimer: ReturnType<typeof setInterval> | null = null;
   private selectedLane: number | null = null;
-  /** Probe a enviar cada PROBE_INTERVAL_MS — un único `InfoLap:Cxxx`
-   *  construido a partir del último octeto de la IP local. */
-  private probePayloads: Buffer[] = [];
+  /** Probes a enviar cada PROBE_INTERVAL_MS. Empieza con un único
+   *  `InfoLap:Cxxx` (derivado de la IP local) y escala a los 254 si no
+   *  hay respuesta. */
+  private probePayloads: Buffer[] = BRUTE_FORCE_PROBES;
   private stateListeners: ((s: LiveState) => void)[] = [];
   private eventListeners: ((e: SourceEvent) => void)[] = [];
   private currentState: LiveState = emptyLiveState();
@@ -159,8 +168,8 @@ export class InfolapSource implements DataSource {
   async connect(): Promise<RaceInfo> {
     console.log('[Infolap] connect() start');
 
-    // Detectar la IP local del dispositivo: el `Cxxx` del probe debe
-    // coincidir con su último octeto o el Gestor no responde.
+    // Detectar la IP local del dispositivo para el probe único inicial.
+    // Si no responde, el escalado de abajo pasa al barrido completo.
     try {
       const ip = await Network.getIpAddressAsync();
       const lastOctet = parseInt(ip.split('.').pop() ?? '', 10);
@@ -168,18 +177,23 @@ export class InfolapSource implements DataSource {
         this.probePayloads = [buildProbe(lastOctet)];
         console.log('[Infolap] local IP', ip, '→ probe ID C' + String(lastOctet).padStart(3, '0'));
       } else {
-        console.log('[Infolap] could not parse last octet from IP', ip);
+        console.log('[Infolap] could not parse last octet from IP', ip, '→ barrido');
       }
     } catch (e) {
-      console.log('[Infolap] getIpAddressAsync failed:', e);
-    }
-
-    if (this.probePayloads.length === 0) {
-      throw new Error('infolap-no-local-ip');
+      console.log('[Infolap] getIpAddressAsync failed → barrido:', e);
     }
 
     return new Promise<RaceInfo>((resolve, reject) => {
       let resolved = false;
+
+      // Si el probe único no obtiene respuesta, escalamos al barrido de 254.
+      const escalate = setTimeout(() => {
+        if (!resolved && this.probePayloads.length === 1) {
+          console.log('[Infolap] sin respuesta → escalando a barrido de 254');
+          this.probePayloads = BRUTE_FORCE_PROBES;
+          this.sendProbe();
+        }
+      }, PROBE_ESCALATE_MS);
       const sock = (dgram as unknown as {
         createSocket: (o: { type: string }) => UdpSocket;
       }).createSocket({ type: 'udp4' });
@@ -188,6 +202,7 @@ export class InfolapSource implements DataSource {
       const timeout = setTimeout(() => {
         if (!resolved) {
           console.log('[Infolap] discovery TIMEOUT after', PROBE_TIMEOUT_MS, 'ms');
+          clearTimeout(escalate);
           this.disconnect();
           reject(new Error('infolap-discovery-timeout'));
         }
@@ -197,6 +212,7 @@ export class InfolapSource implements DataSource {
         console.log('[Infolap] socket error:', err);
         if (!resolved) {
           clearTimeout(timeout);
+          clearTimeout(escalate);
           this.disconnect();
           reject(err as Error);
         }
@@ -215,6 +231,14 @@ export class InfolapSource implements DataSource {
             if (participants.length > 0) {
               resolved = true;
               clearTimeout(timeout);
+              clearTimeout(escalate);
+              // El protocolo no requiere más probes tras el discovery: el
+              // Gestor empuja los paquetes de estado solo. Paramos de
+              // sondear para no dejar conexiones colgando en el Gestor.
+              if (this.probeTimer) {
+                clearInterval(this.probeTimer);
+                this.probeTimer = null;
+              }
               this.participants = participants;
               resolve(this.buildRaceInfo());
               return;
