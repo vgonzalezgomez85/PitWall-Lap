@@ -64,5 +64,6 @@ export function speakTime(ms: number | null): string {
   const s = Math.floor(totalCs / 100);
   const cs = totalCs % 100;
   if (cs === 0) return `${s} segundos`;
-  return `${s} con ${String(cs).padStart(2, '0')}`;
+  // Solo "12 45" — sin "con", se hace pesado al oírlo a cada vuelta.
+  return `${s} ${String(cs).padStart(2, '0')}`;
 }

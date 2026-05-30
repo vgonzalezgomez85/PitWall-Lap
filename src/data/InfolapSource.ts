@@ -150,6 +150,10 @@ export class InfolapSource implements DataSource {
   private laneName = new Map<number, string>();
   /** lane → suma de todos los tiempos de vuelta vistos (para la media). */
   private laneSumMs = new Map<number, number>();
+  /** lane → wall-clock ms cuando se contó la última vuelta. Sirve para
+   *  descartar retransmisiones tardías que llegan con sequence distinto
+   *  (el Gestor reenvía cada paquete N veces según su ajuste). */
+  private laneLastIngestAt = new Map<number, number>();
   /** participantes resueltos en el discovery, en orden. */
   private participants: Participant[] = [];
 
@@ -280,6 +284,7 @@ export class InfolapSource implements DataSource {
     this.laneLapCount.clear();
     this.laneName.clear();
     this.laneSumMs.clear();
+    this.laneLastIngestAt.clear();
     this.rivalLane = null;
     this.selectedName = null;
     this.rivalSelectedName = null;
@@ -365,6 +370,7 @@ export class InfolapSource implements DataSource {
     this.laneSumMs.clear();
     this.laneLastSeq.clear();
     this.laneLastMs.clear();
+    this.laneLastIngestAt.clear();
     this.selectedLane = newLane;
     // El carril del rival se re-resolverá cuando llegue su paquete.
     this.rivalLane = this.laneForName(this.rivalSelectedName);
@@ -528,8 +534,19 @@ export class InfolapSource implements DataSource {
     // al de la vuelta anterior). Paquetes con el mismo sequence son
     // duplicados (el Gestor reenvía cada estado N veces).
     const prevSeq = this.laneLastSeq.get(pkt.lane);
-    if (prevSeq === pkt.sequence) return;   // duplicado → ignorar
+    if (prevSeq === pkt.sequence) return;   // duplicado por sequence → ignorar
     this.laneLastSeq.set(pkt.lane, pkt.sequence);
+
+    // Segunda red de seguridad: si llega la misma vuelta del mismo carril
+    // en menos de 3 s, es una retransmisión tardía con sequence distinto
+    // (el Gestor reenvía 5x por defecto). Mejor descartar que cantarla 5x.
+    const prevMs = this.laneLastMs.get(pkt.lane);
+    const prevAt = this.laneLastIngestAt.get(pkt.lane) ?? 0;
+    const now = Date.now();
+    if (prevMs === pkt.lastLapMs && now - prevAt < 3000) {
+      return;
+    }
+    this.laneLastIngestAt.set(pkt.lane, now);
 
     this.laneLastMs.set(pkt.lane, pkt.lastLapMs);
     const newCount = (this.laneLapCount.get(pkt.lane) ?? 0) + 1;
