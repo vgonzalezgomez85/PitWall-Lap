@@ -58,8 +58,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       }
       case 'position-changed': {
         if (!s.sayPositionChange) return;
-        if (e.to < e.from)      speak(`Has subido a ${ordinal(e.to)}`);
-        else if (e.to > e.from) speak(`Te han adelantado, vas ${ordinal(e.to)}`);
+        if (e.to !== e.from) speak(ordinal(e.to));
         break;
       }
       case 'last-minute':
