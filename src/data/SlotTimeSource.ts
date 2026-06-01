@@ -20,6 +20,7 @@ import type {
   LiveState,
   Participant,
   ParticipantPlan,
+  PoleSnapshot,
   RaceInfo,
   RaceStatsSnapshot,
   SourceEvent,
@@ -92,7 +93,7 @@ interface RaceCurrentResponse {
 
 // ── Fuente ────────────────────────────────────────────────────────────────
 
-export type SlotTimeMode = 'race' | 'training';
+export type SlotTimeMode = 'race' | 'training' | 'pole';
 
 export class SlotTimeSource implements DataSource {
   readonly kind = 'slottime' as const;
@@ -113,6 +114,15 @@ export class SlotTimeSource implements DataSource {
   private firedLastMinute = false;
   private firedLast30s = false;
   private prevPosition: number | null = null;
+  // ── Pole ────────────────────────────────────────────────────────────────
+  private polePollTimer: ReturnType<typeof setInterval> | null = null;
+  private poleBaseUrl: string | null = null;
+  /** Última `live.lapCount` vista para detectar nuevas vueltas. */
+  private polePrevLapCount = 0;
+  /** Última `currentEntry.entryId` vista para detectar cambio de piloto. */
+  private polePrevCurrentEntryId: number | null = null;
+  /** Último `status` visto para detectar 'done'. */
+  private polePrevStatus: PoleSnapshot['status'] = null;
 
   constructor(
     server: SlotTimeServerLocation,
@@ -136,6 +146,9 @@ export class SlotTimeSource implements DataSource {
 
     if (this.mode === 'training') {
       return this.connectTraining(baseUrl);
+    }
+    if (this.mode === 'pole') {
+      return this.connectPole(baseUrl);
     }
     return this.connectRace(baseUrl);
   }
@@ -225,9 +238,146 @@ export class SlotTimeSource implements DataSource {
       try { this.socket.disconnect(); } catch { /* ignore */ }
       this.socket = null;
     }
+    if (this.polePollTimer) {
+      clearInterval(this.polePollTimer);
+      this.polePollTimer = null;
+    }
     this.stateListeners = [];
     this.eventListeners = [];
     this.snapshotListeners = [];
+  }
+
+  // ── Conexión modo pole ────────────────────────────────────────────────
+
+  private async connectPole(baseUrl: string): Promise<RaceInfo> {
+    if (this.raceId == null) throw new Error('slottime-pole-no-race-id');
+    this.poleBaseUrl = baseUrl;
+
+    // Cargar carrera (para nombre / formato) + estado actual de la pole.
+    const [raceRes, poleRes] = await Promise.all([
+      fetch(`${baseUrl}/api/mobile/races/${this.raceId}`),
+      fetch(`${baseUrl}/api/mobile/races/${this.raceId}/pole`),
+    ]);
+    if (!raceRes.ok) throw new Error(`slottime-pole-race-${raceRes.status}`);
+    if (!poleRes.ok) throw new Error(`slottime-pole-${poleRes.status}`);
+    const raceData: RaceCurrentResponse = await raceRes.json();
+    const poleData: PoleSnapshot = await poleRes.json();
+
+    if (!raceData.race) throw new Error('slottime-pole-race-not-found');
+    if (!poleData.active) throw new Error('slottime-pole-not-active');
+
+    // Participantes = entries de la pole. El id que usamos en la app es
+    // el entryId como string (lo elige el usuario en el picker).
+    this.participants = poleData.startingOrder.map(e => ({
+      id: String(e.entryId),
+      name: e.name,
+      color: '#f6c90e',
+      mangas: [],
+    }));
+
+    this.currentState = { ...emptyLiveState(), pole: poleData };
+    this.polePrevLapCount = poleData.live?.lapCount ?? 0;
+    this.polePrevCurrentEntryId = poleData.currentEntry?.entryId ?? null;
+    this.polePrevStatus = poleData.status;
+
+    // Polling de /pole para refrescar standings/order/live cada segundo.
+    // Más simple que cablear 6 eventos socket distintos.
+    this.polePollTimer = setInterval(() => this.refreshPole(), 1000);
+
+    // Socket adicional para capturar la vuelta cantable en cuanto cruza.
+    this.socket = io(baseUrl, { transports: ['websocket'], reconnection: true });
+    this.wirePoleSocket(this.socket);
+
+    return {
+      source: 'slottime',
+      mode: 'pole',
+      name: `${raceData.race.name} · Pole`,
+      format: raceData.race.format,
+      participants: this.participants.map(p => ({ id: p.id, name: p.name, color: p.color })),
+      capabilities: { ...SLOTTIME_CAPABILITIES, multiMangaPlan: false, history: false },
+    };
+  }
+
+  private async refreshPole(): Promise<void> {
+    if (!this.poleBaseUrl || this.raceId == null) return;
+    try {
+      const res = await fetch(`${this.poleBaseUrl}/api/mobile/races/${this.raceId}/pole`);
+      if (!res.ok) return;
+      const snap: PoleSnapshot = await res.json();
+      this.applyPoleSnapshot(snap);
+    } catch {
+      /* red flaky — el siguiente tick lo recoge */
+    }
+  }
+
+  /** Aplica un snapshot de /pole al estado y dispara eventos discretos. */
+  private applyPoleSnapshot(snap: PoleSnapshot): void {
+    const prevStatus = this.polePrevStatus;
+    const prevCurrentId = this.polePrevCurrentEntryId;
+    const prevLapCount = this.polePrevLapCount;
+    this.polePrevStatus = snap.status;
+    this.polePrevCurrentEntryId = snap.currentEntry?.entryId ?? null;
+    this.polePrevLapCount = snap.live?.lapCount ?? 0;
+
+    const selectedEntryId = this.selectedId != null ? parseInt(this.selectedId, 10) : null;
+    const isMyTurn = selectedEntryId != null && snap.currentEntry?.entryId === selectedEntryId;
+
+    this.currentState = {
+      ...this.currentState,
+      pole: snap,
+      status: snap.status === 'done'
+        ? 'race-finished'
+        : isMyTurn ? 'my-turn' : (selectedEntryId != null ? 'resting' : 'pre-race'),
+      myLane: isMyTurn ? snap.poleLane : null,
+      lapCount: isMyTurn ? (snap.live?.lapCount ?? 0) : 0,
+      bestLapMs: isMyTurn ? (snap.live?.bestLapMs ?? null) : null,
+      remainingMs: isMyTurn ? (snap.live?.remainingMs ?? null) : null,
+      totalParticipants: snap.totalCount,
+    };
+    this.emitState();
+
+    // Cambio de piloto en pista — útil para anunciar el siguiente.
+    if (snap.currentEntry?.entryId !== prevCurrentId
+        && snap.currentEntry
+        && snap.currentEntry.entryId === selectedEntryId) {
+      // Mi turno acaba de empezar.
+      this.emitEvent({
+        type: 'manga-changed',
+        newMangaNum: snap.currentEntry.startPos,
+        newLane: snap.poleLane,
+      });
+    }
+
+    // Fin de la pole.
+    if (snap.status === 'done' && prevStatus !== 'done') {
+      this.emitEvent({ type: 'race-finished' });
+    }
+
+    // Nueva vuelta cuando el polling la ve antes que el socket (red lenta).
+    if (isMyTurn && snap.live && snap.live.lapCount > prevLapCount) {
+      // No tenemos el lapTimeMs aquí — el evento de socket lo cubre.
+      // Si llega solo por polling, emitimos sin tiempo concreto.
+      // (lapTimeMs en SourceEvent es number|null y la voz tolera null.)
+    }
+  }
+
+  private wirePoleSocket(socket: Socket): void {
+    socket.on('connect',    () => this.emitEvent({ type: 'connection-restored' }));
+    socket.on('disconnect', () => this.emitEvent({ type: 'connection-lost' }));
+
+    socket.on('pole:lap', (p: { lapNumber: number; lapTimeMs: number; bestLapMs: number; improved: boolean }) => {
+      const snap = this.currentState.pole;
+      const selectedEntryId = this.selectedId != null ? parseInt(this.selectedId, 10) : null;
+      if (snap?.currentEntry?.entryId !== selectedEntryId) return; // no es mi vuelta
+      this.emitEvent({ type: 'lap-completed', lapTimeMs: p.lapTimeMs, lapCount: p.lapNumber });
+    });
+
+    // Estos eventos solo son señales para refrescar antes — el polling ya
+    // los recoge en el siguiente tick pero esto baja la latencia.
+    socket.on('pole:standby',  () => this.refreshPole());
+    socket.on('pole:started',  () => this.refreshPole());
+    socket.on('pole:finished', () => this.refreshPole());
+    socket.on('pole:aborted',  () => this.refreshPole());
   }
 
   selectParticipant(id: string): void {
@@ -244,6 +394,13 @@ export class SlotTimeSource implements DataSource {
         status: 'my-turn',
         myLane: Number.isFinite(myLane) ? myLane : null,
       };
+    } else if (this.mode === 'pole') {
+      // En pole el id es el entryId. El estado real lo deriva el polling
+      // a partir del snapshot, así que aquí solo guardamos selectedId y
+      // reaplicamos el último snapshot conocido.
+      const snap = this.currentState.pole;
+      if (snap) this.applyPoleSnapshot(snap);
+      return;
     } else {
       const myLane = this.findMyLaneForCurrentManga(id);
       this.currentState = {

@@ -8,6 +8,7 @@ export type RootStackParamList = {
   RacePicker: { host: string; port: number };
   TandaPicker: { host: string; port: number; raceId: number };
   TrainingLanePicker: { host: string; port: number };
+  Pole: { host: string; port: number; raceId: number };
   Select: { tandaNum?: number } | undefined;
   MyTurn: undefined;
   History: undefined;

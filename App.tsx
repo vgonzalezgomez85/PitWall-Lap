@@ -11,6 +11,7 @@ import DiscoveryScreen   from './src/screens/DiscoveryScreen';
 import RacePickerScreen  from './src/screens/RacePickerScreen';
 import TandaPickerScreen from './src/screens/TandaPickerScreen';
 import TrainingLanePickerScreen from './src/screens/TrainingLanePickerScreen';
+import PoleScreen          from './src/screens/PoleScreen';
 import SelectScreen      from './src/screens/SelectScreen';
 import MyTurnScreen      from './src/screens/MyTurnScreen';
 import HistoryScreen     from './src/screens/HistoryScreen';
@@ -39,6 +40,7 @@ function AppInner() {
         <Stack.Screen name="RacePicker"    component={RacePickerScreen} />
         <Stack.Screen name="TandaPicker"   component={TandaPickerScreen} />
         <Stack.Screen name="TrainingLanePicker" component={TrainingLanePickerScreen} />
+        <Stack.Screen name="Pole"          component={PoleScreen} />
         <Stack.Screen name="Select"        component={SelectScreen} />
         <Stack.Screen name="MyTurn"        component={MyTurnScreen} />
         <Stack.Screen name="History"       component={HistoryScreen} />

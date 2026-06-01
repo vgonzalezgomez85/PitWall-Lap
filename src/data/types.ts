@@ -33,8 +33,8 @@ export interface ParticipantPlan extends Participant {
 
 export interface RaceInfo {
   source: SourceKind;
-  /** 'training' cuando la fuente SlotTime corre en modo entrenamiento. */
-  mode?: 'race' | 'training';
+  /** 'training' / 'pole' cuando la fuente SlotTime corre en esos modos. */
+  mode?: 'race' | 'training' | 'pole';
   /** Nombre legible de la carrera (SlotTime) o "InfoLap" si no hay otro. */
   name: string;
   /** Formato. Infolap se mapea siempre a 'individual'. */
@@ -80,6 +80,9 @@ export interface LiveState {
   currentMangaNum: number | null;
   /** Si estoy en descanso, info de mi próxima manga. */
   nextMangaInfo?: { mangaNum: number; lane: number };
+
+  // ── Sesión de pole (sólo SlotTime, modo 'pole') ───────────────────────
+  pole?: PoleSnapshot | null;
 
   // ── Rival seguido (sólo InfoLap) ──────────────────────────────────────
   /** Nombre del piloto propio seleccionado. */
@@ -187,6 +190,35 @@ export interface DataSource {
   onRaceStatsSnapshot(cb: (snapshot: RaceStatsSnapshot) => void): () => void;
 }
 
+/** Snapshot del estado de una sesión de Pole Position (sólo SlotTime). */
+export interface PoleSnapshot {
+  active: boolean;
+  status: 'setup' | 'in_progress' | 'done' | null;
+  poleLane: number | null;
+  durationMs: number | null;
+  currentIdx: number;
+  totalCount: number;
+  currentEntry: { entryId: number; name: string; startPos: number } | null;
+  nextEntry:    { entryId: number; name: string } | null;
+  startingOrder: PoleEntry[];
+  standings:     { entryId: number; pos: number; name: string; lapTimeMs: number }[];
+  live: {
+    elapsedMs: number;
+    remainingMs: number;
+    currentLapMs: number;
+    bestLapMs: number | null;
+    lapCount: number;
+  } | null;
+}
+
+export interface PoleEntry {
+  entryId: number;
+  pos: number;
+  name: string;
+  lapTimeMs: number | null;
+  done: boolean;
+}
+
 /** Helper: construir el snapshot vacío inicial. */
 export function emptyLiveState(): LiveState {
   return {
@@ -204,6 +236,7 @@ export function emptyLiveState(): LiveState {
     aheadName: null,
     behindName: null,
     currentMangaNum: null,
+    pole: null,
     selfName: null,
     rivalName: null,
     rivalGapMs: null,

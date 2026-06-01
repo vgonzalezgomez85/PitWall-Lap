@@ -22,6 +22,7 @@ interface RaceBrief {
   mangaDurationMin: number;
   tandasCount: number;
   participantsCount: number;
+  hasPole?: boolean;
 }
 
 export default function RacePickerScreen({ route, navigation }: Props) {
@@ -48,9 +49,15 @@ export default function RacePickerScreen({ route, navigation }: Props) {
           navigation.replace('TrainingLanePicker', { host, port });
           return;
         }
-        // Si solo hay una carrera y no hay entrenamiento → directo a tanda.
+        // Si solo hay una carrera y no hay entrenamiento → directo a su
+        // destino (pole o selector de tanda).
         if (list.length === 1 && !trainingData.active) {
-          navigation.replace('TandaPicker', { host, port, raceId: list[0]!.id });
+          const r = list[0]!;
+          if (r.hasPole) {
+            navigation.replace('Pole', { host, port, raceId: r.id });
+          } else {
+            navigation.replace('TandaPicker', { host, port, raceId: r.id });
+          }
         }
       })
       .catch(err => {
@@ -122,7 +129,13 @@ export default function RacePickerScreen({ route, navigation }: Props) {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}
-            onPress={() => navigation.push('TandaPicker', { host, port, raceId: item.id })}
+            onPress={() => {
+              if (item.hasPole) {
+                navigation.push('Pole', { host, port, raceId: item.id });
+              } else {
+                navigation.push('TandaPicker', { host, port, raceId: item.id });
+              }
+            }}
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.rowName}>{item.name}</Text>
@@ -132,7 +145,12 @@ export default function RacePickerScreen({ route, navigation }: Props) {
                 {item.mangaDurationMin} min/manga
               </Text>
             </View>
-            <View style={[styles.badge, item.status === 'active' ? styles.badgeActive : styles.badgePending]}>
+            {item.hasPole && (
+              <View style={[styles.badge, styles.badgePole]}>
+                <Text style={[styles.badgeText, styles.badgeTextPole]}>POLE</Text>
+              </View>
+            )}
+            <View style={[styles.badge, item.status === 'active' ? styles.badgeActive : styles.badgePending, { marginLeft: 6 }]}>
               <Text style={[styles.badgeText, item.status === 'active' ? styles.badgeTextActive : styles.badgeTextPending]}>
                 {item.status === 'active' ? 'En curso' : 'Pendiente'}
               </Text>
@@ -166,6 +184,8 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700' },
   badgeTextActive: { color: '#5fd167' },
   badgeTextPending: { color: '#9aa3ad' },
+  badgePole: { backgroundColor: '#3a2a00' },
+  badgeTextPole: { color: '#f6c90e' },
 
   trainingRow: { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
 });

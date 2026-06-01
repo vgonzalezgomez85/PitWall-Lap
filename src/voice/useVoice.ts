@@ -71,10 +71,16 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       case 'manga-changed':
         bestLapRef.current = null;
         raceLapsRef.current = [];
-        if (e.newLane != null) speak(`Tu turno, carril ${e.newLane}`);
+        if (e.newLane != null) {
+          if (stateRef.current.pole) {
+            speak(`Pole, tu turno, carril ${e.newLane}`);
+          } else {
+            speak(`Tu turno, carril ${e.newLane}`);
+          }
+        }
         break;
       case 'race-finished':
-        speak('Fin de la manga');
+        speak(stateRef.current.pole ? 'Fin de la pole' : 'Fin de la manga');
         break;
       // 'lap-ghost': silenciado a propósito — el piloto no necesita oír
       // anomalías técnicas del cronometrador, se reasignan solas.
