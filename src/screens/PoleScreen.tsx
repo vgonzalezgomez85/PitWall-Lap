@@ -91,6 +91,16 @@ export default function PoleScreen({ route, navigation }: Props) {
   }
 
   const pole = state.pole;
+
+  // Si la pole ya está terminada, no tiene sentido quedarse aquí: el
+  // siguiente paso es la primera tanda. Redirigimos al picker de tandas.
+  useEffect(() => {
+    if (pole?.status === 'done') {
+      source?.disconnect();
+      navigation.replace('TandaPicker', { host, port, raceId });
+    }
+  }, [pole?.status, navigation, host, port, raceId, source]);
+
   if (connecting || !pole) {
     return (
       <View style={styles.root}>

@@ -264,7 +264,12 @@ export class SlotTimeSource implements DataSource {
     const poleData: PoleSnapshot = await poleRes.json();
 
     if (!raceData.race) throw new Error('slottime-pole-race-not-found');
-    if (!poleData.active) throw new Error('slottime-pole-not-active');
+    // Si no hay sesión de pole alguna, no tiene sentido entrar. Pero si
+    // está terminada (`status='done'`) sí cargamos el snapshot — la
+    // pantalla lo detectará y redirigirá al picker de tandas.
+    if (!poleData.active && poleData.status !== 'done') {
+      throw new Error('slottime-pole-not-active');
+    }
 
     // Participantes = entries de la pole. El id que usamos en la app es
     // el entryId como string (lo elige el usuario en el picker).
