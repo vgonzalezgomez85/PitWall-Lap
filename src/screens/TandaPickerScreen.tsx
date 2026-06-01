@@ -70,8 +70,12 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
         navigation.push('Select', { tandaNum });
       }
     } catch (err) {
-      setConnecting(false);
       setError((err as Error)?.message ?? String(err));
+    } finally {
+      // Importante: al volver atrás desde Select, esta pantalla sigue
+      // montada (native-stack la conserva). Si dejamos `connecting=true`
+      // se queda con el spinner para siempre.
+      setConnecting(false);
     }
   }
 
