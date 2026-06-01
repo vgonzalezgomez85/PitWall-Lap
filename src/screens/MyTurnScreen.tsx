@@ -99,6 +99,7 @@ export default function MyTurnScreen(_props: Props) {
       <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
         <BackButton />
         <Text style={styles.kind}>{raceInfo?.source ?? '—'}</Text>
+        {state.selfName && <Text style={styles.selfName}>{state.selfName}</Text>}
         <Text style={styles.restTitle}>Descansas esta manga</Text>
         {state.currentMangaNum != null && (
           <Text style={styles.restSub}>
@@ -128,6 +129,7 @@ export default function MyTurnScreen(_props: Props) {
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
       <BackButton />
       <Text style={styles.kind}>{raceInfo?.source ?? '—'}</Text>
+      {state.selfName && <Text style={styles.selfName}>{state.selfName}</Text>}
       <View style={styles.headerRow}>
         <Text style={styles.lane}>Carril {state.myLane ?? '—'}</Text>
         {state.remainingMs != null && (
@@ -401,6 +403,7 @@ export function isAdvancedKey(k: keyof VoiceSettings): boolean {
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
   kind: { color: '#9aa3ad', fontSize: 12, marginTop: 12, textTransform: 'uppercase' },
+  selfName: { color: '#fff', fontSize: 22, fontWeight: '700', marginTop: 4 },
   headerRow: {
     flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between',
     marginTop: 4,

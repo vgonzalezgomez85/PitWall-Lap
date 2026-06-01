@@ -391,6 +391,9 @@ export class SlotTimeSource implements DataSource {
     this.firedLastMinute = false;
     this.firedLast30s = false;
 
+    const me = this.participants.find(p => p.id === id);
+    const selfName = me?.name ?? null;
+
     if (this.mode === 'training') {
       // En entrenamiento el id == número de carril. Siempre "my-turn".
       const myLane = parseInt(id, 10);
@@ -398,13 +401,17 @@ export class SlotTimeSource implements DataSource {
         ...emptyLiveState(),
         status: 'my-turn',
         myLane: Number.isFinite(myLane) ? myLane : null,
+        selfName,
       };
     } else if (this.mode === 'pole') {
       // En pole el id es el entryId. El estado real lo deriva el polling
       // a partir del snapshot, así que aquí solo guardamos selectedId y
-      // reaplicamos el último snapshot conocido.
+      // reaplicamos el último snapshot conocido. El selfName lo aporta
+      // applyPoleSnapshot al construir el currentState.
+      this.currentState = { ...this.currentState, selfName };
       const snap = this.currentState.pole;
       if (snap) this.applyPoleSnapshot(snap);
+      else this.emitState();
       return;
     } else {
       const myLane = this.findMyLaneForCurrentManga(id);
@@ -412,6 +419,7 @@ export class SlotTimeSource implements DataSource {
         ...emptyLiveState(),
         status: myLane != null ? 'my-turn' : 'resting',
         myLane,
+        selfName,
         currentMangaNum: this.currentMangaNum,
         nextMangaInfo: myLane == null ? this.findMyNextManga(id) : undefined,
       };
