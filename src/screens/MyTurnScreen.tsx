@@ -39,7 +39,7 @@ function fmtRemaining(ms: number | null): string {
 export default function MyTurnScreen(_props: Props) {
   void _props;
   const { state, raceInfo, source } = useDataSource();
-  const { settings, toggle } = useVoice();
+  const { settings, toggle, update } = useVoice();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const isSlotTime = raceInfo?.source === 'slottime';
@@ -249,6 +249,16 @@ export default function MyTurnScreen(_props: Props) {
             <ToggleChip label="Posición"  active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
             <ToggleChip label="Último min" active={settings.sayLastMinute}     onPress={() => toggle('sayLastMinute')} />
             <ToggleChip label="30 s"      active={settings.sayLast30s}        onPress={() => toggle('sayLast30s')} />
+            <ToggleChip
+              label={settings.sayAveragesEveryMin > 0 ? `Media ${settings.sayAveragesEveryMin} min` : 'Media'}
+              active={settings.sayAveragesEveryMin > 0}
+              onPress={() => update({ sayAveragesEveryMin: settings.sayAveragesEveryMin > 0 ? 0 : 2 })}
+            />
+            <ToggleChip
+              label={settings.sayGapsEveryMin > 0 ? `Gaps ${settings.sayGapsEveryMin} min` : 'Gaps'}
+              active={settings.sayGapsEveryMin > 0}
+              onPress={() => update({ sayGapsEveryMin: settings.sayGapsEveryMin > 0 ? 0 : 2 })}
+            />
           </>
         )}
       </View>
