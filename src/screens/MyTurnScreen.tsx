@@ -252,12 +252,12 @@ export default function MyTurnScreen(_props: Props) {
             <ToggleChip
               label={settings.sayAveragesEveryMin > 0 ? `Media ${settings.sayAveragesEveryMin} min` : 'Media'}
               active={settings.sayAveragesEveryMin > 0}
-              onPress={() => update({ sayAveragesEveryMin: settings.sayAveragesEveryMin > 0 ? 0 : 2 })}
+              onPress={() => update({ sayAveragesEveryMin: cycleMinutes(settings.sayAveragesEveryMin) })}
             />
             <ToggleChip
               label={settings.sayGapsEveryMin > 0 ? `Gaps ${settings.sayGapsEveryMin} min` : 'Gaps'}
               active={settings.sayGapsEveryMin > 0}
-              onPress={() => update({ sayGapsEveryMin: settings.sayGapsEveryMin > 0 ? 0 : 2 })}
+              onPress={() => update({ sayGapsEveryMin: cycleMinutes(settings.sayGapsEveryMin) })}
             />
           </>
         )}
@@ -371,6 +371,13 @@ function SetupField({
       />
     </View>
   );
+}
+
+// Cicla por 0 (off) → 1 → 2 → 3 → 5 → 0 cada vez que se pulsa el chip.
+const MINUTE_CYCLE = [0, 1, 2, 3, 5];
+function cycleMinutes(current: number): number {
+  const i = MINUTE_CYCLE.indexOf(current);
+  return MINUTE_CYCLE[(i + 1) % MINUTE_CYCLE.length] ?? 0;
 }
 
 function ToggleChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
