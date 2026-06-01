@@ -9,7 +9,7 @@
 // La fuente (SlotTimeSource modo 'pole') hace polling de /pole cada 1s y
 // emite estado + evento lap-completed cuando completas una vuelta.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, FlatList, ScrollView, StyleSheet, Text,
   TouchableOpacity, View,
@@ -46,16 +46,18 @@ export default function PoleScreen({ route, navigation }: Props) {
   // a los eventos lap-completed / manga-changed / race-finished.
   useVoice();
 
-  const [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState(true);
   const [selectedEntryId, setSelectedEntryId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Solo intentamos conectar una vez al montar. Si lo incluimos en deps
+  // del state.pole entramos en bucle (re-render antes de que el state
+  // propague crea otra fuente, etc.).
+  const didInitRef = useRef(false);
 
-  // Conexión inicial — sólo si todavía no hay source de tipo 'pole' activa
-  // para esta carrera.
   useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
     let cancelled = false;
-    if (source && state.pole) return;     // ya conectados
-    setConnecting(true);
     (async () => {
       try {
         const src = new SlotTimeSource({ host, port }, { mode: 'pole', raceId });
@@ -69,7 +71,7 @@ export default function PoleScreen({ route, navigation }: Props) {
       }
     })();
     return () => { cancelled = true; };
-  }, [host, port, raceId, source, state.pole, setSource]);
+  }, [host, port, raceId, setSource]);
 
   function pickEntry(entryId: number) {
     setSelectedEntryId(entryId);
