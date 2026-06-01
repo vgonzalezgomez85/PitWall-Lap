@@ -154,6 +154,8 @@ export default function StintDetailScreen({ route, navigation }: Props) {
           <SetupRow label="Motor" value={main.setup.motor} />
           <SetupRow label="Neumático" value={main.setup.tire} />
           <SetupRow label="Llanta" value={main.setup.rim} />
+          <SetupRow label="Corona" value={main.setup.crown} />
+          <SetupRow label="Piñón" value={main.setup.pinion} />
 
           <TouchableOpacity
             style={styles.editBtn}
@@ -180,6 +182,10 @@ export default function StintDetailScreen({ route, navigation }: Props) {
               onChange={v => setSetup(s => ({ ...s, tire: v }))} />
             <SetupField label="Medida de llanta" value={setup.rim}
               onChange={v => setSetup(s => ({ ...s, rim: v }))} />
+            <SetupField label="Corona" value={setup.crown}
+              onChange={v => setSetup(s => ({ ...s, crown: v }))} />
+            <SetupField label="Piñón" value={setup.pinion}
+              onChange={v => setSetup(s => ({ ...s, pinion: v }))} />
             <View style={styles.modalBtns}>
               <Pressable style={[styles.modalBtn, styles.modalBtnGhost]}
                 onPress={() => setEditing(false)}>

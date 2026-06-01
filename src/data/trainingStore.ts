@@ -16,6 +16,8 @@ export interface StintSetup {
   motor?: string;      // motor
   tire?: string;       // neumático
   rim?: string;        // medida de llanta
+  crown?: string;      // corona
+  pinion?: string;     // piñón
 }
 
 /** Metadatos de un stint (lo que va en el índice y en la lista). */
@@ -124,8 +126,8 @@ export async function deleteStint(id: string): Promise<void> {
 
 /** Etiqueta corta legible a partir del setup (para listas y leyendas). */
 export function stintSetupLabel(setup: StintSetup): string {
-  const parts = [setup.carModel, setup.motor, setup.tire, setup.rim].filter(
-    (p): p is string => !!p && p.trim().length > 0,
-  );
+  const parts = [
+    setup.carModel, setup.motor, setup.tire, setup.rim, setup.crown, setup.pinion,
+  ].filter((p): p is string => !!p && p.trim().length > 0);
   return parts.join(' · ');
 }

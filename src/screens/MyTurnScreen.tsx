@@ -298,6 +298,16 @@ export default function MyTurnScreen(_props: Props) {
               value={setup.rim}
               onChange={v => setSetup(s => ({ ...s, rim: v }))}
             />
+            <SetupField
+              label="Corona"
+              value={setup.crown}
+              onChange={v => setSetup(s => ({ ...s, crown: v }))}
+            />
+            <SetupField
+              label="Piñón"
+              value={setup.pinion}
+              onChange={v => setSetup(s => ({ ...s, pinion: v }))}
+            />
             <View style={styles.modalBtns}>
               <Pressable
                 style={[styles.modalBtn, styles.modalBtnGhost]}
