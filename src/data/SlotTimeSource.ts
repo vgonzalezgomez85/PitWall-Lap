@@ -180,7 +180,7 @@ export class SlotTimeSource implements DataSource {
       currentMangaNum: this.currentMangaNum,
     };
 
-    this.socket = io(baseUrl, { transports: ['websocket'], reconnection: true });
+    this.socket = io(baseUrl, { transports: ['websocket'], reconnection: true, query: { client: 'mobile' } });
     this.wireSocket(this.socket);
 
     return {
@@ -219,7 +219,7 @@ export class SlotTimeSource implements DataSource {
     this.currentMangaNum = null;
     this.currentState = emptyLiveState();
 
-    this.socket = io(baseUrl, { transports: ['websocket'], reconnection: true });
+    this.socket = io(baseUrl, { transports: ['websocket'], reconnection: true, query: { client: 'mobile' } });
     this.wireTrainingSocket(this.socket);
 
     return {
@@ -290,7 +290,7 @@ export class SlotTimeSource implements DataSource {
     this.polePollTimer = setInterval(() => this.refreshPole(), 1000);
 
     // Socket adicional para capturar la vuelta cantable en cuanto cruza.
-    this.socket = io(baseUrl, { transports: ['websocket'], reconnection: true });
+    this.socket = io(baseUrl, { transports: ['websocket'], reconnection: true, query: { client: 'mobile' } });
     this.wirePoleSocket(this.socket);
 
     return {
