@@ -135,8 +135,8 @@ export default function DiscoveryScreen({ navigation }: Props) {
           style={[styles.bigBtn, styles.btnSlotTime]}
           onPress={() => setMode({ phase: 'searching', kind: 'slottime' })}
         >
-          <Text style={[styles.bigBtnTitle, { color: '#0a0d13' }]}>Voltrace</Text>
-          <Text style={[styles.bigBtnSub, { color: '#0a0d13' }]}>Cronómetro DS-300 con Voltrace</Text>
+          <Text style={[styles.bigBtnTitle, { color: '#0a0d13' }]}>PitWall</Text>
+          <Text style={[styles.bigBtnSub, { color: '#0a0d13' }]}>Cronómetro DS-300 con PitWall Manager</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.bigBtn, styles.btnInfolap]}
@@ -162,7 +162,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
   }
 
   if (mode.phase === 'searching') {
-    const label = mode.kind === 'slottime' ? 'Voltrace' : 'TicTac';
+    const label = mode.kind === 'slottime' ? 'PitWall' : 'TicTac';
     return (
       <View style={styles.root}>
         <Text style={styles.title}>{label}</Text>
@@ -176,7 +176,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
   }
 
   if (mode.phase === 'connecting') {
-    const label = mode.kind === 'slottime' ? 'Voltrace' : 'TicTac';
+    const label = mode.kind === 'slottime' ? 'PitWall' : 'TicTac';
     return (
       <View style={styles.root}>
         <Text style={styles.title}>{label}</Text>
@@ -187,7 +187,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
   }
 
   // mode.phase === 'manual'
-  const label = mode.kind === 'slottime' ? 'Voltrace' : 'TicTac';
+  const label = mode.kind === 'slottime' ? 'PitWall' : 'TicTac';
   const submit = () => {
     if (!manualHost.trim()) return;
     Keyboard.dismiss();

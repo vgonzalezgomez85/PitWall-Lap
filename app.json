@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Voltrace Lap",
+    "name": "PitWall Lap",
     "slug": "slot-timer-pro",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "SlotTime se conecta al cronómetro de tu pista (DS-300 o InfoLap) en la WiFi local para mostrar los tiempos en vivo.",
+        "NSLocalNetworkUsageDescription": "PitWall se conecta al cronómetro de tu pista (DS-300 o InfoLap) en la WiFi local para mostrar los tiempos en vivo.",
         "NSBonjourServices": [
           "_voltrace-manager._tcp"
         ],

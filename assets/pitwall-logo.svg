@@ -48,8 +48,8 @@
   </g>
 
   <!-- ===== TEXTO ===== -->
-  <text x="207" y="126" fill="#F1EFE8" font-family="Rajdhani, Helvetica, sans-serif" font-size="66" font-weight="700">VOL<tspan fill="#E24B4A">T</tspan>RACE</text>
-  <rect x="207" y="136" width="420" height="1.5" rx="1" fill="#BA7517" opacity="0.6"/>
+  <text x="207" y="126" fill="#F1EFE8" font-family="Rajdhani, Helvetica, sans-serif" font-size="66" font-weight="700">PIT<tspan fill="#E24B4A">W</tspan>ALL</text>
+  <rect x="207" y="136" width="232" height="1.5" rx="1" fill="#BA7517" opacity="0.6"/>
   <text x="210" y="166" fill="#888780" font-family="'Barlow Condensed', Helvetica, sans-serif" font-size="20" font-weight="300">LAP</text>
 
   <!-- Bandera a cuadros -->

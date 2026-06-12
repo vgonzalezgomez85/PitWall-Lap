@@ -1,4 +1,4 @@
-# Voltrace Lap
+# PitWall Lap
 
 App móvil iOS para pilotos de slot racing. Se conecta al cronómetro de la
 pista por WiFi y locuta los tiempos de vuelta en castellano — incluso con
@@ -6,7 +6,7 @@ la pantalla bloqueada.
 
 Compatible con dos sistemas de cronometraje:
 
-- **Voltrace** (sistema propio, basado en hardware DS-300).
+- **PitWall Manager** (sistema propio, basado en hardware DS-300).
 - **Tic Tac Slot / InfoLap** (sistema legado de muchos clubes).
 
 ## Estado
@@ -17,7 +17,7 @@ App Store.
 
 ## Funcionalidades
 
-- **Auto-discovery** del servidor en la WiFi local (mDNS para Voltrace,
+- **Auto-discovery** del servidor en la WiFi local (mDNS para PitWall Manager,
   UDP broadcast para InfoLap), con fallback a IP manual.
 - **Selector multi-carrera y multi-tanda** cuando el servidor tiene varias
   preparadas.
@@ -54,7 +54,7 @@ App Store.
 src/
 ├── data/
 │   ├── types.ts                Contrato común DataSource + LiveState
-│   ├── SlotTimeSource.ts       Cliente Voltrace (socket.io + REST + voz)
+│   ├── SlotTimeSource.ts       Cliente PitWall Manager (socket.io + REST + voz)
 │   ├── InfolapSource.ts        Cliente InfoLap (UDP unicast/broadcast)
 │   ├── infolapDecode.ts        Decoder XOR del campo tiempo de InfoLap
 │   ├── discovery.ts            Orquestador mDNS / subnet scan / UDP
@@ -93,9 +93,10 @@ firma (7 días con Apple ID gratuito, 1 año con Apple Developer Program).
 
 ## Servidor
 
-Requiere el servidor Voltrace (proyecto separado, `~/SloTime`) corriendo
-en la misma WiFi. La app lo descubre automáticamente vía mDNS
-(`_voltrace-manager._tcp`) o por IP manual.
+Requiere el servidor PitWall Manager (proyecto separado, `~/SloTime`)
+corriendo en la misma WiFi. La app lo descubre automáticamente vía mDNS
+(`_voltrace-manager._tcp`, nombre de servicio legado que se mantiene por
+compatibilidad) o por IP manual.
 
 Para modo InfoLap necesita el Gestor de Carreras de Tic Tac Slot en un
 PC de la red.

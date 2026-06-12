@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PitWall Lap — Mockups de pantallas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0d13; --card:#141923; --accent:#f6c90e; --blue:#2c5cdd;
+    --muted:#9aa3ad; --text:#fff; --sec:#cfd5dc; --border:#3a4350;
+    --red:#ff6b6b; --green:#5fd167; --divider:#1c2330;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:#05070b; color:var(--text);
+    font-family:'Saira',system-ui,sans-serif;
+    padding:40px 24px 80px;
+  }
+  .page-head{max-width:1200px; margin:0 auto 40px;}
+  .page-head h1{font-size:32px; font-weight:800; letter-spacing:-.5px;}
+  .page-head .accent{color:var(--accent);}
+  .page-head p{color:var(--muted); margin-top:8px; font-size:15px;}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; margin-top:18px;}
+  .legend span{display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted);}
+  .sw{width:14px; height:14px; border-radius:4px; border:1px solid #0003;}
+
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+    gap:48px 32px; max-width:1400px; margin:0 auto;
+    justify-items:center;
+  }
+  .cell{display:flex; flex-direction:column; align-items:center; gap:14px;}
+  .caption{text-align:center;}
+  .caption .ct{font-size:15px; font-weight:700;}
+  .caption .cs{font-size:12px; color:var(--muted); margin-top:2px; max-width:280px;}
+  .flow{font-size:10px; color:var(--accent); text-transform:uppercase; letter-spacing:1px; font-weight:700;}
+
+  /* ---- phone frame ---- */
+  .phone{
+    width:300px; height:620px; border-radius:38px; padding:10px;
+    background:#1a1d24; box-shadow:0 0 0 2px #2a2e38, 0 24px 50px #0009;
+    position:relative;
+  }
+  .notch{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    width:110px; height:24px; background:#1a1d24; border-radius:0 0 16px 16px; z-index:5;
+  }
+  .screen{
+    width:100%; height:100%; border-radius:30px; background:var(--bg);
+    overflow:hidden; position:relative; display:flex; flex-direction:column;
+  }
+  .statusbar{
+    height:30px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 22px; font-size:11px; color:var(--sec); font-weight:600; flex:0 0 auto;
+  }
+  .body{flex:1 1 auto; overflow:hidden; padding:6px 18px 18px; position:relative;}
+  .body.center{display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px;}
+
+  /* ---- shared bits ---- */
+  .back{color:var(--muted); font-size:13px; margin-bottom:6px;}
+  .back::before{content:"‹ "; font-size:16px;}
+  .kind{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; margin-top:6px;}
+  .self{font-size:21px; font-weight:700; margin-top:2px;}
+  .navTitle{color:var(--accent); font-size:24px; font-weight:700; margin-top:6px;}
+  .subtitle{color:var(--muted); font-size:13px; margin-top:5px;}
+  .lane{color:var(--accent); font-size:26px; font-weight:700;}
+  .remaining{color:var(--sec); font-size:19px; font-weight:600; font-family:'IBM Plex Mono';}
+  .headerRow{display:flex; align-items:baseline; justify-content:space-between; margin-top:4px;}
+  .label{color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.5px;}
+  .block{margin-top:14px; padding:14px; background:var(--card); border-radius:8px;}
+  .bigTime{font-size:58px; font-weight:800; margin-top:2px; font-family:'IBM Plex Mono'; line-height:1;}
+  .medTime{font-size:26px; font-weight:700; margin-top:3px; font-family:'IBM Plex Mono';}
+  .bigName{font-size:26px; font-weight:700; margin-top:3px;}
+  .row2{display:flex; gap:10px; margin-top:10px;}
+  .col{flex:1; padding:13px; background:var(--card); border-radius:8px;}
+  .section{color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.5px; margin-top:18px; margin-bottom:7px;}
+  .muted{color:var(--muted); font-size:12px; margin-top:3px;}
+  .sec{color:var(--sec);}
+
+  .chips{display:flex; flex-wrap:wrap; gap:7px;}
+  .chip{padding:6px 12px; border-radius:999px; border:1px solid var(--border); font-size:12px; font-weight:600; color:var(--sec);}
+  .chip.on{background:var(--accent); border-color:var(--accent); color:var(--bg);}
+
+  .listRow{background:var(--card); padding:14px; border-radius:8px; margin-top:11px;}
+  .listRow .rn{font-size:17px; font-weight:600;}
+  .listRow .rm{color:var(--muted); font-size:11px; margin-top:4px;}
+  .listRow.lb{border-left:4px solid var(--accent);}
+  .rowflex{display:flex; align-items:center; gap:10px;}
+
+  .badge{padding:3px 9px; border-radius:12px; font-size:10px; font-weight:700;}
+  .b-active{background:#1f3a1f; color:var(--green);}
+  .b-pending{background:#2a2a2a; color:var(--muted);}
+  .b-pole{background:#3a2a00; color:var(--accent);}
+
+  .bigBtn{width:100%; padding:22px; border-radius:12px; text-align:center; margin-top:14px;}
+  .bigBtn .t{font-size:24px; font-weight:800;}
+  .bigBtn .s{font-size:12px; margin-top:5px; opacity:.85;}
+  .btn-yellow{background:var(--accent); color:var(--bg);}
+  .btn-blue{background:var(--blue); color:#fff;}
+  .link{color:var(--muted); font-size:13px; text-decoration:underline; text-align:center; margin-top:22px;}
+
+  .input{background:var(--card); border:1px solid var(--border); border-radius:8px; padding:11px 13px; color:#fff; font-size:16px; margin-top:7px; font-family:'IBM Plex Mono';}
+  .placeholder{color:#5a6573;}
+  .btnPrimary{background:var(--accent); color:var(--bg); padding:13px; border-radius:8px; text-align:center; font-weight:700; font-size:15px; margin-top:11px;}
+  .btnGhost{border:1px solid var(--border); color:var(--sec); padding:13px; border-radius:8px; text-align:center; font-size:13px; margin-top:11px;}
+
+  .spinner{width:42px; height:42px; border-radius:50%; border:4px solid #2a2e38; border-top-color:var(--accent); margin:0 auto;}
+  .errTitle{color:var(--red); font-size:19px; font-weight:700;}
+  .goBtn{padding:16px; border-radius:10px; text-align:center; font-size:17px; font-weight:800; margin-top:6px;}
+  .goStart{background:#1f5f2a; color:#fff;} .goStop{background:#7a2230; color:#fff;}
+
+  .standRow{display:flex; align-items:center; gap:11px; background:var(--card); padding:11px 13px; border-radius:8px; margin-top:6px;}
+  .standRow.me{border:1px solid var(--accent);}
+  .standPos{color:var(--accent); font-size:17px; font-weight:800; width:24px;}
+  .standName{flex:1; font-size:14px; font-weight:600;}
+  .standTime{color:var(--sec); font-size:15px; font-weight:600; font-family:'IBM Plex Mono';}
+
+  .pickerRow{display:flex; align-items:center; gap:12px; background:var(--card); padding:13px; border-radius:8px; margin-top:9px;}
+  .pickerPos{color:var(--accent); font-size:20px; font-weight:800; background:#1f1804; padding:3px 9px; border-radius:6px;}
+  .doneTag{color:var(--green); font-size:17px; font-weight:800;}
+
+  .setupRow{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--divider);}
+  .setupRow .l{color:var(--muted); font-size:13px;} .setupRow .v{font-size:13px; font-weight:600;}
+  .check{width:24px; height:24px; border-radius:12px; border:1.5px solid var(--border); display:flex; align-items:center; justify-content:center;}
+  .check.on{background:var(--accent); border-color:var(--accent); color:var(--bg); font-weight:800;}
+
+  /* mini lap chart (svg) */
+  .chartBox{background:var(--card); border-radius:8px; padding:10px; margin-top:14px;}
+  .excelBtn{background:#1f5f2a; color:#fff; text-align:center; padding:11px; border-radius:8px; font-size:14px; font-weight:600; margin-top:14px;}
+
+  .posCol{width:30px;} .pos{color:var(--accent); font-size:20px; font-weight:800;}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1><span class="accent">PitWall</span> Lap — Mockups de pantallas</h1>
+  <p>App del piloto (Expo / React Native). Las 11 pantallas + sus estados clave, fieles al design system PitWall. Los tiempos van en IBM&nbsp;Plex&nbsp;Mono; el resto en Saira.</p>
+  <div class="legend">
+    <span><i class="sw" style="background:#0a0d13"></i>Fondo #0a0d13</span>
+    <span><i class="sw" style="background:#141923"></i>Tarjeta #141923</span>
+    <span><i class="sw" style="background:#f6c90e"></i>Acento #f6c90e</span>
+    <span><i class="sw" style="background:#2c5cdd"></i>InfoLap #2c5cdd</span>
+    <span><i class="sw" style="background:#9aa3ad"></i>Texto apagado</span>
+    <span><i class="sw" style="background:#ff6b6b"></i>Error</span>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- 1. DISCOVERY · choose -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body center">
+        <div style="font-size:34px;font-weight:800;letter-spacing:-1px;"><span class="accent">VOL</span>TRACE</div>
+        <div class="subtitle" style="margin-bottom:18px;">Elige a qué cronometrador conectar</div>
+        <div class="bigBtn btn-yellow"><div class="t">PitWall</div><div class="s">Cronómetro DS-300 con PitWall Manager</div></div>
+        <div class="bigBtn btn-blue"><div class="t">TicTac</div><div class="s">Gestor de Carreras (InfoLap)</div></div>
+        <div class="link">Ver carreras pasadas</div>
+        <div class="link" style="margin-top:14px;">Mis entrenamientos</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">Inicio</div><div class="ct">Discovery · elegir fuente</div><div class="cs">Pantalla raíz. Elige PitWall o TicTac; accesos a histórico y entrenamientos.</div></div>
+  </div>
+
+  <!-- 2. DISCOVERY · searching -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body center">
+        <div class="navTitle" style="font-size:34px;">PitWall</div>
+        <div class="spinner" style="margin-top:30px;"></div>
+        <div class="sec" style="margin-top:16px;font-size:15px;">Buscando PitWall…</div>
+        <div class="link">Cancelar</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">Discovery</div><div class="ct">Buscando (mDNS / UDP)</div><div class="cs">Auto-discovery ~6 s. Mismo patrón en "Conectando a IP…".</div></div>
+  </div>
+
+  <!-- 3. DISCOVERY · manual -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body center" style="justify-content:flex-start;padding-top:40px;">
+        <div class="navTitle" style="font-size:32px;">PitWall</div>
+        <div class="errTitle" style="margin-top:24px;">No se encontró automáticamente</div>
+        <div class="muted" style="margin-top:10px;line-height:1.5;">Introduce la IP del servidor manualmente.</div>
+        <div style="width:100%;margin-top:22px;text-align:left;">
+          <div class="label" style="margin-bottom:6px;">IP del servidor</div>
+          <div class="input placeholder" style="display:block;">192.168.10.99</div>
+          <div class="btnPrimary">Conectar a PitWall</div>
+          <div class="btnGhost">Reintentar búsqueda automática</div>
+          <div class="link" style="margin-top:18px;">Volver al inicio</div>
+        </div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">Discovery</div><div class="ct">IP manual (fallback)</div><div class="cs">Si no encuentra el servidor: input de IP + reintento. Recuerda la última IP.</div></div>
+  </div>
+
+  <!-- 4. RACE PICKER -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="navTitle">Elige actividad</div>
+        <div class="listRow" style="border-left:4px solid #22c55e;">
+          <div class="rowflex"><div style="flex:1"><div class="rn">Entrenamiento</div><div class="rm">Sesión libre · elige tu carril</div></div><span class="badge b-active">Activo</span></div>
+        </div>
+        <div class="listRow">
+          <div class="rowflex"><div style="flex:1"><div class="rn">24h Resistència</div><div class="rm">Equipos · 12 · 6 tandas · 5 min/manga</div></div>
+          <span class="badge b-pole">POLE</span><span class="badge b-active" style="margin-left:5px;">En curso</span></div>
+        </div>
+        <div class="listRow">
+          <div class="rowflex"><div style="flex:1"><div class="rn">Clásica Slot.it</div><div class="rm">Pilotos · 8 · 2 tandas · 4 min/manga</div></div><span class="badge b-pending">Pendiente</span></div>
+        </div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">SlotTime →</div><div class="ct">RacePicker</div><div class="cs">Carreras activas/pendientes + entreno. Si solo hay una, se salta sola.</div></div>
+  </div>
+
+  <!-- 5. TANDA PICKER -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="navTitle">Elige tanda</div>
+        <div class="listRow"><div class="rn">Tanda 1</div></div>
+        <div class="listRow"><div class="rn">Tanda 2</div></div>
+        <div class="listRow"><div class="rn">Tanda 3</div></div>
+        <div class="listRow"><div class="rn">Tanda 4</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">SlotTime →</div><div class="ct">TandaPicker</div><div class="cs">Tandas de la carrera. Al elegir, conecta el socket y va a Select.</div></div>
+  </div>
+
+  <!-- 6. SELECT -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="navTitle">24h Resistència</div>
+        <div class="subtitle">Tanda 2 · Elige tu equipo</div>
+        <div class="listRow lb" style="border-left-color:#e2724b"><div class="rn">Scuderia Llinars</div></div>
+        <div class="listRow lb" style="border-left-color:#4ea1f6"><div class="rn">Blue Racing Team</div></div>
+        <div class="listRow lb" style="border-left-color:#5ec27a"><div class="rn">Green Arrows</div></div>
+        <div class="listRow lb" style="border-left-color:#f6c90e"><div class="rn">Team PitWall</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">SlotTime →</div><div class="ct">Select · piloto/equipo</div><div class="cs">Filtrado por tanda. Borde izq. = color del equipo. Lleva a Mi turno.</div></div>
+  </div>
+
+  <!-- 7. MYTURN · live (★) -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="kind">slottime</div>
+        <div class="self">Scuderia Llinars</div>
+        <div class="headerRow"><div class="lane">Carril 3</div><div class="remaining">3:42</div></div>
+        <div class="block"><div class="label">Última vuelta</div><div class="bigTime">8.47</div></div>
+        <div class="row2">
+          <div class="col"><div class="label">Vuelta rápida</div><div class="medTime">8.12</div></div>
+          <div class="col"><div class="label">Vueltas</div><div class="medTime">27</div></div>
+        </div>
+        <div class="row2">
+          <div class="col"><div class="label">Posición</div><div class="medTime">2 / 12</div></div>
+          <div class="col"><div class="label">Gap delante</div><div class="medTime">1.30</div></div>
+        </div>
+        <div class="section">Voz</div>
+        <div class="chips">
+          <span class="chip on">Voz ON</span><span class="chip on">Vueltas</span>
+          <span class="chip on">Posición</span><span class="chip">Último min</span>
+          <span class="chip">30 s</span><span class="chip on">Media 2 min</span><span class="chip">Gaps</span>
+        </div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">★ Pantalla estrella</div><div class="ct">MyTurn · cronometraje en vivo</div><div class="cs">Última vuelta en grande, rápida, posición, gaps + chips de voz.</div></div>
+  </div>
+
+  <!-- 8. MYTURN · resting -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="kind">slottime</div>
+        <div class="self">Scuderia Llinars</div>
+        <div style="color:var(--accent);font-size:25px;font-weight:700;margin-top:4px;">Descansas esta manga</div>
+        <div class="muted" style="margin-top:8px;">Ahora se corre la manga 4 · 2:15 restante</div>
+        <div class="block" style="margin-top:22px;">
+          <div class="label">Tu próxima manga</div>
+          <div class="bigTime" style="font-size:48px;">5</div>
+          <div class="label" style="margin-top:12px;">Carril</div>
+          <div class="medTime">2</div>
+        </div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">MyTurn</div><div class="ct">Estado: descanso</div><div class="cs">Cuando no corres esta manga. Voz en silencio hasta tu próxima manga.</div></div>
+  </div>
+
+  <!-- 9. MYTURN · training (Entreno GO) -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="kind">slottime · entrenamiento</div>
+        <div class="self">Carril 4</div>
+        <div class="headerRow"><div class="lane">Carril 4</div></div>
+        <div class="block"><div class="label">Última vuelta</div><div class="bigTime">7.98</div></div>
+        <div class="section">Registro de entrenamiento</div>
+        <div class="goBtn goStop">■&nbsp; Detener y guardar</div>
+        <div class="row2">
+          <div class="col"><div class="label">Vueltas</div><div class="medTime">14</div></div>
+          <div class="col"><div class="label">Mejor</div><div class="medTime">7.81</div></div>
+          <div class="col"><div class="label">Media</div><div class="medTime">8.05</div></div>
+        </div>
+        <div class="link" style="margin-top:14px;">Ver mis entrenamientos</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">MyTurn</div><div class="ct">Modo entrenamiento · Entreno GO</div><div class="cs">Graba un stint; al parar abre el modal de datos del coche.</div></div>
+  </div>
+
+  <!-- 10. POLE · picker -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="navTitle">Pole Position</div>
+        <div class="subtitle">Carril 1 · elige tu salida</div>
+        <div class="pickerRow"><span class="pickerPos">P1</span><div style="flex:1"><div class="rn" style="font-size:16px;font-weight:600">Team PitWall</div><div class="muted">7.92</div></div><span class="doneTag">✓</span></div>
+        <div class="pickerRow"><span class="pickerPos">P2</span><div style="flex:1"><div class="rn" style="font-size:16px;font-weight:600">Blue Racing Team</div></div></div>
+        <div class="pickerRow"><span class="pickerPos">P3</span><div style="flex:1"><div class="rn" style="font-size:16px;font-weight:600">Scuderia Llinars</div></div></div>
+        <div class="pickerRow"><span class="pickerPos">P4</span><div style="flex:1"><div class="rn" style="font-size:16px;font-weight:600">Green Arrows</div></div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">SlotTime · Pole</div><div class="ct">Pole · orden de salida</div><div class="cs">Eliges tu entrada. ✓ = ya hizo su vuelta.</div></div>
+  </div>
+
+  <!-- 11. POLE · live my turn -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="kind">pole · carril 1</div>
+        <div class="headerRow"><div class="lane">Tu turno</div><div class="remaining">0:48</div></div>
+        <div class="block"><div class="label">Tiempo actual de vuelta</div><div class="bigTime">6.91</div></div>
+        <div class="row2">
+          <div class="col"><div class="label">Mejor</div><div class="medTime">7.88</div></div>
+          <div class="col"><div class="label">Vueltas</div><div class="medTime">3</div></div>
+        </div>
+        <div class="section">Clasificación</div>
+        <div class="standRow"><div class="standPos">1</div><div class="standName">Team PitWall</div><div class="standTime">7.92</div></div>
+        <div class="standRow me"><div class="standPos">2</div><div class="standName">Scuderia Llinars</div><div class="standTime">7.88</div></div>
+        <div class="standRow"><div class="standPos">3</div><div class="standName">Blue Racing</div><div class="standTime">8.10</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">SlotTime · Pole</div><div class="ct">Pole · en vivo (tu turno)</div><div class="cs">Tiempo en grande + clasificación parcial (tu fila resaltada).</div></div>
+  </div>
+
+  <!-- 12. TRAINING LANE PICKER -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="navTitle">Entrenamiento</div>
+        <div class="subtitle">Elige tu carril</div>
+        <div class="listRow lb" style="border-left-color:#e2724b"><div class="rn">Carril 1</div><div class="rm">42 vueltas · mejor 7.81 · media 8.04</div></div>
+        <div class="listRow lb" style="border-left-color:#4ea1f6"><div class="rn">Carril 2</div><div class="rm">38 vueltas · mejor 7.95 · media 8.20</div></div>
+        <div class="listRow lb" style="border-left-color:#5ec27a"><div class="rn">Carril 3</div><div class="rm">0 vueltas · mejor — · media —</div></div>
+        <div class="listRow lb" style="border-left-color:#f6c90e"><div class="rn">Carril 4</div><div class="rm">12 vueltas · mejor 8.01 · media 8.33</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">SlotTime · Entreno</div><div class="ct">TrainingLanePicker</div><div class="cs">Cuando el servidor está en modo entrenamiento: eliges carril.</div></div>
+  </div>
+
+  <!-- 13. HISTORY -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="navTitle">Histórico</div>
+        <div class="listRow"><div class="rn">24h Resistència Llinars</div><div class="rm">Equipos · 02/06/2026, 21:40</div></div>
+        <div class="listRow"><div class="rn">Clásica Slot.it</div><div class="rm">Pilotos · 28/05/2026, 19:05</div></div>
+        <div class="listRow"><div class="rn">GP Primavera</div><div class="rm">Pilotos · 15/05/2026, 18:30</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">Offline</div><div class="ct">History · carreras pasadas</div><div class="cs">Guardado local del dossier de fin de carrera (race:stats-snapshot).</div></div>
+  </div>
+
+  <!-- 14. HISTORY DETAIL -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="navTitle" style="font-size:22px;">24h Resistència Llinars</div>
+        <div class="subtitle">Por equipos · 02/06/2026, 21:40</div>
+        <div class="excelBtn">Descargar Excel comparativa</div>
+        <div class="listRow lb" style="border-left-color:#f6c90e;margin-top:12px;"><div class="rowflex"><div class="posCol"><span class="pos">1</span></div><div style="flex:1"><div class="rn">Team PitWall</div><div class="rm">312 vueltas · mejor 7.88 · media 8.10</div></div></div></div>
+        <div class="listRow lb" style="border-left-color:#e2724b"><div class="rowflex"><div class="posCol"><span class="pos">2</span></div><div style="flex:1"><div class="rn">Scuderia Llinars</div><div class="rm">308 vueltas · mejor 7.81 · media 8.15</div></div></div></div>
+        <div class="listRow lb" style="border-left-color:#4ea1f6"><div class="rowflex"><div class="posCol"><span class="pos">3</span></div><div style="flex:1"><div class="rn">Blue Racing Team</div><div class="rm">301 vueltas · mejor 7.95 · media 8.22</div></div></div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">Offline</div><div class="ct">HistoryDetail · clasificación final</div><div class="cs">Resultados + descarga/compartir el Excel comparativo del servidor.</div></div>
+  </div>
+
+  <!-- 15. TRAINING (list + compare) -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="headerRow"><div class="navTitle">Entrenamientos</div><div style="color:var(--accent);font-size:14px;font-weight:600;">Comparar</div></div>
+        <div class="muted" style="margin-top:8px;">Selecciona 2-4 stints para comparar (2 elegidos)</div>
+        <div class="listRow" style="border:1px solid var(--accent);"><div class="rowflex"><div style="flex:1"><div class="rn" style="font-size:16px">NSR · Slot.it · 11/8</div><div class="rm">02/06, 20:10 · carril 1 · 22 vueltas</div><div class="sec" style="font-size:12px;margin-top:3px;">mejor 7.81 · media 8.05</div></div><div class="check on">✓</div></div></div>
+        <div class="listRow"><div class="rowflex"><div style="flex:1"><div class="rn" style="font-size:16px">NSR · Pro · 12/9</div><div class="rm">02/06, 19:50 · carril 1 · 18 vueltas</div><div class="sec" style="font-size:12px;margin-top:3px;">mejor 7.95 · media 8.20</div></div><div class="check on">✓</div></div></div>
+        <div class="listRow"><div class="rowflex"><div style="flex:1"><div class="rn" style="font-size:16px">Stint 28/05, 18:30</div><div class="rm">28/05, 18:30 · carril 3 · 15 vueltas</div><div class="sec" style="font-size:12px;margin-top:3px;">mejor 8.01 · media 8.33</div></div><div class="check"></div></div></div>
+        <div class="btnPrimary" style="margin-top:14px;">Comparar 2 stints</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">Offline</div><div class="ct">Training · lista de stints</div><div class="cs">Stints guardados; modo comparar (2-4) para superponer gráficas.</div></div>
+  </div>
+
+  <!-- 16. STINT DETAIL -->
+  <div class="cell">
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>▮▮▮ ▰</span></div>
+      <div class="body">
+        <div class="back">Atrás</div>
+        <div class="navTitle" style="font-size:22px;">NSR · Slot.it · 11/8</div>
+        <div class="subtitle">02/06/2026, 20:10 · carril 1</div>
+        <div class="chartBox">
+          <svg viewBox="0 0 250 90" width="100%" height="90">
+            <line x1="0" y1="30" x2="250" y2="30" stroke="#222a36" stroke-width="1"/>
+            <line x1="0" y1="60" x2="250" y2="60" stroke="#222a36" stroke-width="1"/>
+            <polyline fill="none" stroke="#f6c90e" stroke-width="2" points="5,55 25,40 45,48 65,35 85,42 105,30 125,38 145,33 165,45 185,36 205,32 225,40 245,34"/>
+            <polyline fill="none" stroke="#4ea1f6" stroke-width="2" points="5,68 25,58 45,62 65,55 85,60 105,52 125,58 145,54 165,63 185,56 205,53 225,59 245,55"/>
+          </svg>
+        </div>
+        <div class="block" style="margin-top:12px;"><div class="rowflex"><span style="width:11px;height:11px;border-radius:6px;background:#f6c90e;display:inline-block;"></span><div style="flex:1"><div class="rn" style="font-size:14px">NSR · Slot.it · 11/8</div><div class="rm">22 vueltas · mejor 7.81 · media 8.05 · ±0.18</div></div></div></div>
+        <div style="color:#6b7480;font-size:10px;margin-top:6px;">±  = consistencia (desviación; menor es mejor)</div>
+        <div class="section">Datos del coche</div>
+        <div class="setupRow"><span class="l">Modelo</span><span class="v">NSR Mosler</span></div>
+        <div class="setupRow"><span class="l">Corona / Piñón</span><span class="v">28 / 9</span></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="flow">Offline</div><div class="ct">StintDetail · gráfica + setup</div><div class="cs">Gráfica de tiempos (con comparativa), stats de consistencia y datos del coche.</div></div>
+  </div>
+
+</div>
+
+</body>
+</html>
