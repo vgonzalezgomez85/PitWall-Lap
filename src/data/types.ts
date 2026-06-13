@@ -75,8 +75,16 @@ export interface LiveState {
   remainingMs: number | null;     // sólo SlotTime
   gapAheadMs: number | null;      // sólo SlotTime (calculado en cliente)
   gapBehindMs: number | null;
+  gapAheadLaps: number | null;    // diferencia de vueltas con el de delante
+  gapBehindLaps: number | null;   // diferencia de vueltas con el de detrás
   aheadName: string | null;
   behindName: string | null;
+  /** Ritmo medio (ms/vuelta) necesario para alcanzar al de delante en la
+   *  clasificación proyectada. Lo calcula el servidor (col. P/Subir de la
+   *  web); null = no aplica (líder, sin tiempo o inalcanzable). */
+  avgToCatchMs: number | null;
+  /** Proyección de vueltas al final de la carrera (la calcula el servidor). */
+  projectedTotal: number | null;
   currentMangaNum: number | null;
   /** Si estoy en descanso, info de mi próxima manga. */
   nextMangaInfo?: { mangaNum: number; lane: number };
@@ -100,6 +108,7 @@ export type SourceEvent =
   | { type: 'lap-completed';     lapTimeMs: number | null; lapCount: number }
   | { type: 'position-changed';  from: number; to: number }
   | { type: 'race-started' }
+  | { type: 'half-manga' }
   | { type: 'last-minute' }
   | { type: 'last-30s' }
   | { type: 'race-finished' }
@@ -233,8 +242,12 @@ export function emptyLiveState(): LiveState {
     remainingMs: null,
     gapAheadMs: null,
     gapBehindMs: null,
+    gapAheadLaps: null,
+    gapBehindLaps: null,
     aheadName: null,
     behindName: null,
+    avgToCatchMs: null,
+    projectedTotal: null,
     currentMangaNum: null,
     pole: null,
     selfName: null,

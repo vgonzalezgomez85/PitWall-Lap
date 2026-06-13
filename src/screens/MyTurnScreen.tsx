@@ -28,6 +28,13 @@ function fmt(ms: number | null): string {
   return `${s}.${String(cs).padStart(2, '0')}`;
 }
 
+// Gap en vueltas para mostrar en pantalla. 0 = mismo número de vueltas.
+function fmtGapLaps(laps: number | null): string {
+  if (laps == null) return '—';
+  if (laps === 0) return 'A la par';
+  return `${laps} ${laps === 1 ? 'vuelta' : 'vueltas'}`;
+}
+
 function fmtRemaining(ms: number | null): string {
   if (ms == null) return '—';
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -149,12 +156,21 @@ export default function MyTurnScreen(_props: Props) {
               {state.position} / {state.totalParticipants ?? '?'}
             </Text>
           </View>
-          {state.gapAheadMs != null && (
-            <View style={styles.col}>
-              <Text style={styles.label}>Gap delante</Text>
-              <Text style={styles.medTime}>{fmt(state.gapAheadMs)}</Text>
-            </View>
-          )}
+          <View style={styles.col}>
+            <Text style={styles.label}>Gap delante</Text>
+            <Text style={styles.medTime}>{fmtGapLaps(state.gapAheadLaps)}</Text>
+          </View>
+          <View style={styles.col}>
+            <Text style={styles.label}>Gap detrás</Text>
+            <Text style={styles.medTime}>{fmtGapLaps(state.gapBehindLaps)}</Text>
+          </View>
+        </View>
+      )}
+
+      {isSlotTime && state.position != null && (
+        <View style={styles.block}>
+          <Text style={styles.label}>Media para subir</Text>
+          <Text style={styles.medTime}>{fmt(state.avgToCatchMs)}</Text>
         </View>
       )}
 
@@ -204,6 +220,7 @@ export default function MyTurnScreen(_props: Props) {
         {isSlotTime && (
           <>
             <ToggleChip label="Posición"  active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
+            <ToggleChip label="Media manga" active={settings.sayHalfManga}     onPress={() => toggle('sayHalfManga')} />
             <ToggleChip label="Último min" active={settings.sayLastMinute}     onPress={() => toggle('sayLastMinute')} />
             <ToggleChip label="30 s"      active={settings.sayLast30s}        onPress={() => toggle('sayLast30s')} />
             <ToggleChip
@@ -215,6 +232,11 @@ export default function MyTurnScreen(_props: Props) {
               label={settings.sayGapsEveryMin > 0 ? `Gaps ${settings.sayGapsEveryMin} min` : 'Gaps'}
               active={settings.sayGapsEveryMin > 0}
               onPress={() => update({ sayGapsEveryMin: cycleMinutes(settings.sayGapsEveryMin) })}
+            />
+            <ToggleChip
+              label={settings.sayCatchUpEveryMin > 0 ? `P/Subir ${settings.sayCatchUpEveryMin} min` : 'P/Subir'}
+              active={settings.sayCatchUpEveryMin > 0}
+              onPress={() => update({ sayCatchUpEveryMin: cycleMinutes(settings.sayCatchUpEveryMin) })}
             />
           </>
         )}

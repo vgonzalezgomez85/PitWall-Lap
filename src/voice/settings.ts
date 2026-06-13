@@ -14,22 +14,26 @@ export interface VoiceSettings {
   // Básico
   sayLaps: boolean;             // tiempo de cada vuelta
   sayPositionChange: boolean;   // "has subido a 2º" / "te han adelantado"
+  sayHalfManga: boolean;        // aviso al llegar a la mitad del tiempo
   sayLastMinute: boolean;       // aviso 60s antes del fin
   sayLast30s: boolean;          // aviso 30s antes del fin
 
   // Avanzado
   sayAveragesEveryMin: number;  // 0 = off; entero ≥1 = cada N minutos
   sayGapsEveryMin: number;      // 0 = off; entero ≥1 = cada N minutos
+  sayCatchUpEveryMin: number;   // "media para subir": 0 = off; ≥1 = cada N min
 }
 
 export const DEFAULT_SETTINGS: VoiceSettings = {
   enabled: true,
   sayLaps: true,
   sayPositionChange: true,
+  sayHalfManga: true,
   sayLastMinute: true,
   sayLast30s: true,
   sayAveragesEveryMin: 0,
   sayGapsEveryMin: 0,
+  sayCatchUpEveryMin: 0,
 };
 
 async function load(): Promise<VoiceSettings> {

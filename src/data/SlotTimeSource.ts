@@ -51,12 +51,29 @@ interface StandingsRow {
   gap: number;
 }
 
+// Proyección que envía el servidor (Opción A) en el evento `standings`:
+// array por entidad ordenado por vueltas proyectadas. Calculado en
+// TimingService._buildProjection (col. "P/Subir" de la web).
+interface ProjectionRow {
+  position: number;          // posición GENERAL entre tandas (proyectada)
+  entityId: number;
+  entityType: 'team' | 'driver';
+  name: string;
+  total: number;             // vueltas reales acumuladas
+  projectedTotal: number | null;
+  gapV: number | null;       // gap en vueltas proyectadas al de delante
+  avgToCatch: number | null; // ms/vuelta para alcanzar al de delante; null = N/A
+  avgLapMs: number | null;
+}
+
 interface StandingsPayload {
   mangaId: number;
   raceId: number;
   elapsedMs: number;
   remainingMs: number;
   standings: StandingsRow[];
+  /** Proyección general entre tandas. Puede faltar (servidor antiguo). */
+  projection?: ProjectionRow[];
 }
 
 interface LapPayload {
@@ -111,6 +128,7 @@ export class SlotTimeSource implements DataSource {
   private eventListeners: ((e: SourceEvent) => void)[] = [];
   private snapshotListeners: ((s: RaceStatsSnapshot) => void)[] = [];
   private currentState: LiveState = emptyLiveState();
+  private firedHalfManga = false;
   private firedLastMinute = false;
   private firedLast30s = false;
   private prevPosition: number | null = null;
@@ -285,9 +303,11 @@ export class SlotTimeSource implements DataSource {
     this.polePrevCurrentEntryId = poleData.currentEntry?.entryId ?? null;
     this.polePrevStatus = poleData.status;
 
-    // Polling de /pole para refrescar standings/order/live cada segundo.
-    // Más simple que cablear 6 eventos socket distintos.
-    this.polePollTimer = setInterval(() => this.refreshPole(), 1000);
+    // Polling de /pole para refrescar standings/order/live cada 2 s. Más
+    // simple que cablear 6 eventos socket distintos. La vuelta cantable no
+    // depende de esto (llega instantánea por socket), así que 2 s basta para
+    // standings/gaps y reduce el tráfico WiFi a la mitad (ahorro de batería).
+    this.polePollTimer = setInterval(() => this.refreshPole(), 2000);
 
     // Socket adicional para capturar la vuelta cantable en cuanto cruza.
     this.socket = io(baseUrl, { transports: ['websocket'], reconnection: true, query: { client: 'mobile' } });
@@ -388,6 +408,7 @@ export class SlotTimeSource implements DataSource {
   selectParticipant(id: string): void {
     this.selectedId = id;
     this.prevPosition = null;
+    this.firedHalfManga = false;
     this.firedLastMinute = false;
     this.firedLast30s = false;
 
@@ -466,6 +487,7 @@ export class SlotTimeSource implements DataSource {
 
     socket.on('manga:started', async () => {
       console.log('[SlotTime] manga:started → refetching current race');
+      this.firedHalfManga = false;
       this.firedLastMinute = false;
       this.firedLast30s = false;
       // El servidor empezó una nueva manga. Si la app se conectó antes
@@ -558,6 +580,15 @@ export class SlotTimeSource implements DataSource {
 
     const gapAheadMs  = ahead  && ahead.avgLapMs  != null ? (ahead.lapCount  - me.lapCount) * ahead.avgLapMs  : null;
     const gapBehindMs = behind && behind.avgLapMs != null ? (me.lapCount - behind.lapCount) * behind.avgLapMs : null;
+    // Gap en vueltas (la diferencia real de conteo, no estimada).
+    const gapAheadLaps  = ahead  ? ahead.lapCount - me.lapCount  : null;
+    const gapBehindLaps = behind ? me.lapCount - behind.lapCount : null;
+
+    // Mi fila en la proyección general (Opción A). El id del participante en la
+    // app es el entityId del servidor; como una carrera es solo equipos o solo
+    // pilotos, basta el id. Fallback por nombre por si acaso.
+    const myProj = payload.projection?.find(p => String(p.entityId) === this.selectedId)
+                ?? payload.projection?.find(p => p.name === me.name);
 
     // Detectar cambio de posición
     if (this.prevPosition != null && this.prevPosition !== me.position) {
@@ -577,8 +608,12 @@ export class SlotTimeSource implements DataSource {
       remainingMs: payload.remainingMs,
       gapAheadMs,
       gapBehindMs,
+      gapAheadLaps,
+      gapBehindLaps,
       aheadName:  ahead?.name ?? null,
       behindName: behind?.name ?? null,
+      avgToCatchMs:   myProj?.avgToCatch ?? null,
+      projectedTotal: myProj?.projectedTotal ?? null,
     };
     this.emitState();
   }
@@ -602,6 +637,18 @@ export class SlotTimeSource implements DataSource {
     this.currentState = { ...this.currentState, remainingMs };
     this.emitState();
 
+    // Mitad de manga: cuando ya ha transcurrido la mitad del tiempo (queda
+    // la mitad o menos). Exigimos que aún quede más de un minuto para no
+    // solaparlo con el aviso de último minuto en mangas muy cortas.
+    if (
+      !this.firedHalfManga &&
+      this.mangaDurationMs > 0 &&
+      remainingMs <= this.mangaDurationMs / 2 &&
+      remainingMs > LAST_MINUTE_MS
+    ) {
+      this.firedHalfManga = true;
+      this.emitEvent({ type: 'half-manga' });
+    }
     if (!this.firedLastMinute && remainingMs <= LAST_MINUTE_MS && remainingMs > LAST_30S_MS) {
       this.firedLastMinute = true;
       this.emitEvent({ type: 'last-minute' });
@@ -620,6 +667,7 @@ export class SlotTimeSource implements DataSource {
 
     socket.on('training:go', (payload: { durationMs: number }) => {
       this.mangaDurationMs = payload.durationMs;
+      this.firedHalfManga = false;
       this.firedLastMinute = false;
       this.firedLast30s = false;
       this.emitEvent({ type: 'race-started' });
@@ -704,6 +752,7 @@ export class SlotTimeSource implements DataSource {
   private reevaluateMangaForSelected(): void {
     if (!this.selectedId) return;
     this.currentMangaNum = (this.currentMangaNum ?? 0) + 1;
+    this.firedHalfManga = false;
     this.firedLastMinute = false;
     this.firedLast30s = false;
     this.prevPosition = null;

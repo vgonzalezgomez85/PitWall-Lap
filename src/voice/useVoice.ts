@@ -61,6 +61,9 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         if (e.to !== e.from) speak(ordinal(e.to));
         break;
       }
+      case 'half-manga':
+        if (s.sayHalfManga) speak('Media manga');
+        break;
       case 'last-minute':
         if (s.sayLastMinute) speak('Último minuto');
         break;
@@ -122,16 +125,30 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         }
       }
 
-      // Gaps: cada N minutos en punto.
+      // Gaps: cada N minutos en punto. Avisamos en VUELTAS, y solo cuando el
+      // rival está a 2 vueltas o menos (lo bastante cerca para importar).
       if (s.sayGapsEveryMin > 0 && minute % s.sayGapsEveryMin === 0) {
         if (lastGapMinuteRef.current !== minute) {
           lastGapMinuteRef.current = minute;
-          if (st.gapAheadMs != null && st.aheadName) {
-            speak(`Te separan ${speakTime(st.gapAheadMs)} de ${st.aheadName}`);
+          if (st.gapAheadLaps != null && st.gapAheadLaps <= GAP_LAPS_THRESHOLD && st.aheadName) {
+            speak(st.gapAheadLaps === 0
+              ? `A la par con ${st.aheadName}`
+              : `A ${lapsPhrase(st.gapAheadLaps)} de ${st.aheadName}`);
           }
-          if (st.gapBehindMs != null && st.behindName) {
-            speak(`Tienes a ${st.behindName} a ${speakTime(st.gapBehindMs)}`);
+          if (st.gapBehindLaps != null && st.gapBehindLaps <= GAP_LAPS_THRESHOLD && st.behindName) {
+            speak(st.gapBehindLaps === 0
+              ? `${st.behindName}, a la par`
+              : `Tienes a ${st.behindName} a ${lapsPhrase(st.gapBehindLaps)}`);
           }
+        }
+      }
+
+      // Media para subir: cada N minutos en punto. Solo si el servidor manda un
+      // ritmo aplicable (no líder / con tiempo / alcanzable).
+      if (s.sayCatchUpEveryMin > 0 && minute % s.sayCatchUpEveryMin === 0) {
+        if (lastCatchMinuteRef.current !== minute && st.avgToCatchMs != null) {
+          lastCatchMinuteRef.current = minute;
+          speak(`Para subir, ${speakTime(st.avgToCatchMs)}`);
         }
       }
     }, 5000); // chequear cada 5s, la guarda por minuto evita repetición
@@ -142,6 +159,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   // minuto (el ticker corre cada 5s).
   const lastAvgMinuteRef     = useRef<number>(-1);
   const lastGapMinuteRef     = useRef<number>(-1);
+  const lastCatchMinuteRef   = useRef<number>(-1);
   const lastRaceAvgMinuteRef = useRef<number>(-1);
   const bestLapRef           = useRef<number | null>(null);
   // Tiempos de todas las vueltas del piloto en la manga/carrera actual.
@@ -158,12 +176,20 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   useEffect(() => {
     lastAvgMinuteRef.current = -1;
     lastGapMinuteRef.current = -1;
+    lastCatchMinuteRef.current = -1;
     lastRaceAvgMinuteRef.current = -1;
     bestLapRef.current = null;
     raceLapsRef.current = [];
   }, [raceInfo?.source]);
 
   return { settings, toggle, update, ready };
+}
+
+// Solo avisamos del rival si está a esta diferencia de vueltas o menos.
+const GAP_LAPS_THRESHOLD = 2;
+
+function lapsPhrase(n: number): string {
+  return n === 1 ? 'una vuelta' : `${n} vueltas`;
 }
 
 function ordinal(n: number): string {
