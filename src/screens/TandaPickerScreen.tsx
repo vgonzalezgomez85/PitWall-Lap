@@ -33,15 +33,23 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
     // elige tanda (o automáticamente si solo hay una).
     fetch(`http://${host}:${port}/api/mobile/races/${raceId}`)
       .then(r => r.json())
-      .then((data: { participants: { mangas: { tandaNum: number; isRest: boolean }[] }[] }) => {
+      .then((data: { participants: { mangas: { tandaNum: number; isRest: boolean; mangaStatus?: string }[] }[] }) => {
         if (cancelled) return;
-        const set = new Set<number>();
+        // Una tanda se muestra solo si tiene alguna manga sin finalizar.
+        // El servidor marca cada manga como 'pending' | 'active' | 'finished';
+        // si TODAS las de una tanda están 'finished', la ocultamos.
+        const seen = new Set<number>();
+        const hasUnfinished = new Set<number>();
         for (const p of data.participants ?? []) {
           for (const m of p.mangas ?? []) {
-            if (!m.isRest) set.add(m.tandaNum);
+            if (m.isRest) continue;
+            seen.add(m.tandaNum);
+            if (m.mangaStatus !== 'finished') hasUnfinished.add(m.tandaNum);
           }
         }
-        const list = [...set].sort((a, b) => a - b);
+        const list = [...seen]
+          .filter(t => hasUnfinished.has(t))
+          .sort((a, b) => a - b);
         setTandas(list);
         if (list.length === 1) {
           // Solo una tanda → conectamos y vamos directos a Select.
