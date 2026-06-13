@@ -19,6 +19,7 @@ import type {
   DataSource, LiveState, RaceInfo, RaceStatsSnapshot, SourceEvent,
 } from './types';
 import { emptyLiveState } from './types';
+import { startKeepAlive, stopKeepAlive } from '../../modules/backgroundtts';
 
 interface SourceContextValue {
   source: DataSource | null;
@@ -46,8 +47,14 @@ export function SourceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!source) {
       setState(emptyLiveState());
+      // Sin fuente activa: liberamos la sesión de audio para que iOS pueda
+      // suspender la app y dormir la radio WiFi (ahorro de batería).
+      stopKeepAlive();
       return;
     }
+    // Con una fuente conectada arrancamos el keep-alive para que la voz
+    // siga sonando con la pantalla bloqueada.
+    startKeepAlive();
     const unsubState = source.onStateChange(s => setState(s));
     const unsubEvent = source.onEvent(e => {
       for (const cb of eventListeners.current) cb(e);

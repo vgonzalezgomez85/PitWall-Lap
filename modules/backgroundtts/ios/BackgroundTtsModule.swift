@@ -22,26 +22,41 @@ public class BackgroundTtsModule: Module {
   public func definition() -> ModuleDefinition {
     Name("BackgroundTts")
 
-    OnCreate {
-      _ = self.configureAudioSession()
+    // El keep-alive ya NO arranca en OnCreate. La capa JS lo activa con
+    // `start()` solo cuando hay una fuente conectada y lo para con `stop()`
+    // al desconectar, para que iOS pueda suspender la app (y dormir la radio
+    // WiFi) cuando no estás en una carrera. Esto reduce mucho el consumo.
+
+    // Activa la sesión de audio + el loop silente. Idempotente.
+    Function("start") { () -> Bool in
+      let ok = self.configureAudioSession()
       self.startKeepAlive()
+      return ok
+    }
+
+    // Para la voz y libera la sesión de audio para que iOS suspenda la app.
+    // Usar al desconectar de la carrera.
+    Function("stop") { () -> Void in
+      self.synth.stopSpeaking(at: .immediate)
+      self.stopKeepAlive()
+    }
+
+    // Interrumpe solo el habla en curso, manteniendo viva la sesión.
+    Function("shutUp") { () -> Void in
+      self.synth.stopSpeaking(at: .immediate)
     }
 
     Function("speak") { (text: String, language: String, rate: Double) -> String in
       let ok = self.configureAudioSession()
-      // Asegurar que el keep-alive sigue corriendo.
+      // Asegurar que el keep-alive sigue corriendo mientras hablamos.
       if !(self.keepAlivePlayer?.isPlaying ?? false) {
-        self.keepAlivePlayer?.play()
+        self.startKeepAlive()
       }
       let utterance = AVSpeechUtterance(string: text)
       utterance.voice = AVSpeechSynthesisVoice(language: language)
       utterance.rate = Float(rate)
       self.synth.speak(utterance)
       return ok ? "ok" : "session-failed"
-    }
-
-    Function("stop") { () -> Void in
-      self.synth.stopSpeaking(at: .immediate)
     }
 
     Function("getStatus") { () -> String in
@@ -73,31 +88,50 @@ public class BackgroundTtsModule: Module {
     }
   }
 
+  // Arranca (o re-arranca) el loop silente. El player se crea una vez de
+  // forma perezosa y luego se reusa en sucesivos start/stop.
   private func startKeepAlive() {
-    if started { return }
+    if keepAlivePlayer == nil {
+      // Generar WAV silente de 1s y escribirlo a disco temporal — usamos
+      // AVAudioPlayer en vez de AVAudioPlayerNode porque iOS lo trata
+      // como "media playback" estable que no se suspende.
+      guard let url = self.writeSilentWavToTemp() else {
+        NSLog("[BackgroundTts] could not write keep-alive wav")
+        return
+      }
+      do {
+        let player = try AVAudioPlayer(contentsOf: url)
+        player.numberOfLoops = -1  // infinite
+        // Silencio total. iOS sigue considerando la sesión "playback"
+        // activa mientras el player esté en loop, así que la app no se
+        // suspende en background aunque las muestras sean 0.
+        player.volume = 0.0
+        player.prepareToPlay()
+        self.keepAlivePlayer = player
+      } catch {
+        NSLog("[BackgroundTts] keep-alive player failed: \(error)")
+        return
+      }
+    }
+    if !(keepAlivePlayer?.isPlaying ?? false) {
+      keepAlivePlayer?.play()
+    }
     started = true
+    NSLog("[BackgroundTts] keep-alive started")
+  }
 
-    // Generar WAV silente de 1s y escribirlo a disco temporal — usamos
-    // AVAudioPlayer en vez de AVAudioPlayerNode porque iOS lo trata
-    // como "media playback" estable que no se suspende.
-    guard let url = self.writeSilentWavToTemp() else {
-      NSLog("[BackgroundTts] could not write keep-alive wav")
-      return
-    }
+  // Para el loop silente y libera la sesión de audio. A partir de aquí iOS
+  // puede suspender la app en background (no más drenaje de batería).
+  private func stopKeepAlive() {
+    keepAlivePlayer?.pause()
+    started = false
+    let session = AVAudioSession.sharedInstance()
     do {
-      let player = try AVAudioPlayer(contentsOf: url)
-      player.numberOfLoops = -1  // infinite
-      // Silencio total. iOS sigue considerando la sesión "playback"
-      // activa mientras el player esté en loop, así que la app no se
-      // suspende en background aunque las muestras sean 0.
-      player.volume = 0.0
-      player.prepareToPlay()
-      player.play()
-      self.keepAlivePlayer = player
-      NSLog("[BackgroundTts] keep-alive player started")
+      try session.setActive(false, options: [.notifyOthersOnDeactivation])
     } catch {
-      NSLog("[BackgroundTts] keep-alive player failed: \(error)")
+      NSLog("[BackgroundTts] deactivate session failed: \(error)")
     }
+    NSLog("[BackgroundTts] keep-alive stopped")
   }
 
   // Genera 1s de WAV mono 16-bit 44100Hz con un tono muy bajo
