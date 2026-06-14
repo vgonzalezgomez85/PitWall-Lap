@@ -35,6 +35,8 @@ export interface RaceInfo {
   source: SourceKind;
   /** 'training' / 'pole' cuando la fuente SlotTime corre en esos modos. */
   mode?: 'race' | 'training' | 'pole';
+  /** Id de la carrera en el servidor (SlotTime). Clave de persistencia. */
+  raceId?: number;
   /** Nombre legible de la carrera (SlotTime) o "InfoLap" si no hay otro. */
   name: string;
   /** Formato. Infolap se mapea siempre a 'individual'. */
@@ -54,6 +56,21 @@ export interface SourceCapabilities {
   laneAverages: boolean;      // media de carril / proyectada
   multiMangaPlan: boolean;    // planning entre mangas
   history: boolean;           // carreras pasadas
+}
+
+/** Fila de la proyección general entre tandas que envía el servidor (Opción A)
+ *  en el evento `standings`, ordenada por vueltas proyectadas. La calcula
+ *  TimingService._buildProjection (col. "P/Subir" de la web). */
+export interface ProjectionRow {
+  position: number;          // posición GENERAL entre tandas (proyectada)
+  entityId: number;
+  entityType: 'team' | 'driver';
+  name: string;
+  total: number;             // vueltas reales acumuladas
+  projectedTotal: number | null;
+  gapV: number | null;       // gap en vueltas proyectadas al de delante
+  avgToCatch: number | null; // ms/vuelta para alcanzar al de delante; null = N/A
+  avgLapMs: number | null;   // media de carrera (todas las mangas)
 }
 
 /** Estado actual del piloto seleccionado. */
@@ -85,6 +102,9 @@ export interface LiveState {
   avgToCatchMs: number | null;
   /** Proyección de vueltas al final de la carrera (la calcula el servidor). */
   projectedTotal: number | null;
+  /** Proyección general completa (todas las entidades). La usa la estrategia
+   *  de neumáticos para comparar con el rival de delante/detrás. */
+  projection: ProjectionRow[] | null;
   currentMangaNum: number | null;
   /** Si estoy en descanso, info de mi próxima manga. */
   nextMangaInfo?: { mangaNum: number; lane: number };
@@ -105,7 +125,10 @@ export interface LiveState {
 
 /** Eventos discretos. La capa de voz los traduce a locuciones. */
 export type SourceEvent =
-  | { type: 'lap-completed';     lapTimeMs: number | null; lapCount: number }
+  | { type: 'lap-completed';     lapTimeMs: number | null; lapCount: number; isExit?: boolean; isFirstCrossing?: boolean }
+  // Vuelta de CUALQUIER entidad (no solo el seguido). La usa la estrategia de
+  // neumáticos para modelar la goma de los rivales (Fase 2).
+  | { type: 'entity-lap';        lane: number; name: string; lapTimeMs: number | null; lapNumber: number; isExit?: boolean; isFirstCrossing?: boolean }
   | { type: 'position-changed';  from: number; to: number }
   | { type: 'race-started' }
   | { type: 'half-manga' }
@@ -248,6 +271,7 @@ export function emptyLiveState(): LiveState {
     behindName: null,
     avgToCatchMs: null,
     projectedTotal: null,
+    projection: null,
     currentMangaNum: null,
     pole: null,
     selfName: null,

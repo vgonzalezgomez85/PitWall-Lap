@@ -11,6 +11,7 @@ export type RootStackParamList = {
   Pole: { host: string; port: number; raceId: number };
   Select: { tandaNum?: number } | undefined;
   MyTurn: undefined;
+  Strategy: undefined;
   History: undefined;
   HistoryDetail: { raceId: number | string };
   Training: undefined;

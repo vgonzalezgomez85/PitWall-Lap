@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { setAudioModeAsync } from 'expo-audio';
 
 import { SourceProvider } from './src/data/sourceContext';
+import { TireStrategyProvider } from './src/strategy/useTireStrategy';
 import { useAutoSaveHistory } from './src/data/useAutoSaveHistory';
 import DiscoveryScreen   from './src/screens/DiscoveryScreen';
 import RacePickerScreen  from './src/screens/RacePickerScreen';
@@ -14,6 +15,7 @@ import TrainingLanePickerScreen from './src/screens/TrainingLanePickerScreen';
 import PoleScreen          from './src/screens/PoleScreen';
 import SelectScreen      from './src/screens/SelectScreen';
 import MyTurnScreen      from './src/screens/MyTurnScreen';
+import StrategyScreen    from './src/screens/StrategyScreen';
 import HistoryScreen     from './src/screens/HistoryScreen';
 import HistoryDetailScreen from './src/screens/HistoryDetailScreen';
 import TrainingScreen     from './src/screens/TrainingScreen';
@@ -43,6 +45,7 @@ function AppInner() {
         <Stack.Screen name="Pole"          component={PoleScreen} />
         <Stack.Screen name="Select"        component={SelectScreen} />
         <Stack.Screen name="MyTurn"        component={MyTurnScreen} />
+        <Stack.Screen name="Strategy"      component={StrategyScreen} />
         <Stack.Screen name="History"       component={HistoryScreen} />
         <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
         <Stack.Screen name="Training"      component={TrainingScreen} />
@@ -70,7 +73,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SourceProvider>
-        <AppInner />
+        <TireStrategyProvider>
+          <AppInner />
+        </TireStrategyProvider>
       </SourceProvider>
     </SafeAreaProvider>
   );

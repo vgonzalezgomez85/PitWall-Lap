@@ -14,6 +14,7 @@ import { useDataSource } from '../data/sourceContext';
 import { useStintRecorder } from '../data/useStintRecorder';
 import { saveStint, type StintSetup } from '../data/trainingStore';
 import { useVoice } from '../voice/useVoice';
+import { useTireStrategy } from '../strategy/useTireStrategy';
 import type { VoiceSettings } from '../voice/settings';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
@@ -46,6 +47,7 @@ function fmtRemaining(ms: number | null): string {
 export default function MyTurnScreen(_props: Props) {
   void _props;
   const { state, raceInfo, source } = useDataSource();
+  const { pendingCount } = useTireStrategy();
   const { settings, toggle, update } = useVoice();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -172,6 +174,14 @@ export default function MyTurnScreen(_props: Props) {
           <Text style={styles.label}>Media para subir</Text>
           <Text style={styles.medTime}>{fmt(state.avgToCatchMs)}</Text>
         </View>
+      )}
+
+      {isSlotTime && !isTraining && (
+        <Pressable style={styles.strategyBtn} onPress={() => navigation.push('Strategy')}>
+          <Text style={styles.strategyBtnText}>
+            Estrategia de neumáticos{pendingCount > 0 ? ` · ${pendingCount} ●` : ''} →
+          </Text>
+        </Pressable>
       )}
 
       {/* ── Entreno GO (solo modo entrenamiento) ───────────────────────── */}
@@ -378,6 +388,13 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 13, fontWeight: '600' },
   chipTextOn:  { color: '#0a0d13' },
   chipTextOff: { color: '#cfd5dc' },
+
+  // Acceso a Estrategia
+  strategyBtn: {
+    marginTop: 18, paddingVertical: 14, borderRadius: 10, alignItems: 'center',
+    borderWidth: 1, borderColor: '#f6c90e',
+  },
+  strategyBtnText: { color: '#f6c90e', fontSize: 15, fontWeight: '700' },
 
   // Vista de descanso
   restTitle: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 4 },

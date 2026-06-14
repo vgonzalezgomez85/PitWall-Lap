@@ -21,6 +21,7 @@ import type {
   Participant,
   ParticipantPlan,
   PoleSnapshot,
+  ProjectionRow,
   RaceInfo,
   RaceStatsSnapshot,
   SourceEvent,
@@ -49,21 +50,6 @@ interface StandingsRow {
   avgLapMs: number | null;
   position: number;
   gap: number;
-}
-
-// Proyección que envía el servidor (Opción A) en el evento `standings`:
-// array por entidad ordenado por vueltas proyectadas. Calculado en
-// TimingService._buildProjection (col. "P/Subir" de la web).
-interface ProjectionRow {
-  position: number;          // posición GENERAL entre tandas (proyectada)
-  entityId: number;
-  entityType: 'team' | 'driver';
-  name: string;
-  total: number;             // vueltas reales acumuladas
-  projectedTotal: number | null;
-  gapV: number | null;       // gap en vueltas proyectadas al de delante
-  avgToCatch: number | null; // ms/vuelta para alcanzar al de delante; null = N/A
-  avgLapMs: number | null;
 }
 
 interface StandingsPayload {
@@ -203,6 +189,7 @@ export class SlotTimeSource implements DataSource {
 
     return {
       source: 'slottime',
+      raceId: data.race.id,
       name: data.race.name,
       format: data.race.format,
       participants: this.participants.map(p => ({ id: p.id, name: p.name, color: p.color })),
@@ -614,18 +601,35 @@ export class SlotTimeSource implements DataSource {
       behindName: behind?.name ?? null,
       avgToCatchMs:   myProj?.avgToCatch ?? null,
       projectedTotal: myProj?.projectedTotal ?? null,
+      projection:     payload.projection ?? null,
     };
     this.emitState();
   }
 
   private onLap(payload: LapPayload): void {
+    // Vuelta de CUALQUIER entidad → estrategia de rivales (Fase 2). Se emite
+    // antes del filtro por carril propio.
+    this.emitEvent({
+      type: 'entity-lap',
+      lane: payload.lane,
+      name: payload.name,
+      lapTimeMs: payload.lapTimeMs,
+      lapNumber: payload.lapNumber,
+      isExit: payload.isExit,
+      isFirstCrossing: payload.isFirstCrossing,
+    });
+
     const myLane = this.currentState.myLane;
     if (myLane == null || payload.lane !== myLane) return;
-    // Standings ya nos actualiza el conteo; este evento dispara la voz.
+    // Standings ya nos actualiza el conteo; este evento dispara la voz y
+    // alimenta la estrategia del piloto propio (los flags permiten excluir
+    // salidas y la primera vuelta).
     this.emitEvent({
       type: 'lap-completed',
       lapTimeMs: payload.lapTimeMs,
       lapCount: payload.lapNumber,
+      isExit: payload.isExit,
+      isFirstCrossing: payload.isFirstCrossing,
     });
   }
 
