@@ -126,7 +126,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
     return (
       <View style={styles.root}>
         <Image
-          source={require('../../assets/logo-wide.png')}
+          source={require('../../assets/icon.png')}
           style={styles.logo}
           resizeMode="contain"
         />
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     padding: 24, backgroundColor: '#0a0d13',
   },
   title: { color: '#f6c90e', fontSize: 36, fontWeight: '700' },
-  logo: { width: 280, height: 110, marginBottom: 16 },
+  logo: { width: 120, height: 120, marginBottom: 16 },
   subtitle: { color: '#9aa3ad', fontSize: 14, marginTop: 8, marginBottom: 32 },
   phase: { color: '#cfd5dc', fontSize: 16, marginTop: 16, textAlign: 'center' },
 
