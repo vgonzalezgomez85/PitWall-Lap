@@ -543,7 +543,7 @@ export class SlotTimeSource implements DataSource {
       this.mangaDurationMs = payload.elapsedMs + payload.remainingMs;
     }
 
-    const myLane = this.currentState.myLane;
+    let myLane = this.currentState.myLane;
     if (myLane == null) {
       // Estoy descansando: sólo actualizo el contexto general.
       this.currentState = {
@@ -555,7 +555,21 @@ export class SlotTimeSource implements DataSource {
       return;
     }
 
-    const me = payload.standings.find(r => r.lane === myLane);
+    let me = payload.standings.find(r => r.lane === myLane);
+    // Blindaje: si la fila de mi carril no es el equipo seguido (plan
+    // desfasado con la asignación real), lo localizamos por nombre de forma
+    // INEQUÍVOCA (una sola fila) y corregimos el carril. Si hay ambigüedad o
+    // no coincide, dejamos el carril del plan (no arriesgamos).
+    const selfName = this.currentState.selfName;
+    if (selfName && (!me || me.name !== selfName)) {
+      const byName = payload.standings.filter(r => r.name === selfName);
+      if (byName.length === 1) {
+        me = byName[0];
+        myLane = me!.lane;
+        this.currentState = { ...this.currentState, myLane };
+        console.log('[SlotTime] carril corregido por nombre →', myLane);
+      }
+    }
     if (!me) return;
 
     // Calcular gap al de delante y al de detrás en tiempo (aproximado:
@@ -765,6 +779,8 @@ export class SlotTimeSource implements DataSource {
       ...emptyLiveState(),
       status: myLane != null ? 'my-turn' : 'resting',
       myLane,
+      // Preservar el nombre seguido: sin esto desaparecía entre mangas.
+      selfName: this.currentState.selfName,
       currentMangaNum: this.currentMangaNum,
       nextMangaInfo: myLane == null ? this.findMyNextManga(this.selectedId) : undefined,
     };

@@ -14,6 +14,8 @@
 import dgram from 'react-native-udp';
 import { Buffer } from 'buffer';
 import * as Network from 'expo-network';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type {
   DataSource,
@@ -28,8 +30,14 @@ import { decodeLapField } from './infolapDecode';
 
 const SERVER_PORT = 4441;
 const CLIENT_PORT = 12543;
+// IP del último servidor TicTac al que conectamos. En iOS el escaneo de la
+// subred lo bloquea el SO (anti-port-scan), así que en automático probamos
+// PRIMERO esta IP recordada como un único unicast (que sí funciona).
+const LAST_HOST_KEY = '@pitwall/infolap/last-host';
 const PROBE_INTERVAL_MS = 2000;
-const PROBE_TIMEOUT_MS  = 6000;
+// El barrido unicast suave necesita margen para recorrer la subred (en iOS
+// hay que ir despacio para que no se pierda la respuesta del servidor).
+const PROBE_TIMEOUT_MS  = 11000;
 
 // El Gestor de Carreras de Tic Tac Slot rechaza silenciosamente los probes
 // cuyo identificador `Cxxx` no coincide con el último octeto de la IP del
@@ -47,6 +55,10 @@ const BRUTE_FORCE_PROBES: Buffer[] = [];
 for (let i = 1; i <= 254; i++) BRUTE_FORCE_PROBES.push(buildProbe(i));
 // Si el probe único no responde en este plazo, escalamos al barrido.
 const PROBE_ESCALATE_MS = 2500;
+// Fallback (sobre todo iOS): si el "OK" de discovery se pierde pero el
+// servidor ya nos empuja paquetes de estado, resolvemos con los nombres que
+// vengan en el estado tras recolectar este plazo.
+const STATE_RESOLVE_MS = 1200;
 
 // ── Parsers puros (testables sin red) ─────────────────────────────────────
 
@@ -133,6 +145,22 @@ export class InfolapSource implements DataSource {
    *  `InfoLap:Cxxx` (derivado de la IP local) y escala a los 254 si no
    *  hay respuesta. */
   private probePayloads: Buffer[] = BRUTE_FORCE_PROBES;
+  /** Probe con NUESTRO id (un solo payload), para el barrido unicast. */
+  private ownProbe: Buffer | null = null;
+  /** Hosts de la subred local para el barrido unicast (funciona en iOS,
+   *  donde el broadcast UDP está bloqueado sin entitlement multicast). */
+  private subnetHosts: string[] = [];
+  /** true mientras un barrido unicast por tandas está en curso. */
+  private sweeping = false;
+  /** true una vez resuelto el descubrimiento (para parar el barrido). */
+  private discovered = false;
+  /** IP del último servidor (recordada) para probarla primero en auto. */
+  private cachedHost: string | null = null;
+  /** Si arrancamos el barrido de subred. Con IP recordada esperamos a que
+   *  esa falle (evita disparar el anti-escaneo de iOS en el caso normal). */
+  private sweepEnabled = false;
+  /** IP desde la que respondió el servidor en esta sesión (para recordarla). */
+  private serverHost: string | null = null;
   private stateListeners: ((s: LiveState) => void)[] = [];
   private eventListeners: ((e: SourceEvent) => void)[] = [];
   private currentState: LiveState = emptyLiveState();
@@ -173,6 +201,8 @@ export class InfolapSource implements DataSource {
 
   async connect(): Promise<RaceInfo> {
     console.log('[Infolap] connect() start');
+    this.discovered = false;
+    this.sweeping = false;
 
     // Detectar la IP local del dispositivo para el probe único inicial.
     // Si no responde, el escalado de abajo pasa al barrido completo.
@@ -180,8 +210,21 @@ export class InfolapSource implements DataSource {
       const ip = await Network.getIpAddressAsync();
       const lastOctet = parseInt(ip.split('.').pop() ?? '', 10);
       if (Number.isFinite(lastOctet) && lastOctet >= 1 && lastOctet <= 254) {
-        this.probePayloads = [buildProbe(lastOctet)];
-        console.log('[Infolap] local IP', ip, '→ probe ID C' + String(lastOctet).padStart(3, '0'));
+        this.ownProbe = buildProbe(lastOctet);
+        this.probePayloads = [this.ownProbe];
+        // Hosts de la subred para el barrido unicast (todas menos la nuestra),
+        // en orden PRIORIZADO: primero los rangos donde suele estar un servidor
+        // (bajos 1-60 y el tramo 100-150) para encontrarlo pronto, luego el resto.
+        const subnet = ip.split('.').slice(0, 3).join('.');
+        if (/^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01]))\./.test(ip)) {
+          const priority = (n: number) => (n <= 60 ? 0 : (n >= 100 && n <= 150) ? 1 : 2);
+          const octets: number[] = [];
+          for (let i = 1; i <= 254; i++) if (i !== lastOctet) octets.push(i);
+          octets.sort((a, b) => priority(a) - priority(b) || a - b);
+          this.subnetHosts = octets.map(i => `${subnet}.${i}`);
+        }
+        console.log('[Infolap] local IP', ip, '→ probe ID C' + String(lastOctet).padStart(3, '0'),
+          '· unicast sweep', this.subnetHosts.length, 'hosts');
       } else {
         console.log('[Infolap] could not parse last octet from IP', ip, '→ barrido');
       }
@@ -189,14 +232,28 @@ export class InfolapSource implements DataSource {
       console.log('[Infolap] getIpAddressAsync failed → barrido:', e);
     }
 
+    // Auto: cargar la IP del último servidor para probarla primero (sortea el
+    // bloqueo de escaneo de iOS — un único unicast a un host conocido sí pasa).
+    if (!this.opts.manualHost) {
+      try {
+        this.cachedHost = await AsyncStorage.getItem(LAST_HOST_KEY);
+        if (this.cachedHost) console.log('[Infolap] cached host →', this.cachedHost);
+      } catch { /* ignore */ }
+    }
+    // Sin IP recordada barremos desde el principio; con IP recordada esperamos
+    // a que esa falle antes de barrer (para no disparar el anti-escaneo iOS).
+    this.sweepEnabled = !this.cachedHost;
+
     return new Promise<RaceInfo>((resolve, reject) => {
       let resolved = false;
+      let stateTimer: ReturnType<typeof setTimeout> | null = null;
 
-      // Si el probe único no obtiene respuesta, escalamos al barrido de 254.
+      // Si la IP recordada no respondió a tiempo, habilitamos el barrido de
+      // subred (caso: servidor en otra IP, o primera vez sin caché).
       const escalate = setTimeout(() => {
-        if (!resolved && this.probePayloads.length === 1) {
-          console.log('[Infolap] sin respuesta → escalando a barrido de 254');
-          this.probePayloads = BRUTE_FORCE_PROBES;
+        if (!resolved && !this.sweepEnabled) {
+          console.log('[Infolap] IP recordada sin respuesta → habilitando barrido');
+          this.sweepEnabled = true;
           this.sendProbe();
         }
       }, PROBE_ESCALATE_MS);
@@ -209,6 +266,7 @@ export class InfolapSource implements DataSource {
         if (!resolved) {
           console.log('[Infolap] discovery TIMEOUT after', PROBE_TIMEOUT_MS, 'ms');
           clearTimeout(escalate);
+          if (stateTimer) clearTimeout(stateTimer);
           this.disconnect();
           reject(new Error('infolap-discovery-timeout'));
         }
@@ -219,43 +277,62 @@ export class InfolapSource implements DataSource {
         if (!resolved) {
           clearTimeout(timeout);
           clearTimeout(escalate);
+          if (stateTimer) clearTimeout(stateTimer);
           this.disconnect();
           reject(err as Error);
         }
       });
 
+      // Resuelve el descubrimiento (por "OK" o por estado) una sola vez.
+      const settle = (participants: Participant[]) => {
+        if (resolved) return;
+        resolved = true;
+        this.discovered = true;
+        clearTimeout(timeout);
+        clearTimeout(escalate);
+        if (stateTimer) { clearTimeout(stateTimer); stateTimer = null; }
+        // El protocolo no requiere más probes tras el discovery: el Gestor
+        // empuja los paquetes de estado solo. Paramos de sondear.
+        if (this.probeTimer) { clearInterval(this.probeTimer); this.probeTimer = null; }
+        // Recordar la IP del servidor para la próxima conexión automática.
+        if (this.serverHost) {
+          void AsyncStorage.setItem(LAST_HOST_KEY, this.serverHost).catch(() => {});
+        }
+        this.participants = participants;
+        resolve(this.buildRaceInfo());
+      };
+
       sock.on('message', (msg, rinfo) => {
         const buf = msg as Uint8Array;
         console.log('[Infolap] msg len=', buf.length, 'from', rinfo);
+        const addr = (rinfo as { address?: string } | undefined)?.address;
+        if (addr) this.serverHost = addr;
         // Distinguimos discovery response ("OK …") vs state packet (52 bytes).
         if (buf.length >= 3 && buf[0] === 0x4f && buf[1] === 0x4b && buf[2] === 0x20) {
           const text = Buffer.from(buf).toString('ascii');
           console.log('[Infolap] discovery payload:', text);
-          if (!resolved) {
-            const participants = parseDiscoveryResponse(text);
-            console.log('[Infolap] parsed', participants.length, 'participants');
-            if (participants.length > 0) {
-              resolved = true;
-              clearTimeout(timeout);
-              clearTimeout(escalate);
-              // El protocolo no requiere más probes tras el discovery: el
-              // Gestor empuja los paquetes de estado solo. Paramos de
-              // sondear para no dejar conexiones colgando en el Gestor.
-              if (this.probeTimer) {
-                clearInterval(this.probeTimer);
-                this.probeTimer = null;
-              }
-              this.participants = participants;
-              resolve(this.buildRaceInfo());
-              return;
-            }
-          }
-          // Discovery responses subsiguientes: ignorar, ya estamos conectados.
+          const participants = parseDiscoveryResponse(text);
+          console.log('[Infolap] parsed', participants.length, 'participants');
+          if (participants.length > 0) settle(participants);
           return;
         }
         if (buf.length === 52) {
           const pkt = parseStatePacket(buf);
           if (pkt) this.ingestPacket(pkt);
+          // Fallback (iOS): si el "OK" se pierde pero el servidor ya nos
+          // empuja estado con nombres, resolvemos con esos participantes tras
+          // recolectar un poco (los carriles ciclan ~830 ms cada uno).
+          if (!resolved && this.laneName.size > 0 && !stateTimer) {
+            stateTimer = setTimeout(() => {
+              stateTimer = null;
+              if (resolved || this.laneName.size === 0) return;
+              const participants = [...this.laneName.entries()]
+                .sort((a, b) => a[0] - b[0])
+                .map(([lane, name]) => ({ id: `#${String(lane).padStart(3, '0')}`, name }));
+              console.log('[Infolap] resolved from state packets:', participants.length);
+              settle(participants);
+            }, STATE_RESOLVE_MS);
+          }
         }
       });
 
@@ -269,6 +346,7 @@ export class InfolapSource implements DataSource {
   }
 
   disconnect(): void {
+    this.sweeping = false;
     if (this.probeTimer) {
       clearInterval(this.probeTimer);
       this.probeTimer = null;
@@ -335,12 +413,21 @@ export class InfolapSource implements DataSource {
     return s.trim().toLowerCase().replace(/\s+/g, ' ');
   }
 
-  /** ¿Dos nombres se refieren al mismo piloto? El paquete recorta el
-   *  nombre a 20 chars, así que aceptamos coincidencia por prefijo. */
+  /** Longitud mínima del nombre corto para aceptar una coincidencia por
+   *  prefijo. El paquete recorta a 20 chars, así que un prefijo solo es
+   *  fiable si el corto está cerca de esa longitud (fue truncado). Por debajo
+   *  exigimos coincidencia EXACTA — si no, "1" emparejaría con "10" y "Juan"
+   *  con "Juan Pérez", siguiendo al coche equivocado. */
+  private static readonly PREFIX_MIN = 18;
+
+  /** ¿Dos nombres se refieren al mismo piloto? Exacto, o prefijo solo cuando
+   *  el nombre corto pudo haber sido truncado a ~20 chars. */
   private nameMatches(a: string, b: string): boolean {
     const x = this.norm(a), y = this.norm(b);
     if (!x || !y) return false;
-    return x === y || x.startsWith(y) || y.startsWith(x);
+    if (x === y) return true;
+    const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+    return long.startsWith(short) && short.length >= InfolapSource.PREFIX_MIN;
   }
 
   /** Busca el carril cuyo `driverName` coincide con `name`. */
@@ -352,10 +439,14 @@ export class InfolapSource implements DataSource {
     for (const [lane, dn] of this.laneName) {
       if (this.norm(dn) === target) return lane;
     }
-    // Luego por prefijo (el protocolo recorta el nombre a 20 chars).
+    // Luego por prefijo, pero SOLO si el nombre corto pudo ser un truncado
+    // (mismo criterio que nameMatches) para no emparejar nombres cortos
+    // parecidos ("1" con "10", "Juan" con "Juan Pérez").
     for (const [lane, dn] of this.laneName) {
       const n = this.norm(dn);
-      if (n && (n.startsWith(target) || target.startsWith(n))) return lane;
+      if (!n) continue;
+      const [short, long] = n.length <= target.length ? [n, target] : [target, n];
+      if (long.startsWith(short) && short.length >= InfolapSource.PREFIX_MIN) return lane;
     }
     return null;
   }
@@ -479,16 +570,72 @@ export class InfolapSource implements DataSource {
       console.log('[Infolap] sendProbe: no socket');
       return;
     }
-    const targets = this.opts.manualHost
-      ? [this.opts.manualHost]
-      : ['255.255.255.255', '192.168.10.255', '192.168.1.255', '192.168.0.255', '192.168.115.255'];
-    console.log('[Infolap] sendProbe →', targets.length, 'host(s) x',
-      this.probePayloads.length, 'ID(s)', this.opts.manualHost ? '(unicast)' : '(broadcast)');
-    for (const host of targets) {
-      for (const payload of this.probePayloads) {
-        sock.send(payload, 0, payload.length, SERVER_PORT, host);
-      }
+    // Cada envío protegido: en iOS un send a una dirección de broadcast puede
+    // lanzar (EACCES/EHOSTUNREACH) y, sin proteger, abortaría el resto —
+    // incluido el barrido unicast, que es justo lo que funciona en iOS.
+    const send = (payload: Buffer, host: string) => {
+      try { sock.send(payload, 0, payload.length, SERVER_PORT, host); }
+      catch { /* host concreto falla: seguimos con los demás */ }
+    };
+
+    // Manual: unicast directo al host indicado (un solo probe basta).
+    if (this.opts.manualHost) {
+      const payloads = this.ownProbe ? [this.ownProbe] : this.probePayloads;
+      for (const payload of payloads) send(payload, this.opts.manualHost);
+      return;
     }
+
+    const broadcastAddrs = ['255.255.255.255', '192.168.10.255', '192.168.1.255', '192.168.0.255', '192.168.115.255'];
+    const probe = this.ownProbe;
+    if (probe) {
+      // PRIMERO la IP recordada (un único unicast a un host conocido — esto sí
+      // pasa el filtro anti-escaneo de iOS y resuelve al instante si el
+      // servidor sigue ahí).
+      if (this.cachedHost) send(probe, this.cachedHost);
+      // Broadcast SOLO en Android (en iOS está bloqueado sin entitlement
+      // multicast). Resuelve al instante en Android.
+      if (Platform.OS === 'android') {
+        for (const host of broadcastAddrs) send(probe, host);
+      }
+      // El barrido de subred solo cuando está habilitado (sin caché desde el
+      // principio; con caché, tras 2,5 s sin respuesta). Evita disparar el
+      // anti-escaneo de iOS en el caso normal (IP recordada).
+      if (this.sweepEnabled) this.startUnicastSweep(probe);
+      console.log('[Infolap] sendProbe →', this.cachedHost ? `cached ${this.cachedHost} ` : '',
+        this.sweepEnabled ? `sweep ${this.subnetHosts.length}` : '(sin barrido)',
+        Platform.OS === 'android' ? '+ broadcast' : '');
+    } else {
+      // Sin IP local detectada: broadcast con todos los IDs (fallback antiguo).
+      for (const host of broadcastAddrs) {
+        for (const payload of this.probePayloads) send(payload, host);
+      }
+      console.log('[Infolap] sendProbe → broadcast brute-force (sin IP local)');
+    }
+  }
+
+  // Barrido unicast por tandas: envía `probe` a cada host de la subred en
+  // grupos pequeños con pausas, para no saturar el socket UDP (en iOS la
+  // ráfaga síncrona hace que se pierda la respuesta del servidor).
+  private startUnicastSweep(probe: Buffer): void {
+    if (this.sweeping || this.subnetHosts.length === 0) return;
+    this.sweeping = true;
+    const hosts = this.subnetHosts;
+    // Suave: pocas por tanda con pausa amplia. En iOS, sondear deprisa muchas
+    // IPs congestiona la pila (ARP a hosts inexistentes) y se pierde el "OK".
+    const CHUNK = 3;
+    const GAP_MS = 50;
+    let i = 0;
+    const step = () => {
+      const sock = this.socket;
+      if (!sock || this.discovered) { this.sweeping = false; return; }
+      const end = Math.min(i + CHUNK, hosts.length);
+      for (; i < end; i++) {
+        try { sock.send(probe, 0, probe.length, SERVER_PORT, hosts[i]!); } catch { /* ignore */ }
+      }
+      if (i < hosts.length) setTimeout(step, GAP_MS);
+      else this.sweeping = false;
+    };
+    step();
   }
 
   private buildRaceInfo(): RaceInfo {

@@ -11,6 +11,7 @@
 //     entitlement → suele caer al manual).
 //   • Manual: unicast UDP a `<host>:4441`.
 
+import { Platform } from 'react-native';
 import Zeroconf from 'react-native-zeroconf';
 import * as Network from 'expo-network';
 
@@ -21,6 +22,10 @@ import { SlotTimeSource, type SlotTimeServerLocation } from './SlotTimeSource';
 // iOS NSNetService.resolveWithTimeout en react-native-zeroconf es 5s.
 const MDNS_TIMEOUT_MS = 6000;
 const MDNS_SERVICE_TYPE = 'voltrace-manager';
+// En Android el descubrimiento por defecto (NsdManager) es poco fiable; la
+// implementación DNSSD embebida (mdnsresponder de Apple) sí funciona bien.
+// En iOS hay una sola implementación nativa, así que dejamos el default.
+const MDNS_IMPL = Platform.OS === 'android' ? 'DNSSD' : undefined;
 
 export type SourceKind = 'slottime' | 'infolap';
 
@@ -60,7 +65,8 @@ function probeSlotTime(): Promise<SlotTimeServerLocation | null> {
     const finish = (server: SlotTimeServerLocation | null) => {
       if (settled) return;
       settled = true;
-      try { zc.stop(); } catch { /* ignore */ }
+      // El .d.ts de la librería va por detrás del runtime (no tipa implType).
+      try { (zc as unknown as { stop: (i?: string) => void }).stop(MDNS_IMPL); } catch { /* ignore */ }
       try { zc.removeDeviceListeners(); } catch { /* ignore */ }
       resolve(server);
     };
@@ -76,7 +82,8 @@ function probeSlotTime(): Promise<SlotTimeServerLocation | null> {
     zc.on('error', () => { /* swallow — caemos al timeout */ });
 
     try {
-      zc.scan(MDNS_SERVICE_TYPE, 'tcp', 'local.');
+      (zc as unknown as { scan: (t: string, p: string, d: string, i?: string) => void })
+        .scan(MDNS_SERVICE_TYPE, 'tcp', 'local.', MDNS_IMPL);
     } catch {
       finish(null);
       return;
@@ -128,28 +135,52 @@ async function scanSubnetForSlotTime(): Promise<SlotTimeServerLocation | null> {
   const myLast = parseInt(parts[3] ?? '', 10);
   console.log('[Discovery] subnet scan on', subnet + '.0/24');
 
-  // Lanzamos los 254 probes en paralelo y nos quedamos con el primero
-  // que responda. Damos prioridad a IPs típicas de servidores (1-30, 99-110)
-  // resolviendo primero la promesa de las menores.
+  // Barrido de las 254 IPs por HTTP, con concurrencia limitada (lanzar las
+  // 254 a la vez satura el stack de red en Android y la buena se queda sin
+  // turno antes del timeout). Nos quedamos con el primero que responda.
   const order: number[] = [];
   for (let i = 1; i <= 254; i++) if (i !== myLast) order.push(i);
 
+  const CONCURRENCY = 24;
   return new Promise<SlotTimeServerLocation | null>((resolve) => {
-    let pending = order.length;
+    let idx = 0, active = 0, remaining = order.length, settled = false;
+    const pump = () => {
+      if (settled) return;
+      while (active < CONCURRENCY && idx < order.length) {
+        const host = `${subnet}.${order[idx++]}`;
+        active++;
+        probeHttpHost(host, SCAN_PORT_DEFAULT).then((ok) => {
+          active--; remaining--;
+          if (settled) return;
+          if (ok) {
+            settled = true;
+            console.log('[Discovery] subnet scan found SlotTime at', host);
+            resolve({ host, port: SCAN_PORT_DEFAULT });
+          } else if (remaining === 0) {
+            settled = true;
+            resolve(null);
+          } else {
+            pump();
+          }
+        });
+      }
+    };
+    pump();
+  });
+}
+
+// Resuelve con el primer resultado no-null de varias promesas; null si todas
+// son null. No corta las demás (se ignoran al estar ya resuelto).
+function firstNonNull<T>(promises: Promise<T | null>[]): Promise<T | null> {
+  return new Promise((resolve) => {
+    let pending = promises.length;
     let settled = false;
-    for (const i of order) {
-      const host = `${subnet}.${i}`;
-      probeHttpHost(host, SCAN_PORT_DEFAULT).then((ok) => {
+    for (const p of promises) {
+      p.then((v) => {
         if (settled) return;
-        if (ok) {
-          settled = true;
-          console.log('[Discovery] subnet scan found SlotTime at', host);
-          resolve({ host, port: SCAN_PORT_DEFAULT });
-        } else if (--pending === 0) {
-          settled = true;
-          resolve(null);
-        }
-      });
+        if (v) { settled = true; resolve(v); }
+        else if (--pending === 0) resolve(null);
+      }).catch(() => { if (!settled && --pending === 0) resolve(null); });
     }
   });
 }
@@ -158,15 +189,12 @@ async function scanSubnetForSlotTime(): Promise<SlotTimeServerLocation | null> {
 
 export async function discover(opts: DiscoveryOptions): Promise<DiscoveryResult | null> {
   if (opts.kind === 'slottime') {
-    let server: SlotTimeServerLocation | null = opts.manualHost
+    // mDNS y subnet scan en PARALELO: el primero que encuentre el servidor
+    // gana. Así no dependemos de que el mDNS funcione (falla en Android) ni
+    // esperamos su timeout antes de barrer la subred.
+    const server: SlotTimeServerLocation | null = opts.manualHost
       ? { host: opts.manualHost, port: 3000 }
-      : await probeSlotTime();
-    // Fallback: si mDNS no resolvió (típico iOS con hostnames Windows),
-    // probamos un scan del subnet local en HTTP:3000.
-    if (!server && !opts.manualHost) {
-      console.log('[Discovery] mDNS failed → trying subnet scan');
-      server = await scanSubnetForSlotTime();
-    }
+      : await firstNonNull([probeSlotTime(), scanSubnetForSlotTime()]);
     if (!server) return null;
 
     // Smoke-test: comprueba que /api/mobile/races/active responde 2xx.
