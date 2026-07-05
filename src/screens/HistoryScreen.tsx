@@ -1,16 +1,26 @@
-// Histórico local de carreras pasadas. Funciona offline — los datos los
-// guardó la app cuando llegaba el `race:stats-snapshot` del servidor.
+// Histórico de carreras pasadas. Combina lo guardado localmente (offline)
+// con la lista del servidor (si es accesible), para poder abrir también
+// carreras que no seguiste en vivo o desde un móvil nuevo.
 
 import { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { listHistory, type HistoryEntryMeta } from '../data/historyStore';
+import { listHistory } from '../data/historyStore';
+import { getCachedHost } from '../data/discovery';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'History'>;
+
+interface Row {
+  raceId: number | string;
+  name: string;
+  format: 'team' | 'individual';
+  finishedAt: string | null;
+  local: boolean;   // true = dossier guardado en el móvil (offline)
+}
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -22,13 +32,40 @@ function formatDate(iso: string | null | undefined): string {
   });
 }
 
+async function loadRows(): Promise<Row[]> {
+  const local = await listHistory();
+  const rows: Row[] = local.map(e => ({
+    raceId: e.raceId, name: e.name, format: e.format,
+    finishedAt: e.finishedAt, local: true,
+  }));
+  const localIds = new Set(local.map(e => String(e.raceId)));
+
+  // Añadir carreras del servidor que no tengamos en local (si es accesible).
+  const host = await getCachedHost();
+  if (host) {
+    try {
+      const res = await fetch(`http://${host}:3000/api/mobile/races`);
+      if (res.ok) {
+        const data: { races: { id: number; name: string; format: 'team' | 'individual'; finishedAt: string | null }[] } = await res.json();
+        for (const r of data.races ?? []) {
+          if (!localIds.has(String(r.id))) {
+            rows.push({ raceId: r.id, name: r.name, format: r.format, finishedAt: r.finishedAt, local: false });
+          }
+        }
+      }
+    } catch { /* sin servidor: solo locales */ }
+  }
+  rows.sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''));
+  return rows;
+}
+
 export default function HistoryScreen({ navigation }: Props) {
-  const [entries, setEntries] = useState<HistoryEntryMeta[] | null>(null);
+  const [entries, setEntries] = useState<Row[] | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      listHistory().then(list => { if (!cancelled) setEntries(list); });
+      loadRows().then(list => { if (!cancelled) setEntries(list); });
       return () => { cancelled = true; };
     }, []),
   );
@@ -41,8 +78,8 @@ export default function HistoryScreen({ navigation }: Props) {
         <Text style={styles.empty}>Cargando…</Text>
       ) : entries.length === 0 ? (
         <Text style={styles.empty}>
-          Aún no tienes carreras guardadas.{'\n'}
-          Las carreras terminadas en PitWall se guardan aquí automáticamente.
+          Aún no hay carreras.{'\n'}
+          Las carreras terminadas en PitWall aparecen aquí (conéctate para verlas todas).
         </Text>
       ) : (
         <FlatList
@@ -57,6 +94,7 @@ export default function HistoryScreen({ navigation }: Props) {
               <Text style={styles.rowName}>{item.name}</Text>
               <Text style={styles.rowMeta}>
                 {item.format === 'team' ? 'Equipos' : 'Pilotos'} · {formatDate(item.finishedAt)}
+                {!item.local && '  ·  ☁ en servidor'}
               </Text>
             </TouchableOpacity>
           )}

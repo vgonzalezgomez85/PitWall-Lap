@@ -6,10 +6,11 @@ import {
   ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
-import { getSnapshot } from '../data/historyStore';
+import { getSnapshot, saveSnapshot } from '../data/historyStore';
+import { ensureExcelLocal } from '../data/excelCache';
+import { getCachedHost } from '../data/discovery';
 import type { RaceStatsSnapshot } from '../data/types';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
@@ -40,23 +41,55 @@ export default function HistoryDetailScreen({ route }: Props) {
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
-    getSnapshot(raceId).then(setSnap);
+    let cancelled = false;
+    (async () => {
+      const local = await getSnapshot(raceId);
+      if (local) { if (!cancelled) setSnap(local); return; }
+      // No está en local → rescatarlo del servidor (si es accesible) y cachearlo.
+      const host = await getCachedHost();
+      if (!host) { if (!cancelled) setSnap(null); return; }
+      try {
+        const res = await fetch(`http://${host}:3000/api/mobile/races/${raceId}/results`);
+        if (!res.ok) { if (!cancelled) setSnap(null); return; }
+        const data: {
+          race: { id: number; name: string; format: 'team' | 'individual'; startedAt: string; finishedAt: string };
+          standings: RaceStatsSnapshot['standings'];
+        } = await res.json();
+        const snapshot: RaceStatsSnapshot = {
+          raceId: data.race.id,
+          name: data.race.name,
+          format: data.race.format,
+          startedAt: data.race.startedAt,
+          finishedAt: data.race.finishedAt,
+          excelPath: `/races/${data.race.id}/results/xlsx`,
+          serverBaseUrl: `http://${host}:3000`,
+          standings: data.standings,
+        };
+        await saveSnapshot(snapshot);
+        if (!cancelled) setSnap(snapshot);
+      } catch {
+        if (!cancelled) setSnap(null);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [raceId]);
 
-  async function downloadExcel() {
-    if (!snap?.excelPath || !snap.serverBaseUrl) return;
+  async function openExcel() {
+    if (!snap) return;
     setDownloading(true);
     try {
-      const url = `${snap.serverBaseUrl}${snap.excelPath}`;
-      const filename = `${(snap.name || 'carrera').replace(/[^\w-]+/g, '_')}.xlsx`;
-      const dir = new Directory(Paths.cache);
-      const file = await File.downloadFileAsync(url, new File(dir, filename));
+      const local = await ensureExcelLocal(snap);
+      if (!local) {
+        Alert.alert('Excel no disponible', 'Conéctate a PitWall para descargarlo.');
+        return;
+      }
+      setSnap(s => (s ? { ...s, excelLocalPath: local } : s));
       const can = await Sharing.isAvailableAsync();
       if (!can) {
         Alert.alert('Compartir no disponible', 'Tu dispositivo no soporta compartir archivos.');
         return;
       }
-      await Sharing.shareAsync(file.uri, {
+      await Sharing.shareAsync(local, {
         mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         dialogTitle: snap.name,
         UTI: 'org.openxmlformats.spreadsheetml.sheet',
@@ -80,7 +113,9 @@ export default function HistoryDetailScreen({ route }: Props) {
     return (
       <View style={styles.center}>
         <BackButton />
-        <Text style={styles.error}>No se encontró esta carrera en el histórico local.</Text>
+        <Text style={styles.error}>
+          No se pudo cargar esta carrera. Conéctate a PitWall para rescatarla del servidor.
+        </Text>
       </View>
     );
   }
@@ -93,14 +128,16 @@ export default function HistoryDetailScreen({ route }: Props) {
         {snap.format === 'team' ? 'Por equipos' : 'Individual'} · {formatDate(snap.finishedAt)}
       </Text>
 
-      {snap.excelPath && snap.serverBaseUrl && (
+      {(snap.excelLocalPath || (snap.excelPath && snap.serverBaseUrl)) && (
         <TouchableOpacity
           style={[styles.excelBtn, downloading && styles.excelBtnDisabled]}
-          onPress={downloadExcel}
+          onPress={openExcel}
           disabled={downloading}
         >
           <Text style={styles.excelBtnText}>
-            {downloading ? 'Descargando…' : 'Descargar Excel comparativa'}
+            {downloading ? 'Abriendo…'
+              : snap.excelLocalPath ? 'Abrir Excel comparativa'
+              : 'Descargar Excel comparativa'}
           </Text>
         </TouchableOpacity>
       )}

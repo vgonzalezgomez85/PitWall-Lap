@@ -6,13 +6,17 @@ import { useEffect } from 'react';
 
 import { useDataSource } from './sourceContext';
 import { saveSnapshot } from './historyStore';
+import { ensureExcelLocal } from './excelCache';
 
 export function useAutoSaveHistory(): void {
   const { subscribeSnapshot } = useDataSource();
   useEffect(() => {
-    return subscribeSnapshot(snap => {
-      void saveSnapshot(snap);
+    return subscribeSnapshot(async snap => {
+      await saveSnapshot(snap);
       console.log('[history] auto-saved snapshot for race', snap.raceId);
+      // Best-effort: descargar el Excel ya, con el servidor a mano, para
+      // poder abrirlo luego sin conexión. Si falla, se baja bajo demanda.
+      void ensureExcelLocal(snap);
     });
   }, [subscribeSnapshot]);
 }
