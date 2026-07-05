@@ -84,9 +84,25 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       case 'race-finished':
         speak(stateRef.current.pole ? 'Fin de la pole' : 'Fin de la manga');
         break;
-      // 'lap-ghost': silenciado a propósito — el piloto no necesita oír
-      // anomalías técnicas del cronometrador, se reasignan solas.
-      // lap-reassigned, race-started, connection-*: no se locutan en v1.
+      // Vuelta fantasma en MI carril (cruce demasiado rápido, no cuenta): no
+      // es vuelta rápida — se avisa como ignorada.
+      case 'lap-ghost':
+        if (s.sayLaps && e.lane === stateRef.current.myLane) speak('Vuelta ignorada');
+        break;
+      // Vuelta fantasma reasignada. Si era mía (la "pierdo"): "ignorada,
+      // asignada a X". Si me la asignan a mí (la gano): "vuelta asignada"
+      // (sin tiempo — cuenta a media, no al tiempo rápido del fantasma).
+      case 'lap-reassigned': {
+        if (!s.sayLaps) break;
+        const my = stateRef.current.myLane;
+        if (e.fromLane === my) {
+          speak(e.toName ? `Vuelta ignorada, asignada a ${e.toName}` : 'Vuelta ignorada');
+        } else if (e.toLane === my) {
+          speak('Vuelta asignada');
+        }
+        break;
+      }
+      // race-started, connection-*: no se locutan.
       default:
         break;
     }

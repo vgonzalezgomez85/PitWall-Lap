@@ -36,6 +36,13 @@ function fmtGapLaps(laps: number | null): string {
   return `${laps} ${laps === 1 ? 'vuelta' : 'vueltas'}`;
 }
 
+// Etiqueta visible de la fuente (el id interno sigue siendo 'slottime'/'infolap').
+function sourceLabel(source: string | undefined): string {
+  if (source === 'slottime') return 'PitWall Lap';
+  if (source === 'infolap') return 'TicTac';
+  return '—';
+}
+
 function fmtRemaining(ms: number | null): string {
   if (ms == null) return '—';
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -95,7 +102,7 @@ export default function MyTurnScreen(_props: Props) {
     return (
       <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
         <BackButton />
-        <Text style={styles.kind}>{raceInfo?.source ?? '—'}</Text>
+        <Text style={styles.kind}>{sourceLabel(raceInfo?.source)}</Text>
         {state.selfName && <Text style={styles.selfName}>{state.selfName}</Text>}
         <Text style={styles.restTitle}>Descansas esta manga</Text>
         {state.currentMangaNum != null && (
@@ -145,10 +152,27 @@ export default function MyTurnScreen(_props: Props) {
           <Text style={styles.medTime}>{fmt(state.bestLapMs)}</Text>
         </View>
         <View style={styles.col}>
+          <Text style={styles.label}>Media carril</Text>
+          <Text style={styles.medTime}>{fmt(state.avgLapMs)}</Text>
+        </View>
+        <View style={styles.col}>
           <Text style={styles.label}>Vueltas</Text>
           <Text style={styles.medTime}>{state.lapCount}</Text>
         </View>
       </View>
+
+      {isSlotTime && (
+        <View style={styles.row}>
+          <View style={styles.col}>
+            <Text style={styles.label}>Salidas</Text>
+            <Text style={styles.medTime}>{state.exitCount}</Text>
+          </View>
+          <View style={styles.col}>
+            <Text style={styles.label}>Pit stops</Text>
+            <Text style={styles.medTime}>{state.pitStopCount}</Text>
+          </View>
+        </View>
+      )}
 
       {state.position != null && (
         <View style={styles.row}>

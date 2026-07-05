@@ -50,6 +50,8 @@ interface StandingsRow {
   avgLapMs: number | null;
   position: number;
   gap: number;
+  exitCount?: number;
+  pitStopCount?: number;
 }
 
 interface StandingsPayload {
@@ -504,19 +506,15 @@ export class SlotTimeSource implements DataSource {
       this.emitEvent({ type: 'lap-ghost', lane: p.lane, lapTimeMs: p.lapTimeMs });
     });
 
-    socket.on('lap:reassigned', (p: { fromLane: number; toLane: number; lapTimeMs: number }) => {
-      this.emitEvent({ type: 'lap-reassigned', fromLane: p.fromLane, toLane: p.toLane, lapTimeMs: p.lapTimeMs });
-      // Si la vuelta se ha movido a mi carril, también disparo lap-completed
-      // — los standings que llegan inmediatamente después ya traen el counter
-      // actualizado, pero el evento de voz debe llegar ahora.
-      const myLane = this.currentState.myLane;
-      if (myLane != null && p.toLane === myLane) {
-        this.emitEvent({
-          type: 'lap-completed',
-          lapTimeMs: p.lapTimeMs,
-          lapCount: this.currentState.lapCount + 1,
-        });
-      }
+    socket.on('lap:reassigned', (p: { fromLane: number; toLane: number; lapTimeMs: number; name?: string }) => {
+      // NO emitimos lap-completed: la vuelta reasignada cuenta a MEDIA del
+      // carril, no al tiempo (falso, rápido) del fantasma — anunciarla como
+      // "vuelta rápida" era incorrecto. La voz lo trata como reasignación.
+      this.emitEvent({
+        type: 'lap-reassigned',
+        fromLane: p.fromLane, toLane: p.toLane, lapTimeMs: p.lapTimeMs,
+        toName: p.name ?? null,
+      });
     });
 
     socket.on('race:stats-snapshot', (snap: RaceStatsSnapshot) => {
@@ -572,30 +570,48 @@ export class SlotTimeSource implements DataSource {
     }
     if (!me) return;
 
-    // Calcular gap al de delante y al de detrás en tiempo (aproximado:
-    // diferencia de vueltas × avg propio del rival).
+    // Mi fila en la proyección general (clasificación ESTIMADA entre tandas).
+    // El id del participante en la app es el entityId del servidor; como una
+    // carrera es solo equipos o solo pilotos, basta el id. Fallback por nombre.
+    const proj = payload.projection ?? [];
+    let pIdx = proj.findIndex(p => String(p.entityId) === this.selectedId);
+    if (pIdx < 0) pIdx = proj.findIndex(p => p.name === me.name);
+    const myProj = pIdx >= 0 ? proj[pIdx]! : null;
+    const projAhead  = pIdx > 0 ? proj[pIdx - 1]! : undefined;
+    const projBehind = (pIdx >= 0 && pIdx < proj.length - 1) ? proj[pIdx + 1]! : undefined;
+    // Gap por clasificación ESTIMADA (gapV del servidor, redondeado).
+    const pGapAhead  = (myProj && projAhead && myProj.gapV != null) ? Math.round(myProj.gapV) : null;
+    const pGapBehind = (projBehind && projBehind.gapV != null) ? Math.round(projBehind.gapV) : null;
+
+    // Vecinos por ORDEN DE MANGA — fallback cuando la proyección no da valor
+    // (líder sin media aún, o no llega proyección) para no mostrar "—".
     const sorted = [...payload.standings].sort((a, b) => a.position - b.position);
-    const idx = sorted.findIndex(r => r.lane === myLane);
-    const ahead  = idx > 0 ? sorted[idx - 1] : undefined;
-    const behind = idx < sorted.length - 1 ? sorted[idx + 1] : undefined;
+    const mIdx = sorted.findIndex(r => r.lane === myLane);
+    const mAhead  = mIdx > 0 ? sorted[mIdx - 1] : undefined;
+    const mBehind = (mIdx >= 0 && mIdx < sorted.length - 1) ? sorted[mIdx + 1] : undefined;
+    const mGapAhead  = mAhead  ? mAhead.lapCount - me.lapCount  : null;
+    const mGapBehind = mBehind ? me.lapCount - mBehind.lapCount : null;
 
-    const gapAheadMs  = ahead  && ahead.avgLapMs  != null ? (ahead.lapCount  - me.lapCount) * ahead.avgLapMs  : null;
-    const gapBehindMs = behind && behind.avgLapMs != null ? (me.lapCount - behind.lapCount) * behind.avgLapMs : null;
-    // Gap en vueltas (la diferencia real de conteo, no estimada).
-    const gapAheadLaps  = ahead  ? ahead.lapCount - me.lapCount  : null;
-    const gapBehindLaps = behind ? me.lapCount - behind.lapCount : null;
+    // Preferimos la clasificación estimada; si no, la manga.
+    const useProjAhead  = pGapAhead  != null;
+    const useProjBehind = pGapBehind != null;
+    const gapAheadLaps  = useProjAhead  ? pGapAhead  : mGapAhead;
+    const gapBehindLaps = useProjBehind ? pGapBehind : mGapBehind;
+    const aheadName  = (useProjAhead  ? projAhead?.name  : mAhead?.name)  ?? null;
+    const behindName = (useProjBehind ? projBehind?.name : mBehind?.name) ?? null;
+    const gapAheadMs: number | null = null;   // ya no mostramos gap en tiempo
+    const gapBehindMs: number | null = null;
 
-    // Mi fila en la proyección general (Opción A). El id del participante en la
-    // app es el entityId del servidor; como una carrera es solo equipos o solo
-    // pilotos, basta el id. Fallback por nombre por si acaso.
-    const myProj = payload.projection?.find(p => String(p.entityId) === this.selectedId)
-                ?? payload.projection?.find(p => p.name === me.name);
+    // Posición y total sobre la clasificación ESTIMADA (proyección general
+    // entre tandas); si no hay proyección, caemos a la de la manga.
+    const shownPosition = myProj?.position ?? me.position;
+    const totalParticipants = proj.length > 0 ? proj.length : payload.standings.length;
 
-    // Detectar cambio de posición
-    if (this.prevPosition != null && this.prevPosition !== me.position) {
-      this.emitEvent({ type: 'position-changed', from: this.prevPosition, to: me.position });
+    // Detectar cambio de posición (sobre la posición que mostramos).
+    if (this.prevPosition != null && this.prevPosition !== shownPosition) {
+      this.emitEvent({ type: 'position-changed', from: this.prevPosition, to: shownPosition });
     }
-    this.prevPosition = me.position;
+    this.prevPosition = shownPosition;
 
     this.currentState = {
       ...this.currentState,
@@ -604,15 +620,17 @@ export class SlotTimeSource implements DataSource {
       lastLapMs: me.lastLapMs,
       bestLapMs: me.bestLapMs,
       avgLapMs: me.avgLapMs,
-      position: me.position,
-      totalParticipants: payload.standings.length,
+      exitCount: me.exitCount ?? 0,
+      pitStopCount: me.pitStopCount ?? 0,
+      position: shownPosition,
+      totalParticipants,
       remainingMs: payload.remainingMs,
       gapAheadMs,
       gapBehindMs,
       gapAheadLaps,
       gapBehindLaps,
-      aheadName:  ahead?.name ?? null,
-      behindName: behind?.name ?? null,
+      aheadName,
+      behindName,
       avgToCatchMs:   myProj?.avgToCatch ?? null,
       projectedTotal: myProj?.projectedTotal ?? null,
       projection:     payload.projection ?? null,

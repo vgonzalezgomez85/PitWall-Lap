@@ -86,7 +86,9 @@ export interface LiveState {
   lapCount: number;
   lastLapMs: number | null;
   bestLapMs: number | null;
-  avgLapMs: number | null;        // sólo SlotTime
+  avgLapMs: number | null;        // sólo SlotTime — media del carril
+  exitCount: number;              // sólo SlotTime — salidas del carril
+  pitStopCount: number;           // sólo SlotTime — pit stops del carril
   position: number | null;        // sólo SlotTime
   totalParticipants: number | null;
   remainingMs: number | null;     // sólo SlotTime
@@ -141,7 +143,7 @@ export type SourceEvent =
   | { type: 'lap-ghost';         lane: number; lapTimeMs: number }
   // Sólo SlotTime: vuelta fantasma se ha transferido a otro carril.
   // Si `toLane === myLane` mi propio contador acaba de incrementarse.
-  | { type: 'lap-reassigned';    fromLane: number; toLane: number; lapTimeMs: number }
+  | { type: 'lap-reassigned';    fromLane: number; toLane: number; lapTimeMs: number; toName?: string | null }
   | { type: 'connection-lost' }
   | { type: 'connection-restored' };
 
@@ -164,6 +166,8 @@ export interface RaceStatsSnapshot {
    *  que vino el snapshot, para poder reconstruir la URL del Excel
    *  después aunque cambies de servidor. */
   serverBaseUrl?: string;
+  /** Ruta local (file://) del Excel ya descargado, para abrirlo sin conexión. */
+  excelLocalPath?: string;
   standings: {
     position: number;
     entityId: number | string;
@@ -260,6 +264,8 @@ export function emptyLiveState(): LiveState {
     lastLapMs: null,
     bestLapMs: null,
     avgLapMs: null,
+    exitCount: 0,
+    pitStopCount: 0,
     position: null,
     totalParticipants: null,
     remainingMs: null,
