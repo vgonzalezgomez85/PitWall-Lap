@@ -14,6 +14,7 @@
 import { Platform } from 'react-native';
 import Zeroconf from 'react-native-zeroconf';
 import * as Network from 'expo-network';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { DataSource, RaceInfo } from './types';
 import { InfolapSource } from './InfolapSource';
@@ -101,7 +102,29 @@ function probeSlotTime(): Promise<SlotTimeServerLocation | null> {
 // :3000. El primero que responde 2xx es el servidor.
 
 const SCAN_PORT_DEFAULT = 3000;
-const SCAN_PROBE_TIMEOUT_MS = 1500;
+const SCAN_PROBE_TIMEOUT_MS = 900;   // por IP; antes 1500 → el barrido se rinde antes
+// IP del último servidor PitWall al que conectamos. En redes de club el mDNS
+// suele estar filtrado y el server puede estar en otra subred, pero el unicast
+// directo a una IP conocida sí funciona — así que la probamos primero.
+const LAST_HOST_KEY = '@pitwall/slottime/last-host';
+
+/** IP del último servidor PitWall al que conectamos (o null). La usan el
+ *  histórico y otras pantallas para hablar con el servidor sin re-descubrir. */
+export async function getCachedHost(): Promise<string | null> {
+  try { return await AsyncStorage.getItem(LAST_HOST_KEY); } catch { return null; }
+}
+
+async function probeCachedHost(): Promise<SlotTimeServerLocation | null> {
+  try {
+    const host = await AsyncStorage.getItem(LAST_HOST_KEY);
+    if (!host) return null;
+    if (await probeHttpHost(host, SCAN_PORT_DEFAULT)) {
+      console.log('[Discovery] cached host respondió', host);
+      return { host, port: SCAN_PORT_DEFAULT };
+    }
+  } catch { /* ignore */ }
+  return null;
+}
 
 async function probeHttpHost(host: string, port: number): Promise<boolean> {
   const ctrl = new AbortController();
@@ -141,7 +164,7 @@ async function scanSubnetForSlotTime(): Promise<SlotTimeServerLocation | null> {
   const order: number[] = [];
   for (let i = 1; i <= 254; i++) if (i !== myLast) order.push(i);
 
-  const CONCURRENCY = 24;
+  const CONCURRENCY = 32;
   return new Promise<SlotTimeServerLocation | null>((resolve) => {
     let idx = 0, active = 0, remaining = order.length, settled = false;
     const pump = () => {
@@ -192,9 +215,12 @@ export async function discover(opts: DiscoveryOptions): Promise<DiscoveryResult 
     // mDNS y subnet scan en PARALELO: el primero que encuentre el servidor
     // gana. Así no dependemos de que el mDNS funcione (falla en Android) ni
     // esperamos su timeout antes de barrer la subred.
+    // En PARALELO: IP recordada + mDNS + barrido de subred. El primero que
+    // encuentre el servidor gana. La IP recordada es la que salva las redes de
+    // club (mDNS filtrado / otra subred): un único unicast a un host conocido.
     const server: SlotTimeServerLocation | null = opts.manualHost
       ? { host: opts.manualHost, port: 3000 }
-      : await firstNonNull([probeSlotTime(), scanSubnetForSlotTime()]);
+      : await firstNonNull([probeCachedHost(), probeSlotTime(), scanSubnetForSlotTime()]);
     if (!server) return null;
 
     // Smoke-test: comprueba que /api/mobile/races/active responde 2xx.
@@ -211,6 +237,8 @@ export async function discover(opts: DiscoveryOptions): Promise<DiscoveryResult 
       console.log('[Discovery] SlotTime unreachable:', (e as Error)?.message);
       return null;
     }
+    // Recordar esta IP para la próxima vez (reconexión directa, sin barrido).
+    void AsyncStorage.setItem(LAST_HOST_KEY, server.host).catch(() => {});
     return { kind: 'slottime', server };
   }
 

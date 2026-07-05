@@ -168,6 +168,13 @@ export default function DiscoveryScreen({ navigation }: Props) {
         <Text style={styles.title}>{label}</Text>
         <ActivityIndicator size="large" color="#f6c90e" style={{ marginTop: 32 }} />
         <Text style={styles.phase}>Buscando {label}…</Text>
+        {/* Salida directa a IP manual, sin esperar al timeout de la búsqueda. */}
+        <TouchableOpacity
+          style={[styles.btn, styles.btnGhost, { marginTop: 28 }]}
+          onPress={() => setMode({ phase: 'manual', kind: mode.kind })}
+        >
+          <Text style={styles.btnGhostText}>Introducir IP manualmente</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.backBtn} onPress={() => setMode({ phase: 'choose' })}>
           <Text style={styles.backText}>Cancelar</Text>
         </TouchableOpacity>
@@ -197,7 +204,9 @@ export default function DiscoveryScreen({ navigation }: Props) {
   return (
     <View style={styles.root}>
       <Text style={styles.title}>{label}</Text>
-      <Text style={styles.errorTitle}>No se encontró automáticamente</Text>
+      <Text style={styles.errorTitle}>
+        {mode.error ? 'No se encontró automáticamente' : 'Conexión manual'}
+      </Text>
       {mode.error && <Text style={styles.errorBody}>{mode.error}</Text>}
       <Text style={styles.errorBody}>Introduce la IP del servidor manualmente.</Text>
 
