@@ -28,16 +28,29 @@ const stintKey = (raceId: number, entity: string) =>
 export interface StrategyConfig {
   pitCostSec: number;
   setsTotal: number;
+  /** Cambios de goma que obliga el reglamento (Mejora 2). Por defecto 0. */
+  mandatoryChanges: number;
 }
 
-const DEFAULT_CONFIG: StrategyConfig = { pitCostSec: 25, setsTotal: 4 };
+const DEFAULT_CONFIG: StrategyConfig = { pitCostSec: 25, setsTotal: 4, mandatoryChanges: 0 };
 
 interface StintState {
   stintLaps: number[];
+  /** Referencia de ritmo del carril en cada vuelta del stint (Mejora 1). Paralela
+   *  a stintLaps; null donde no había datos de carril al cerrar la vuelta. */
+  stintRefs: (number | null)[];
   changesMade: number;
 }
 
-const EMPTY_STINT: StintState = { stintLaps: [], changesMade: 0 };
+const EMPTY_STINT: StintState = { stintLaps: [], stintRefs: [], changesMade: 0 };
+
+/** Mínimo de vueltas de campo en un carril/manga para fiarnos de su mediana. */
+const LANE_REF_MIN = 3;
+function median(arr: number[]): number {
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+}
 
 export type RivalSide = 'ahead' | 'behind';
 
@@ -91,8 +104,21 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
   const statusRef = useRef(state.status);
   statusRef.current = state.status;
 
+  // ── Referencia de carril (Mejora 1): mediana del lapTime de cada carril en la
+  // manga EN CURSO, alimentada por las vueltas de todas las entidades. Se resetea
+  // al cambiar de manga (cada manga es un carril nuevo). Aísla goma de carril.
+  const laneLapsRef = useRef<Map<number, number[]>>(new Map());
+  const myLaneRef = useRef<number | null>(state.myLane);
+  myLaneRef.current = state.myLane;
+  const laneRefOf = (lane: number | null): number | null => {
+    if (lane == null) return null;
+    const laps = laneLapsRef.current.get(lane);
+    return laps && laps.length >= LANE_REF_MIN ? median(laps) : null;
+  };
+
   // ── Estado de rivales (Fase 2), en refs para no re-renderizar por vuelta ──
   const rivalBuffersRef = useRef<Map<string, number[]>>(new Map());
+  const rivalRefsRef = useRef<Map<string, (number | null)[]>>(new Map()); // paralelo al buffer
   const rivalChangeRef = useRef<Map<string, number>>(new Map()); // name → stintStartIdx
   const detectedRef = useRef<Map<string, number>>(new Map());    // name → último idx detectado
   const aheadNameRef = useRef<string | null>(null);
@@ -127,8 +153,10 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
   // Al cambiar de carrera, olvidamos los modelos de rivales (no se persisten).
   useEffect(() => {
     rivalBuffersRef.current = new Map();
+    rivalRefsRef.current = new Map();
     rivalChangeRef.current = new Map();
     detectedRef.current = new Map();
+    laneLapsRef.current = new Map();
     setPending([]);
   }, [raceId]);
 
@@ -139,13 +167,24 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
 
   // ── Vueltas: piloto propio (lap-completed) y rivales (entity-lap) ─────────
   useSourceEvent(e => {
+    // Cambio de manga → carril nuevo: reinicia las medianas de carril (Mejora 1).
+    if (e.type === 'manga-changed') {
+      laneLapsRef.current = new Map();
+      return;
+    }
+
     // Piloto propio: stint persistente, excluye salidas/out-lap/fuera de turno.
     if (e.type === 'lap-completed') {
       if (!keyRef.current || statusRef.current !== 'my-turn') return;
       if (e.isExit || e.isFirstCrossing) return;
       if (e.lapTimeMs == null || e.lapTimeMs <= 0) return;
+      const ref = laneRefOf(myLaneRef.current); // referencia de mi carril ahora
       setStint(prev => {
-        const next = { ...prev, stintLaps: [...prev.stintLaps, e.lapTimeMs!] };
+        const next = {
+          ...prev,
+          stintLaps: [...prev.stintLaps, e.lapTimeMs!],
+          stintRefs: [...prev.stintRefs, ref],
+        };
         persist(next);
         return next;
       });
@@ -156,11 +195,22 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
     // necesita); el modelo limpia outliers. No nos observamos a nosotros.
     if (e.type === 'entity-lap') {
       if (!keyRef.current) return;
-      if (e.name === entityRef.current) return;
       if (e.lapTimeMs == null || e.lapTimeMs <= 0) return;
+      // Alimenta la mediana de ESTE carril con las vueltas de campo (sin
+      // salidas/out-laps, que la sesgan). Vale para propio y rivales.
+      if (!e.isExit && !e.isFirstCrossing) {
+        const ll = laneLapsRef.current.get(e.lane) ?? [];
+        ll.push(e.lapTimeMs);
+        laneLapsRef.current.set(e.lane, ll);
+      }
+      if (e.name === entityRef.current) return;
       const buf = rivalBuffersRef.current.get(e.name) ?? [];
       buf.push(e.lapTimeMs);
       rivalBuffersRef.current.set(e.name, buf);
+      // Ref de carril del rival en esta vuelta (paralelo al buffer, Mejora 1).
+      const refs = rivalRefsRef.current.get(e.name) ?? [];
+      refs.push(laneRefOf(e.lane));
+      rivalRefsRef.current.set(e.name, refs);
 
       // Auto-detección solo para el rival de delante/detrás actual.
       const side: RivalSide | null =
@@ -188,7 +238,7 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
 
   const changeTires = useCallback(() => {
     setStint(prev => {
-      const next: StintState = { stintLaps: [], changesMade: prev.changesMade + 1 };
+      const next: StintState = { stintLaps: [], stintRefs: [], changesMade: prev.changesMade + 1 };
       persist(next);
       return next;
     });
@@ -247,17 +297,19 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
       };
     }
     const aheadModel: RivalModel | null = ahead
-      ? buildRivalModel(rivalBuffersRef.current.get(ahead.name) ?? [], rivalChangeRef.current.get(ahead.name) ?? null, ahead)
+      ? buildRivalModel(rivalBuffersRef.current.get(ahead.name) ?? [], rivalChangeRef.current.get(ahead.name) ?? null, ahead, rivalRefsRef.current.get(ahead.name))
       : null;
     const behindModel: RivalModel | null = behind
-      ? buildRivalModel(rivalBuffersRef.current.get(behind.name) ?? [], rivalChangeRef.current.get(behind.name) ?? null, behind)
+      ? buildRivalModel(rivalBuffersRef.current.get(behind.name) ?? [], rivalChangeRef.current.get(behind.name) ?? null, behind, rivalRefsRef.current.get(behind.name))
       : null;
 
     const res = computeTireStrategy({
       stintLaps: stint.stintLaps,
+      stintRefs: stint.stintRefs,
       pitCostMs: config.pitCostSec * 1000,
       setsTotal: config.setsTotal,
       changesMade: stint.changesMade,
+      mandatoryChanges: config.mandatoryChanges,
       followed, ahead, behind,
       aheadProjected: aheadModel?.projectedTotal ?? null,
       behindProjected: behindModel?.projectedTotal ?? null,
@@ -275,7 +327,7 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
       rivals: { ahead: toView(ahead, aheadModel, 'ahead'), behind: toView(behind, behindModel, 'behind') },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [available, stint.stintLaps, stint.changesMade, config.pitCostSec, config.setsTotal, followed, ahead, behind, rivalVersion]);
+  }, [available, stint.stintLaps, stint.stintRefs, stint.changesMade, config.pitCostSec, config.setsTotal, config.mandatoryChanges, followed, ahead, behind, rivalVersion]);
 
   const value = useMemo<TireStrategy>(() => ({
     available, config, setConfig, changeTires, result, followedName: entity, ready,

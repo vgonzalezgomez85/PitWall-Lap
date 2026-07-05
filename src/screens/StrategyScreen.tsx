@@ -129,6 +129,12 @@ export default function StrategyScreen() {
         onChange={v => setConfig({ setsTotal: clamp(v, 1, 20) })}
         step={1}
       />
+      <Stepper
+        label="Cambios obligatorios (reglamento)"
+        value={config.mandatoryChanges}
+        onChange={v => setConfig({ mandatoryChanges: clamp(v, 0, config.setsTotal - 1) })}
+        step={1}
+      />
     </ScrollView>
   );
 }
@@ -152,7 +158,12 @@ function RecommendationCard({ result }: { result: StrategyResult }) {
       }
       break;
     case 'hold-to-end':
-      headline = 'Sin cambios disponibles · aguanta a meta';
+      if (result.setsAvailable > 0) {
+        headline = 'Aguanta hasta meta';
+        sub = 'Sin degradación y sin cambios obligatorios: parar es tiempo regalado.';
+      } else {
+        headline = 'Sin juegos · aguanta a meta';
+      }
       break;
     case 'no-degradation':
       headline = 'Sin degradación medible';

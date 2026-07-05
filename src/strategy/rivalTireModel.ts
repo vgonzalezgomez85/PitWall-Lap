@@ -57,11 +57,16 @@ export function buildRivalModel(
   allLaps: number[],
   stintStartIdx: number | null,
   row: ProjectionRow | null,
+  allRefs?: (number | null)[],
 ): RivalModel {
   const stintLaps = stintStartIdx != null ? allLaps.slice(stintStartIdx) : allLaps;
+  // Refs de carril paralelas al stint (Mejora 1). Solo si cuadra la longitud.
+  const refs = allRefs && allRefs.length === allLaps.length
+    ? (stintStartIdx != null ? allRefs.slice(stintStartIdx) : allRefs)
+    : undefined;
   const ageKnown = stintStartIdx != null;
   const tireAgeLaps = stintLaps.length;
-  const fit = fitDegradation(stintLaps);
+  const fit = fitDegradation(stintLaps, refs);
 
   // Proyección corregida por goma SOLO si conocemos la edad real (hemos
   // observado/confirmado un cambio). Sin edad fiable no extrapolamos —

@@ -18,12 +18,20 @@ export const MIN_CONFIDENCE_LAPS = 8;
 export interface StrategyInputs {
   /** Tiempos de vuelta LIMPIOS del stint (ms), en orden. */
   stintLaps: number[];
+  /** Referencia de ritmo del carril de CADA vuelta del stint (ms) = mediana del
+   *  lapTime de ese carril en esa manga. Se usa para normalizar la degradación
+   *  por carril (un stint cruza varias mangas/carriles). null en una vuelta sin
+   *  datos de carril; si falta cobertura se cae al ajuste bruto (Mejora 1). */
+  stintRefs?: (number | null)[];
   /** Coste de una parada (ms). */
   pitCostMs: number;
   /** Juegos de neumáticos totales disponibles para la carrera. */
   setsTotal: number;
   /** Veces que se ha pulsado "Cambié gomas" en esta carrera. */
   changesMade: number;
+  /** Cambios de goma que OBLIGA el reglamento (por defecto 0). Sin degradación
+   *  medible solo se recomienda cumplir este mínimo, lo más tarde posible. */
+  mandatoryChanges?: number;
   /** Mi fila en la proyección general. */
   followed: ProjectionRow | null;
   /** Rival de delante / detrás en la proyección (posición ±1). */
@@ -76,6 +84,9 @@ export interface DegradationFit {
   confidence: 'none' | 'low' | 'ok';
   /** Vueltas limpias usadas (tras rechazo de outliers). */
   cleanCount: number;
+  /** true si la pendiente se ajustó sobre tiempos NORMALIZADOS por carril
+   *  (Mejora 1); false si se cayó al ajuste bruto por falta de datos de carril. */
+  normalized: boolean;
 }
 
 /** Regresión lineal por mínimos cuadrados sobre (x, y). */
@@ -101,27 +112,62 @@ function median(arr: number[]): number {
 
 /**
  * Ajusta la degradación de un stint a partir de sus tiempos de vuelta.
- * Rechaza outliers (pits/incidentes, >125% de la mediana) y salta la primera
- * vuelta del stint (out-lap) para la regresión. Lo usan piloto propio y rivales.
+ *
+ * Mejora 1 — normalización por carril: en resistencia con rotación un stint de
+ * goma cruza VARIAS mangas, y cada manga es un carril a distinto ritmo. Sobre
+ * tiempos brutos la pendiente `d` mezcla el efecto-carril con el desgaste (puede
+ * inventar o esconder degradación). Si se pasan las referencias de carril
+ * (`refs[i]` = mediana del carril de esa vuelta en esa manga), se ajusta sobre
+ * la serie normalizada `t − ref + baseRef`: quita el escalón de carril dejando
+ * `d` = desgaste puro y `t0` en escala absoluta (baseline neutro `baseRef`).
+ *
+ * Sin refs (o con poca cobertura) cae con elegancia al ajuste bruto de siempre.
+ * Rechaza outliers (pits/incidentes) y salta la out-lap para la regresión.
  */
-export function fitDegradation(stintLaps: number[]): DegradationFit {
+export function fitDegradation(stintLaps: number[], refs?: (number | null)[]): DegradationFit {
   const stintLap = stintLaps.length;
-  let clean = stintLaps;
-  if (stintLaps.length >= 4) {
-    const med = median(stintLaps);
-    clean = stintLaps.filter(t => t <= med * 1.25);
-  }
-  const fitLaps = clean.slice(1); // salta la out-lap
-  const currentAvgMs = clean.length ? clean.reduce((a, b) => a + b, 0) / clean.length : null;
-  const fit = fitLaps.length >= 2 ? linearFit(fitLaps.map((_, i) => i + 1), fitLaps) : null;
   const confidence: DegradationFit['confidence'] =
     stintLap >= MIN_CONFIDENCE_LAPS ? 'ok' : stintLap >= 3 ? 'low' : 'none';
+
+  // ¿Hay cobertura de carril suficiente para normalizar?
+  const known = refs && refs.length === stintLaps.length
+    ? refs.filter((r): r is number => r != null && r > 0)
+    : [];
+  const canNorm = known.length >= Math.max(4, Math.ceil(stintLaps.length * 0.6));
+
+  let series: number[];      // serie sobre la que ajustar (bruta o normalizada)
+  let clean: number[];       // vueltas limpias (misma escala que `series`)
+  if (canNorm) {
+    const baseRef = median(known);
+    // Empareja cada vuelta con su referencia (baseRef donde falte).
+    const pairs = stintLaps.map((t, i) => {
+      const r = refs![i];
+      return { t, ref: r != null && r > 0 ? r : baseRef };
+    });
+    // Outlier = vuelta > 1.25× su propia referencia de carril (pit/incidente).
+    const kept = pairs.length >= 4 ? pairs.filter(p => p.t <= p.ref * 1.25) : pairs;
+    clean = kept.map(p => p.t - p.ref + baseRef); // absoluta, sin escalón de carril
+    series = clean;
+  } else {
+    let c = stintLaps;
+    if (stintLaps.length >= 4) {
+      const med = median(stintLaps);
+      c = stintLaps.filter(t => t <= med * 1.25);
+    }
+    clean = c;
+    series = c;
+  }
+
+  const fitLaps = series.slice(1); // salta la out-lap
+  const currentAvgMs = clean.length ? clean.reduce((a, b) => a + b, 0) / clean.length : null;
+  const fit = fitLaps.length >= 2 ? linearFit(fitLaps.map((_, i) => i + 1), fitLaps) : null;
   return {
     d: fit ? fit.slope : null,
     t0: fit ? fit.intercept : null,
     currentAvgMs,
     confidence,
     cleanCount: clean.length,
+    normalized: canNorm,
   };
 }
 
@@ -137,10 +183,12 @@ export function computeTireStrategy(input: StrategyInputs): StrategyResult {
 
   const changesRemaining = Math.max(0, (setsTotal - 1) - changesMade);
   const setsAvailable = changesRemaining;
-  const stintsRemaining = changesRemaining + 1;
   const stintLap = stintLaps.length;
+  // Cambios que aún exige el reglamento (Mejora 2). No puede superar los juegos.
+  const mandatory = Math.max(0, input.mandatoryChanges ?? 0);
+  const mandatoryLeft = Math.min(changesRemaining, Math.max(0, mandatory - changesMade));
 
-  const fit = fitDegradation(stintLaps);
+  const fit = fitDegradation(stintLaps, input.stintRefs);
   const d = fit.d, t0 = fit.t0;
 
   const remMs = remainingRaceMs(followed);
@@ -158,7 +206,9 @@ export function computeTireStrategy(input: StrategyInputs): StrategyResult {
   } else if (fit.confidence !== 'ok') {
     recommendation = { kind: 'insufficient-data' };
   } else if (d != null && d > 0) {
-    // Degradación medible → óptimo por √(2·P/d), acotado por el reparto.
+    // Degradación medible → óptimo por √(2·P/d), acotado por el reparto de los
+    // stints que quedan (cambios obligatorios + los que hagas por ritmo).
+    const stintsRemaining = Math.max(1, mandatoryLeft) + 1;
     const lStar = Math.sqrt((2 * pitCostMs) / d);
     const perStint = remainingLaps != null ? remainingLaps / stintsRemaining : lStar;
     const optimalStintLen = Math.max(lStar, perStint);
@@ -166,15 +216,19 @@ export function computeTireStrategy(input: StrategyInputs): StrategyResult {
     recommendation = changeIn <= 0
       ? { kind: 'window-open', basis: 'degradation' }
       : { kind: 'change-in', laps: changeIn, basis: 'degradation' };
+  } else if (mandatoryLeft <= 0) {
+    // Sin degradación medible y sin cambios obligatorios pendientes → NO cambies:
+    // parar cuesta ~pitCost sin ritmo que recuperar (validado en Modena).
+    recommendation = { kind: 'hold-to-end' };
   } else if (remainingLaps != null) {
-    // Sin degradación medible → cambio pautado: reparte los juegos por vueltas.
-    const perStint = remainingLaps / stintsRemaining;
-    const changeIn = Math.round(perStint - stintLap);
+    // Sin degradación pero el reglamento obliga: cumple el mínimo lo más TARDE
+    // posible, dejando una vuelta de margen por cada cambio pendiente.
+    const changeIn = Math.round(remainingLaps - mandatoryLeft);
     recommendation = changeIn <= 0
       ? { kind: 'window-open', basis: 'scheduled' }
       : { kind: 'change-in', laps: changeIn, basis: 'scheduled' };
   } else {
-    // Ni degradación ni vueltas restantes conocidas: no hay nada que pautar.
+    // Obliga a cambiar pero no sabemos cuánto queda: no podemos pautarlo.
     recommendation = { kind: 'no-degradation' };
   }
 
