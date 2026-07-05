@@ -42,7 +42,7 @@ export default function HistoryScreen({ navigation }: Props) {
       ) : entries.length === 0 ? (
         <Text style={styles.empty}>
           Aún no tienes carreras guardadas.{'\n'}
-          Las carreras terminadas en SlotTime se guardan aquí automáticamente.
+          Las carreras terminadas en PitWall se guardan aquí automáticamente.
         </Text>
       ) : (
         <FlatList

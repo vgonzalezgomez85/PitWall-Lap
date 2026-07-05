@@ -97,7 +97,7 @@ export default function RacePickerScreen({ route, navigation }: Props) {
         <View style={styles.center}>
           <Text style={styles.errorTitle}>Sin actividad</Text>
           <Text style={styles.errorBody}>
-            El servidor SlotTime no tiene carreras preparadas ni una sesión de entrenamiento activa.
+            El servidor PitWall no tiene carreras preparadas ni una sesión de entrenamiento activa.
           </Text>
         </View>
       </View>

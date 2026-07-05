@@ -98,7 +98,7 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
         <View style={styles.center}>
           <Text style={styles.errorTitle}>Entrenamiento no activo</Text>
           <Text style={styles.errorBody}>
-            El servidor SlotTime no tiene una sesión de entrenamiento activa ahora mismo.
+            El servidor PitWall no tiene una sesión de entrenamiento activa ahora mismo.
           </Text>
         </View>
       </View>
