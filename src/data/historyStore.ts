@@ -63,6 +63,21 @@ export async function saveSnapshot(snapshot: RaceStatsSnapshot): Promise<void> {
   }
 }
 
+// ── Actualizar campos sueltos de un snapshot (sin tocar el índice) ──────────
+
+export async function updateSnapshot(
+  raceId: number | string,
+  patch: Partial<RaceStatsSnapshot>,
+): Promise<void> {
+  try {
+    const snap = await getSnapshot(raceId);
+    if (!snap) return;
+    await AsyncStorage.setItem(ENTRY_KEY(raceId), JSON.stringify({ ...snap, ...patch }));
+  } catch (e) {
+    console.warn('[history] updateSnapshot failed:', e);
+  }
+}
+
 // ── Borrar una entrada ───────────────────────────────────────────────────
 
 export async function deleteSnapshot(raceId: number | string): Promise<void> {
