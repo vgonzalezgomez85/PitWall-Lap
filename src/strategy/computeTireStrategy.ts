@@ -35,12 +35,20 @@ export interface StrategyInputs {
   behindProjected?: number | null;
 }
 
+/** Sobre qué se apoya la recomendación de cambio:
+ *  - 'degradation': hay pendiente medible (T sube con las vueltas), el óptimo
+ *    sale de √(2·P/d).
+ *  - 'scheduled': NO hay degradación por laptime (lo normal en slot de
+ *    resistencia), así que repartimos los juegos disponibles sobre las vueltas
+ *    que quedan. El cambio es pautado, no reactivo al ritmo. */
+export type RecommendationBasis = 'degradation' | 'scheduled';
+
 export type Recommendation =
   | { kind: 'insufficient-data' }
   | { kind: 'no-degradation' }
   | { kind: 'hold-to-end' }
-  | { kind: 'window-open' }
-  | { kind: 'change-in'; laps: number };
+  | { kind: 'window-open'; basis: RecommendationBasis }
+  | { kind: 'change-in'; laps: number; basis: RecommendationBasis };
 
 export interface PositionAdvice {
   action: 'change' | 'hold' | 'neutral';
@@ -139,19 +147,35 @@ export function computeTireStrategy(input: StrategyInputs): StrategyResult {
   const remainingLaps = remMs != null && fit.currentAvgMs ? remMs / fit.currentAvgMs : null;
 
   // ── Recomendación temporal ───────────────────────────────────────────────
+  // Validado contra datos reales (24h Modena): en slot de resistencia la goma
+  // NO se traduce en pérdida de tiempo por vuelta (d ≤ 0 en la práctica), así
+  // que el aviso reactivo por laptime casi nunca dispara. Por eso, cuando no hay
+  // degradación medible pero quedan juegos y sabemos las vueltas restantes,
+  // caemos a un plan PAUTADO: repartir los juegos sobre lo que queda de carrera.
   let recommendation: Recommendation;
   if (changesRemaining <= 0) {
     recommendation = { kind: 'hold-to-end' };
-  } else if (fit.confidence !== 'ok' || d == null) {
+  } else if (fit.confidence !== 'ok') {
     recommendation = { kind: 'insufficient-data' };
-  } else if (d <= 0) {
-    recommendation = { kind: 'no-degradation' };
-  } else {
+  } else if (d != null && d > 0) {
+    // Degradación medible → óptimo por √(2·P/d), acotado por el reparto.
     const lStar = Math.sqrt((2 * pitCostMs) / d);
     const perStint = remainingLaps != null ? remainingLaps / stintsRemaining : lStar;
     const optimalStintLen = Math.max(lStar, perStint);
     const changeIn = Math.round(optimalStintLen - stintLap);
-    recommendation = changeIn <= 0 ? { kind: 'window-open' } : { kind: 'change-in', laps: changeIn };
+    recommendation = changeIn <= 0
+      ? { kind: 'window-open', basis: 'degradation' }
+      : { kind: 'change-in', laps: changeIn, basis: 'degradation' };
+  } else if (remainingLaps != null) {
+    // Sin degradación medible → cambio pautado: reparte los juegos por vueltas.
+    const perStint = remainingLaps / stintsRemaining;
+    const changeIn = Math.round(perStint - stintLap);
+    recommendation = changeIn <= 0
+      ? { kind: 'window-open', basis: 'scheduled' }
+      : { kind: 'change-in', laps: changeIn, basis: 'scheduled' };
+  } else {
+    // Ni degradación ni vueltas restantes conocidas: no hay nada que pautar.
+    recommendation = { kind: 'no-degradation' };
   }
 
   // ── Capa de posición ─────────────────────────────────────────────────────

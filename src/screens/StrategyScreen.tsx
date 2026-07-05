@@ -138,17 +138,25 @@ function RecommendationCard({ result }: { result: StrategyResult }) {
   let sub: string | null = null;
   switch (result.recommendation.kind) {
     case 'change-in':
-      headline = `Cambio óptimo en ~${result.recommendation.laps} vueltas`;
+      if (result.recommendation.basis === 'scheduled') {
+        headline = `Cambio pautado en ~${result.recommendation.laps} vueltas`;
+        sub = 'Sin degradación de ritmo — reparto de juegos por vueltas restantes.';
+      } else {
+        headline = `Cambio óptimo en ~${result.recommendation.laps} vueltas`;
+      }
       break;
     case 'window-open':
       headline = 'Ventana abierta · cambia cuanto antes';
+      if (result.recommendation.basis === 'scheduled') {
+        sub = 'Reparto pautado: toca gastar un juego.';
+      }
       break;
     case 'hold-to-end':
       headline = 'Sin cambios disponibles · aguanta a meta';
       break;
     case 'no-degradation':
-      headline = 'Sin degradación medible aún';
-      sub = 'Las gomas todavía no pierden ritmo.';
+      headline = 'Sin degradación medible';
+      sub = 'Las gomas no pierden ritmo — decide por posición o relevo.';
       break;
     case 'insufficient-data':
     default:
