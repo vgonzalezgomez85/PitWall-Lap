@@ -110,6 +110,9 @@ export interface LiveState {
   currentMangaNum: number | null;
   /** Si estoy en descanso, info de mi próxima manga. */
   nextMangaInfo?: { mangaNum: number; lane: number };
+  /** true si el piloto ya corrió TODAS sus mangas (no le quedan más) → FINAL,
+   *  distinto de "descansa esta manga" (aún le quedan). */
+  isFinal?: boolean;
 
   // ── Sesión de pole (sólo SlotTime, modo 'pole') ───────────────────────
   pole?: PoleSnapshot | null;

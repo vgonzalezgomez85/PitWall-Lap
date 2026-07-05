@@ -112,6 +112,9 @@ export class SlotTimeSource implements DataSource {
   private participants: ParticipantPlan[] = [];
   private mangaDurationMs = 0;
   private currentMangaNum: number | null = null;
+  /** Tanda de la manga activa. La numeración de manga es POR TANDA (tanda 2
+   *  vuelve a manga 1), así que hace falta la tanda para identificar la manga. */
+  private currentTandaNum: number | null = null;
   private stateListeners: ((s: LiveState) => void)[] = [];
   private eventListeners: ((e: SourceEvent) => void)[] = [];
   private snapshotListeners: ((s: RaceStatsSnapshot) => void)[] = [];
@@ -181,6 +184,7 @@ export class SlotTimeSource implements DataSource {
     }));
     this.mangaDurationMs = data.race.mangaDurationMin * 60_000;
     this.currentMangaNum = data.activeManga?.number ?? null;
+    this.currentTandaNum = data.activeManga?.tandaNum ?? null;
     this.currentState = {
       ...emptyLiveState(),
       currentMangaNum: this.currentMangaNum,
@@ -425,13 +429,17 @@ export class SlotTimeSource implements DataSource {
       return;
     } else {
       const myLane = this.findMyLaneForCurrentManga(id);
+      const next = myLane == null ? this.findMyNextManga(id) : undefined;
       this.currentState = {
         ...emptyLiveState(),
         status: myLane != null ? 'my-turn' : 'resting',
         myLane,
         selfName,
         currentMangaNum: this.currentMangaNum,
-        nextMangaInfo: myLane == null ? this.findMyNextManga(id) : undefined,
+        nextMangaInfo: next,
+        // FINAL: descansa la manga actual (hay una en curso) y no le queda
+        // ninguna manga futura → ya corrió todas las suyas.
+        isFinal: myLane == null && this.currentMangaNum != null && next == null,
       };
     }
     this.emitState();
@@ -754,6 +762,7 @@ export class SlotTimeSource implements DataSource {
       if (!res.ok) return;
       const data: RaceCurrentResponse = await res.json();
       this.currentMangaNum = data.activeManga?.number ?? null;
+      this.currentTandaNum = data.activeManga?.tandaNum ?? null;
       this.mangaDurationMs = data.race ? data.race.mangaDurationMin * 60_000 : this.mangaDurationMs;
       // Actualizar plan por si añadieron mangas nuevas
       if (data.participants) {
@@ -773,15 +782,29 @@ export class SlotTimeSource implements DataSource {
   private findMyLaneForCurrentManga(id: string): number | null {
     if (this.currentMangaNum == null) return null;
     const p = this.participants.find(x => x.id === id);
-    const slot = p?.mangas.find(m => m.mangaNum === this.currentMangaNum);
+    // Numeración por tanda → hay que casar (tanda, manga). Si no conocemos la
+    // tanda (server antiguo), caemos a solo mangaNum.
+    const slot = p?.mangas.find(m =>
+      m.mangaNum === this.currentMangaNum &&
+      (this.currentTandaNum == null || m.tandaNum === this.currentTandaNum));
     if (!slot || slot.isRest) return null;
     return slot.lane;
+  }
+
+  /** Está DESPUÉS de la manga actual en orden (tanda, manga). */
+  private isAfterCurrent(m: { tandaNum: number; mangaNum: number }): boolean {
+    if (this.currentMangaNum == null) return false;
+    if (this.currentTandaNum == null) return m.mangaNum > this.currentMangaNum;
+    return m.tandaNum > this.currentTandaNum
+      || (m.tandaNum === this.currentTandaNum && m.mangaNum > this.currentMangaNum);
   }
 
   private findMyNextManga(id: string): { mangaNum: number; lane: number } | undefined {
     const p = this.participants.find(x => x.id === id);
     if (!p || this.currentMangaNum == null) return undefined;
-    const next = p.mangas.find(m => m.mangaNum > this.currentMangaNum! && !m.isRest);
+    const next = p.mangas
+      .filter(m => !m.isRest && this.isAfterCurrent(m))
+      .sort((a, b) => a.tandaNum - b.tandaNum || a.mangaNum - b.mangaNum)[0];
     return next ? { mangaNum: next.mangaNum, lane: next.lane } : undefined;
   }
 
@@ -793,6 +816,7 @@ export class SlotTimeSource implements DataSource {
     this.firedLast30s = false;
     this.prevPosition = null;
     const myLane = this.findMyLaneForCurrentManga(this.selectedId);
+    const next = myLane == null ? this.findMyNextManga(this.selectedId) : undefined;
     this.currentState = {
       ...emptyLiveState(),
       status: myLane != null ? 'my-turn' : 'resting',
@@ -800,7 +824,8 @@ export class SlotTimeSource implements DataSource {
       // Preservar el nombre seguido: sin esto desaparecía entre mangas.
       selfName: this.currentState.selfName,
       currentMangaNum: this.currentMangaNum,
-      nextMangaInfo: myLane == null ? this.findMyNextManga(this.selectedId) : undefined,
+      nextMangaInfo: next,
+      isFinal: myLane == null && this.currentMangaNum != null && next == null,
     };
     if (myLane != null) {
       this.emitEvent({ type: 'manga-changed', newMangaNum: this.currentMangaNum, newLane: myLane });

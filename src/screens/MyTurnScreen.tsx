@@ -104,25 +104,36 @@ export default function MyTurnScreen(_props: Props) {
         <BackButton />
         <Text style={styles.kind}>{sourceLabel(raceInfo?.source)}</Text>
         {state.selfName && <Text style={styles.selfName}>{state.selfName}</Text>}
-        <Text style={styles.restTitle}>Descansas esta manga</Text>
-        {state.currentMangaNum != null && (
-          <Text style={styles.restSub}>
-            Ahora se corre la manga {state.currentMangaNum}
-            {state.remainingMs != null && ` · ${fmtRemaining(state.remainingMs)} restante`}
-          </Text>
-        )}
 
-        {state.nextMangaInfo ? (
-          <View style={styles.block}>
-            <Text style={styles.label}>Tu próxima manga</Text>
-            <Text style={styles.bigTime}>{state.nextMangaInfo.mangaNum}</Text>
-            <Text style={[styles.label, { marginTop: 12 }]}>Carril</Text>
-            <Text style={styles.medTime}>{state.nextMangaInfo.lane}</Text>
-          </View>
+        {state.isFinal ? (
+          <>
+            <Text style={[styles.restTitle, styles.finalTitle]}>FINAL</Text>
+            <Text style={styles.restSub}>
+              Ya has corrido todas tus mangas. Carrera completada para ti.
+            </Text>
+          </>
         ) : (
-          <View style={styles.block}>
-            <Text style={styles.label}>Sin próxima manga programada</Text>
-          </View>
+          <>
+            <Text style={styles.restTitle}>Descansas esta manga</Text>
+            {state.currentMangaNum != null && (
+              <Text style={styles.restSub}>
+                Ahora se corre la manga {state.currentMangaNum}
+                {state.remainingMs != null && ` · ${fmtRemaining(state.remainingMs)} restante`}
+              </Text>
+            )}
+            {state.nextMangaInfo ? (
+              <View style={styles.block}>
+                <Text style={styles.label}>Tu próxima manga</Text>
+                <Text style={styles.bigTime}>{state.nextMangaInfo.mangaNum}</Text>
+                <Text style={[styles.label, { marginTop: 12 }]}>Carril</Text>
+                <Text style={styles.medTime}>{state.nextMangaInfo.lane}</Text>
+              </View>
+            ) : (
+              <View style={styles.block}>
+                <Text style={styles.label}>Sin próxima manga programada</Text>
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
     );
@@ -422,6 +433,7 @@ const styles = StyleSheet.create({
 
   // Vista de descanso
   restTitle: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 4 },
+  finalTitle: { fontSize: 44, fontWeight: '800', marginTop: 8, letterSpacing: 2 },
   restSub:   { color: '#9aa3ad', fontSize: 14, marginTop: 8 },
 
   // Entreno GO
