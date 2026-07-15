@@ -148,13 +148,13 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
           lastGapMinuteRef.current = minute;
           if (st.gapAheadLaps != null && st.gapAheadLaps <= GAP_LAPS_THRESHOLD && st.aheadName) {
             speak(st.gapAheadLaps === 0
-              ? `A la par con ${st.aheadName}`
+              ? `Delante, a la par con ${st.aheadName}`
               : `A ${lapsPhrase(st.gapAheadLaps)} de ${st.aheadName}`);
           }
           if (st.gapBehindLaps != null && st.gapBehindLaps <= GAP_LAPS_THRESHOLD && st.behindName) {
             speak(st.gapBehindLaps === 0
-              ? `${st.behindName}, a la par`
-              : `Tienes a ${st.behindName} a ${lapsPhrase(st.gapBehindLaps)}`);
+              ? `Detrás, a la par con ${st.behindName}`
+              : `Detrás, ${st.behindName} a ${lapsPhrase(st.gapBehindLaps)}`);
           }
         }
       }
