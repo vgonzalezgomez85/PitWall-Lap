@@ -16,6 +16,7 @@ import BackButton from '../ui/BackButton';
 export default function StrategyScreen() {
   const {
     available, config, setConfig, changeTires, result, followedName, ready,
+    serverDriven, ownTire,
     pending, confirmRivalChange, dismissRivalChange, markRivalChange, rivals,
   } = useTireStrategy();
 
@@ -50,6 +51,20 @@ export default function StrategyScreen() {
       <BackButton />
       <Text style={styles.title}>Estrategia</Text>
       {followedName && <Text style={styles.self}>{followedName}</Text>}
+
+      {/* ── Neumáticos según el servidor (PitWall Manager) ──────────────── */}
+      {serverDriven && ownTire && (
+        <View style={styles.serverBlock}>
+          <Text style={styles.label}>Neumáticos · servidor</Text>
+          <Text style={styles.serverMain}>
+            {ownTire.available} de {ownTire.allowance} juegos restantes
+          </Text>
+          <Text style={styles.serverSub}>{lastChangeText(ownTire.lastChange)}</Text>
+          <Text style={styles.serverHint}>
+            Dotación y cambios los controla PitWall Manager.
+          </Text>
+        </View>
+      )}
 
       {/* ── Confirmaciones de cambio de rival (auto-detectado) ──────────── */}
       {pending.map(p => (
@@ -97,20 +112,22 @@ export default function StrategyScreen() {
         </View>
       )}
 
-      {/* ── Cambié gomas ────────────────────────────────────────────────── */}
-      <Pressable style={styles.changeBtn} onPress={confirmChange} disabled={!ready}>
-        <Text style={styles.changeBtnText}>Cambié gomas</Text>
-      </Pressable>
+      {/* ── Cambié gomas (sólo manual; con servidor lo marca el Manager) ── */}
+      {!serverDriven && (
+        <Pressable style={styles.changeBtn} onPress={confirmChange} disabled={!ready}>
+          <Text style={styles.changeBtnText}>Cambié gomas</Text>
+        </Pressable>
+      )}
 
       {/* ── Goma de los rivales (Fase 2) ────────────────────────────────── */}
       {(rivals.ahead || rivals.behind) && (
         <>
           <Text style={styles.section}>Goma de los rivales</Text>
           {rivals.ahead && (
-            <RivalCard rival={rivals.ahead} onMark={() => markRivalChange('ahead')} />
+            <RivalCard rival={rivals.ahead} onMark={() => markRivalChange('ahead')} hideMark={serverDriven} />
           )}
           {rivals.behind && (
-            <RivalCard rival={rivals.behind} onMark={() => markRivalChange('behind')} />
+            <RivalCard rival={rivals.behind} onMark={() => markRivalChange('behind')} hideMark={serverDriven} />
           )}
         </>
       )}
@@ -123,16 +140,19 @@ export default function StrategyScreen() {
         onChange={v => setConfig({ pitCostSec: clamp(v, 5, 120) })}
         step={1}
       />
-      <Stepper
-        label="Juegos de neumáticos"
-        value={config.setsTotal}
-        onChange={v => setConfig({ setsTotal: clamp(v, 1, 20) })}
-        step={1}
-      />
+      {/* Con control del servidor, la dotación viene del Manager (no editable). */}
+      {!serverDriven && (
+        <Stepper
+          label="Juegos de neumáticos"
+          value={config.setsTotal}
+          onChange={v => setConfig({ setsTotal: clamp(v, 1, 20) })}
+          step={1}
+        />
+      )}
       <Stepper
         label="Cambios obligatorios (reglamento)"
         value={config.mandatoryChanges}
-        onChange={v => setConfig({ mandatoryChanges: clamp(v, 0, config.setsTotal - 1) })}
+        onChange={v => setConfig({ mandatoryChanges: clamp(v, 0, (serverDriven && ownTire ? ownTire.allowance : config.setsTotal - 1)) })}
         step={1}
       />
     </ScrollView>
@@ -187,7 +207,7 @@ function RecommendationCard({ result }: { result: StrategyResult }) {
   );
 }
 
-function RivalCard({ rival, onMark }: { rival: RivalView; onMark: () => void }) {
+function RivalCard({ rival, onMark, hideMark }: { rival: RivalView; onMark: () => void; hideMark?: boolean }) {
   const sideLabel = rival.side === 'ahead' ? 'Delante' : 'Detrás';
   const age = rival.ageKnown
     ? `${rival.tireAgeLaps} v${rival.confidence !== 'ok' ? ' · baja conf.' : ''}`
@@ -200,11 +220,33 @@ function RivalCard({ rival, onMark }: { rival: RivalView; onMark: () => void }) 
           Goma: {age}   ·   Degr. {fmtDeg(rival.degradationMsPerLap)}
         </Text>
       </View>
-      <Pressable style={styles.markBtn} onPress={onMark}>
-        <Text style={styles.markBtnText}>Marcar cambio</Text>
-      </Pressable>
+      {!hideMark && (
+        <Pressable style={styles.markBtn} onPress={onMark}>
+          <Text style={styles.markBtnText}>Marcar cambio</Text>
+        </Pressable>
+      )}
     </View>
   );
+}
+
+/** Texto del último cambio de goma según el servidor. */
+function lastChangeText(lc: { setNumber: number; mangaNumber: number | null; raceElapsedMs: number | null } | null): string {
+  if (!lc) return 'Sin cambios registrados';
+  const parts = [`Último cambio: juego ${lc.setNumber}`];
+  if (lc.mangaNumber != null) parts.push(`manga ${lc.mangaNumber}`);
+  if (lc.raceElapsedMs != null) parts.push(fmtElapsed(lc.raceElapsedMs));
+  return parts.join(' · ');
+}
+
+/** ms de carrera → "h:mm:ss" o "mm:ss". */
+function fmtElapsed(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = String(m).padStart(h > 0 ? 2 : 1, '0');
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 function Stepper({
@@ -254,6 +296,15 @@ const styles = StyleSheet.create({
   hero: { color: '#fff', fontSize: 26, fontWeight: '800', marginTop: 6 },
   heroSub: { color: '#9aa3ad', fontSize: 13, marginTop: 6 },
   lowConf: { color: '#e0a93b', fontSize: 12, marginTop: 8 },
+
+  // Bloque de neumáticos según el servidor
+  serverBlock: {
+    marginTop: 16, padding: 16, borderRadius: 10,
+    backgroundColor: '#141923', borderWidth: 1, borderColor: '#2c5cdd',
+  },
+  serverMain: { color: '#fff', fontSize: 20, fontWeight: '800', marginTop: 6 },
+  serverSub: { color: '#cfd5dc', fontSize: 14, marginTop: 6 },
+  serverHint: { color: '#7f8a97', fontSize: 12, marginTop: 8 },
 
   block: { marginTop: 14, padding: 16, backgroundColor: '#141923', borderRadius: 10 },
   label: { color: '#9aa3ad', fontSize: 12, textTransform: 'uppercase' },

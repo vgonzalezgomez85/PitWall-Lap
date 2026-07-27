@@ -73,6 +73,40 @@ export interface ProjectionRow {
   avgLapMs: number | null;   // media de carrera (todas las mangas)
 }
 
+/** Un cambio de neumáticos registrado por el servidor (PitWall Manager). Cada
+ *  cambio = un juego entregado; el nº de juego se numera por equipo en orden
+ *  cronológico. Ver `TireControlState`. */
+export interface TireChangeRecord {
+  /** Nº de juego del equipo (1, 2, 3…), cronológico. */
+  setNumber: number;
+  /** Manga en que se registró (null si no había manga viva). */
+  mangaNumber: number | null;
+  /** Minuto:segundo de carrera del cambio (null si el reloj no corría). */
+  raceElapsedMs: number | null;
+  /** Timestamp real del registro (Date.now() del servidor). */
+  createdAtMs: number;
+}
+
+/** Estado de neumáticos de un equipo (canónico, casado por NOMBRE). */
+export interface TireTeamState {
+  name: string;
+  /** Juegos entregados (nº de cambios). */
+  used: number;
+  /** Juegos que quedan = allowance − used (puede ser negativo si se excede). */
+  available: number;
+  /** Historial de cambios en orden cronológico ascendente. */
+  changes: TireChangeRecord[];
+}
+
+/** Control de neumáticos de la carrera, tal como lo expone PitWall Manager en
+ *  `/api/mobile/races/:id/tires`. `allowance = 0` → la carrera NO lleva control
+ *  y la app se queda con su configuración manual. */
+export interface TireControlState {
+  /** Pares suministrados a cada equipo para toda la carrera (0 = sin control). */
+  allowance: number;
+  teams: TireTeamState[];
+}
+
 /** Estado actual del piloto seleccionado. */
 export interface LiveState {
   status:
@@ -107,6 +141,10 @@ export interface LiveState {
   /** Proyección general completa (todas las entidades). La usa la estrategia
    *  de neumáticos para comparar con el rival de delante/detrás. */
   projection: ProjectionRow[] | null;
+  /** Control de neumáticos de la carrera (sólo SlotTime con control activo).
+   *  Lo usa la estrategia de goma para poblar dotación y cambios desde el
+   *  servidor en vez de la configuración manual. null = sin control / sin datos. */
+  tireControl: TireControlState | null;
   currentMangaNum: number | null;
   /** Si estoy en descanso, info de mi próxima manga. */
   nextMangaInfo?: { mangaNum: number; lane: number };
@@ -281,6 +319,7 @@ export function emptyLiveState(): LiveState {
     avgToCatchMs: null,
     projectedTotal: null,
     projection: null,
+    tireControl: null,
     currentMangaNum: null,
     pole: null,
     selfName: null,

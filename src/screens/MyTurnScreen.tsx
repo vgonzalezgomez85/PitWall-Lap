@@ -98,7 +98,11 @@ export default function MyTurnScreen(_props: Props) {
   // 'resting'), renderizamos una pantalla distinta: info de su próxima
   // manga + cuándo le toca. Sin voz (la app silencia eventos cuando no
   // es turno; cuando llegue su manga, se pasa solo a 'my-turn').
-  if (state.status === 'resting') {
+  // ── Vista de espera: PRE-CARRERA (aún no empieza) o DESCANSO (no corres la
+  // manga en curso). En ambos casos mostramos el horario y, sobre todo, dejamos
+  // configurar la app (voz + estrategia) mientras esperas tu turno.
+  if (state.status === 'resting' || state.status === 'pre-race') {
+    const isPre = state.status === 'pre-race';
     return (
       <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
         <BackButton />
@@ -111,6 +115,22 @@ export default function MyTurnScreen(_props: Props) {
             <Text style={styles.restSub}>
               Ya has corrido todas tus mangas. Carrera completada para ti.
             </Text>
+          </>
+        ) : isPre ? (
+          <>
+            <Text style={styles.restTitle}>La carrera aún no ha empezado</Text>
+            {state.nextMangaInfo ? (
+              <View style={styles.block}>
+                <Text style={styles.label}>Tu primera manga</Text>
+                <Text style={styles.bigTime}>{state.nextMangaInfo.mangaNum}</Text>
+                <Text style={[styles.label, { marginTop: 12 }]}>Carril</Text>
+                <Text style={styles.medTime}>{state.nextMangaInfo.lane}</Text>
+              </View>
+            ) : (
+              <View style={styles.block}>
+                <Text style={styles.label}>Descansas toda la carrera (sin mangas asignadas)</Text>
+              </View>
+            )}
           </>
         ) : (
           <>
@@ -133,6 +153,14 @@ export default function MyTurnScreen(_props: Props) {
                 <Text style={styles.label}>Sin próxima manga programada</Text>
               </View>
             )}
+          </>
+        )}
+
+        {/* Config disponible mientras esperas (solo carreras PitWall). */}
+        {isSlotTime && !isTraining && (
+          <>
+            <StrategyButton navigation={navigation} pendingCount={pendingCount} />
+            <VoiceControls settings={settings} toggle={toggle} update={update} isSlotTime={isSlotTime} />
           </>
         )}
       </ScrollView>
@@ -212,11 +240,7 @@ export default function MyTurnScreen(_props: Props) {
       )}
 
       {isSlotTime && !isTraining && (
-        <Pressable style={styles.strategyBtn} onPress={() => navigation.push('Strategy')}>
-          <Text style={styles.strategyBtnText}>
-            Estrategia de neumáticos{pendingCount > 0 ? ` · ${pendingCount} ●` : ''} →
-          </Text>
-        </Pressable>
+        <StrategyButton navigation={navigation} pendingCount={pendingCount} />
       )}
 
       {/* ── Entreno GO (solo modo entrenamiento) ───────────────────────── */}
@@ -254,38 +278,7 @@ export default function MyTurnScreen(_props: Props) {
       )}
 
       {/* ── Voice toggles ──────────────────────────────────────────────── */}
-      <Text style={styles.section}>Voz</Text>
-      <View style={styles.togglesRow}>
-        <ToggleChip
-          label={settings.enabled ? 'Voz ON' : 'Voz OFF'}
-          active={settings.enabled}
-          onPress={() => toggle('enabled')}
-        />
-        <ToggleChip label="Vueltas"   active={settings.sayLaps} onPress={() => toggle('sayLaps')} />
-        {isSlotTime && (
-          <>
-            <ToggleChip label="Posición"  active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
-            <ToggleChip label="Media manga" active={settings.sayHalfManga}     onPress={() => toggle('sayHalfManga')} />
-            <ToggleChip label="Último min" active={settings.sayLastMinute}     onPress={() => toggle('sayLastMinute')} />
-            <ToggleChip label="30 s"      active={settings.sayLast30s}        onPress={() => toggle('sayLast30s')} />
-            <ToggleChip
-              label={settings.sayAveragesEveryMin > 0 ? `Media ${settings.sayAveragesEveryMin} min` : 'Media'}
-              active={settings.sayAveragesEveryMin > 0}
-              onPress={() => update({ sayAveragesEveryMin: cycleMinutes(settings.sayAveragesEveryMin) })}
-            />
-            <ToggleChip
-              label={settings.sayGapsEveryMin > 0 ? `Gaps ${settings.sayGapsEveryMin} min` : 'Gaps'}
-              active={settings.sayGapsEveryMin > 0}
-              onPress={() => update({ sayGapsEveryMin: cycleMinutes(settings.sayGapsEveryMin) })}
-            />
-            <ToggleChip
-              label={settings.sayCatchUpEveryMin > 0 ? `P/Subir ${settings.sayCatchUpEveryMin} min` : 'P/Subir'}
-              active={settings.sayCatchUpEveryMin > 0}
-              onPress={() => update({ sayCatchUpEveryMin: cycleMinutes(settings.sayCatchUpEveryMin) })}
-            />
-          </>
-        )}
-      </View>
+      <VoiceControls settings={settings} toggle={toggle} update={update} isSlotTime={isSlotTime} />
 
       {/* ── Modal: datos del stint al detener ──────────────────────────── */}
       <Modal
@@ -392,6 +385,66 @@ function ToggleChip({ label, active, onPress }: { label: string; active: boolean
 // Helper exportado por si en el futuro queremos chips de modo avanzado:
 export function isAdvancedKey(k: keyof VoiceSettings): boolean {
   return k === 'sayAveragesEveryMin' || k === 'sayGapsEveryMin';
+}
+
+// Botón de acceso a la pantalla de estrategia. Reutilizado en "mi turno" y en
+// la vista de espera (pre-carrera / descanso) para poder configurar antes.
+function StrategyButton({ navigation, pendingCount }: {
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+  pendingCount: number;
+}) {
+  return (
+    <Pressable style={styles.strategyBtn} onPress={() => navigation.push('Strategy')}>
+      <Text style={styles.strategyBtnText}>
+        Estrategia de neumáticos{pendingCount > 0 ? ` · ${pendingCount} ●` : ''} →
+      </Text>
+    </Pressable>
+  );
+}
+
+// Sección de ajustes de voz. Reutilizada en "mi turno" y en la vista de espera.
+function VoiceControls({ settings, toggle, update, isSlotTime }: {
+  settings: VoiceSettings;
+  toggle: (k: keyof VoiceSettings) => void;
+  update: (p: Partial<VoiceSettings>) => void;
+  isSlotTime: boolean;
+}) {
+  return (
+    <>
+      <Text style={styles.section}>Voz</Text>
+      <View style={styles.togglesRow}>
+        <ToggleChip
+          label={settings.enabled ? 'Voz ON' : 'Voz OFF'}
+          active={settings.enabled}
+          onPress={() => toggle('enabled')}
+        />
+        <ToggleChip label="Vueltas"   active={settings.sayLaps} onPress={() => toggle('sayLaps')} />
+        {isSlotTime && (
+          <>
+            <ToggleChip label="Posición"  active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
+            <ToggleChip label="Media manga" active={settings.sayHalfManga}     onPress={() => toggle('sayHalfManga')} />
+            <ToggleChip label="Último min" active={settings.sayLastMinute}     onPress={() => toggle('sayLastMinute')} />
+            <ToggleChip label="30 s"      active={settings.sayLast30s}        onPress={() => toggle('sayLast30s')} />
+            <ToggleChip
+              label={settings.sayAveragesEveryMin > 0 ? `Media ${settings.sayAveragesEveryMin} min` : 'Media'}
+              active={settings.sayAveragesEveryMin > 0}
+              onPress={() => update({ sayAveragesEveryMin: cycleMinutes(settings.sayAveragesEveryMin) })}
+            />
+            <ToggleChip
+              label={settings.sayGapsEveryMin > 0 ? `Gaps ${settings.sayGapsEveryMin} min` : 'Gaps'}
+              active={settings.sayGapsEveryMin > 0}
+              onPress={() => update({ sayGapsEveryMin: cycleMinutes(settings.sayGapsEveryMin) })}
+            />
+            <ToggleChip
+              label={settings.sayCatchUpEveryMin > 0 ? `P/Subir ${settings.sayCatchUpEveryMin} min` : 'P/Subir'}
+              active={settings.sayCatchUpEveryMin > 0}
+              onPress={() => update({ sayCatchUpEveryMin: cycleMinutes(settings.sayCatchUpEveryMin) })}
+            />
+          </>
+        )}
+      </View>
+    </>
+  );
 }
 
 const styles = StyleSheet.create({

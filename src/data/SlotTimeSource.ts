@@ -25,6 +25,7 @@ import type {
   RaceInfo,
   RaceStatsSnapshot,
   SourceEvent,
+  TireControlState,
 } from './types';
 import { SLOTTIME_CAPABILITIES, emptyLiveState } from './types';
 
@@ -96,6 +97,26 @@ interface RaceCurrentResponse {
   participants: (ParticipantPlan & { id: number | string })[];
 }
 
+// GET /api/mobile/races/:id/tires
+interface TiresResponse {
+  raceId: number;
+  allowance: number;
+  teams: {
+    id: number;
+    name: string;
+    color: string;
+    used: number;
+    available: number;
+    changes: {
+      setNumber: number;
+      mangaNumber: number | null;
+      raceElapsedMs: number | null;
+      createdAtMs: number;
+      note?: string | null;
+    }[];
+  }[];
+}
+
 // ── Fuente ────────────────────────────────────────────────────────────────
 
 export type SlotTimeMode = 'race' | 'training' | 'pole';
@@ -111,6 +132,13 @@ export class SlotTimeSource implements DataSource {
   private selectedId: string | null = null;
   private participants: ParticipantPlan[] = [];
   private mangaDurationMs = 0;
+  /** baseUrl + id de carrera resueltos tras conectar, para refetch de tires. */
+  private baseUrl = '';
+  private resolvedRaceId: number | null = null;
+  /** Último control de neumáticos conocido. Es la fuente de verdad: emitState()
+   *  lo inyecta en cada snapshot, porque varios handlers reconstruyen
+   *  currentState desde cero (p. ej. al seleccionar piloto) y lo borrarían. */
+  private tireControlState: TireControlState | null = null;
   private currentMangaNum: number | null = null;
   /** Tanda de la manga activa. La numeración de manga es POR TANDA (tanda 2
    *  vuelve a manga 1), así que hace falta la tanda para identificar la manga. */
@@ -185,6 +213,8 @@ export class SlotTimeSource implements DataSource {
     this.mangaDurationMs = data.race.mangaDurationMin * 60_000;
     this.currentMangaNum = data.activeManga?.number ?? null;
     this.currentTandaNum = data.activeManga?.tandaNum ?? null;
+    this.baseUrl = baseUrl;
+    this.resolvedRaceId = data.race.id;
     this.currentState = {
       ...emptyLiveState(),
       currentMangaNum: this.currentMangaNum,
@@ -192,6 +222,10 @@ export class SlotTimeSource implements DataSource {
 
     this.socket = io(baseUrl, { transports: ['websocket'], reconnection: true, query: { client: 'mobile' } });
     this.wireSocket(this.socket);
+
+    // Control de neumáticos (dotación + cambios). No bloquea el arranque; si la
+    // carrera no lleva control, deja tireControl en null.
+    void this.fetchTires();
 
     return {
       source: 'slottime',
@@ -256,6 +290,8 @@ export class SlotTimeSource implements DataSource {
     this.stateListeners = [];
     this.eventListeners = [];
     this.snapshotListeners = [];
+    this.tireControlState = null;
+    this.resolvedRaceId = null;
   }
 
   // ── Conexión modo pole ────────────────────────────────────────────────
@@ -428,18 +464,24 @@ export class SlotTimeSource implements DataSource {
       else this.emitState();
       return;
     } else {
+      // Antes de que arranque ninguna manga (currentMangaNum == null) la carrera
+      // está en PRE-CARRERA: no es "descanso" (no hay manga corriendo), así que
+      // mostramos su PRIMERA manga/carril (o que descansa toda la carrera).
+      const preRace = this.currentMangaNum == null;
       const myLane = this.findMyLaneForCurrentManga(id);
-      const next = myLane == null ? this.findMyNextManga(id) : undefined;
+      const upcoming = preRace
+        ? this.findMyFirstTurn(id)
+        : (myLane == null ? this.findMyNextManga(id) : undefined);
       this.currentState = {
         ...emptyLiveState(),
-        status: myLane != null ? 'my-turn' : 'resting',
+        status: preRace ? 'pre-race' : (myLane != null ? 'my-turn' : 'resting'),
         myLane,
         selfName,
         currentMangaNum: this.currentMangaNum,
-        nextMangaInfo: next,
+        nextMangaInfo: upcoming,
         // FINAL: descansa la manga actual (hay una en curso) y no le queda
         // ninguna manga futura → ya corrió todas las suyas.
-        isFinal: myLane == null && this.currentMangaNum != null && next == null,
+        isFinal: myLane == null && this.currentMangaNum != null && upcoming == null,
       };
     }
     this.emitState();
@@ -475,6 +517,9 @@ export class SlotTimeSource implements DataSource {
       // Si ya hay una manga corriendo cuando entramos, pedimos standings
       // inicial para empezar a pintar inmediatamente.
       socket.emit('standings:request');
+      // Tras una reconexión el control de neumáticos pudo cambiar mientras no
+      // había socket (el evento tires:changed se perdió): re-sincronizamos.
+      void this.fetchTires();
       this.emitEvent({ type: 'connection-restored' });
     });
     socket.on('disconnect', () => {
@@ -523,6 +568,13 @@ export class SlotTimeSource implements DataSource {
         fromLane: p.fromLane, toLane: p.toLane, lapTimeMs: p.lapTimeMs,
         toName: p.name ?? null,
       });
+    });
+
+    // El operador entregó/editó/borró un juego en PitWall Manager. El evento es
+    // global y sólo trae { raceId }; refrescamos el control de neumáticos.
+    socket.on('tires:changed', (p: { raceId?: number }) => {
+      if (p?.raceId != null && this.resolvedRaceId != null && p.raceId !== this.resolvedRaceId) return;
+      void this.fetchTires();
     });
 
     socket.on('race:stats-snapshot', (snap: RaceStatsSnapshot) => {
@@ -808,6 +860,17 @@ export class SlotTimeSource implements DataSource {
     return next ? { mangaNum: next.mangaNum, lane: next.lane } : undefined;
   }
 
+  /** Primera manga en la que corre el piloto (la más temprana no-descanso de su
+   *  plan). Para la vista de PRE-CARRERA. undefined = no corre ninguna manga. */
+  private findMyFirstTurn(id: string): { mangaNum: number; lane: number } | undefined {
+    const p = this.participants.find(x => x.id === id);
+    if (!p) return undefined;
+    const first = p.mangas
+      .filter(m => !m.isRest)
+      .sort((a, b) => a.tandaNum - b.tandaNum || a.mangaNum - b.mangaNum)[0];
+    return first ? { mangaNum: first.mangaNum, lane: first.lane } : undefined;
+  }
+
   private reevaluateMangaForSelected(): void {
     if (!this.selectedId) return;
     this.currentMangaNum = (this.currentMangaNum ?? 0) + 1;
@@ -834,7 +897,41 @@ export class SlotTimeSource implements DataSource {
   }
 
   private emitState(): void {
+    // Inyecta siempre el control de neumáticos: es un campo transversal que los
+    // handlers que reconstruyen currentState desde emptyLiveState() perderían.
+    if (this.currentState.tireControl !== this.tireControlState) {
+      this.currentState = { ...this.currentState, tireControl: this.tireControlState };
+    }
     for (const l of this.stateListeners) l(this.currentState);
+  }
+
+  /** Consulta el control de neumáticos de la carrera y lo mete en el estado.
+   *  Silencioso ante fallos (control opcional): si algo va mal deja el
+   *  `tireControl` como estaba. `allowance = 0` = carrera sin control. */
+  private async fetchTires(): Promise<void> {
+    if (!this.baseUrl || this.resolvedRaceId == null) return;
+    try {
+      const res = await fetch(`${this.baseUrl}/api/mobile/races/${this.resolvedRaceId}/tires`);
+      if (!res.ok) return;
+      const data: TiresResponse = await res.json();
+      this.tireControlState = {
+        allowance: data.allowance ?? 0,
+        teams: (data.teams ?? []).map(t => ({
+          name:      t.name,
+          used:      t.used,
+          available: t.available,
+          changes:   (t.changes ?? []).map(c => ({
+            setNumber:     c.setNumber,
+            mangaNumber:   c.mangaNumber ?? null,
+            raceElapsedMs: c.raceElapsedMs ?? null,
+            createdAtMs:   c.createdAtMs,
+          })),
+        })),
+      };
+      this.emitState();
+    } catch {
+      // Servidor antiguo (sin endpoint) o red caída: control opcional, ignorar.
+    }
   }
 
   private emitEvent(e: SourceEvent): void {

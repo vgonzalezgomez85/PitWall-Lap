@@ -19,6 +19,7 @@ import React, {
 import { useDataSource, useSourceEvent } from '../data/sourceContext';
 import { computeTireStrategy, type StrategyResult } from './computeTireStrategy';
 import { buildRivalModel, detectTireChange, type RivalModel } from './rivalTireModel';
+import { hasTireControl, ownTireInfo, resolveTireInputs, type OwnTireInfo } from './serverTires';
 import type { ProjectionRow } from '../data/types';
 
 const CONFIG_KEY = '@pitwall/strategy/config/v1';
@@ -77,6 +78,11 @@ export interface TireStrategy {
   result: StrategyResult | null;
   followedName: string | null;
   ready: boolean;
+  /** true si mandan los datos del servidor (control activo + equipo casado):
+   *  dotación y cambios vienen de PitWall Manager, no de la config manual. */
+  serverDriven: boolean;
+  /** Neumáticos del piloto seguido según el servidor (null si no aplica). */
+  ownTire: OwnTireInfo | null;
   // Fase 2
   pending: PendingRivalChange[];
   pendingCount: number;
@@ -128,6 +134,21 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<PendingRivalChange[]>([]);
   const [rivalVersion, setRivalVersion] = useState(0);
 
+  // ── Control de neumáticos del servidor (PitWall Manager) ─────────────────
+  // Cuando la carrera lleva control, dotación y cambios mandan sobre la config
+  // manual. Casamos el piloto/rivales por NOMBRE (único por carrera).
+  const ownTire = useMemo(
+    () => ownTireInfo(state.tireControl, entity),
+    [state.tireControl, entity],
+  );
+  const serverDriven = ownTire != null;
+  const serverControlRef = useRef(false);
+  serverControlRef.current = hasTireControl(state.tireControl);
+  // Último `used` visto por equipo, para detectar cambios NUEVOS (incrementos):
+  // el propio (reinicia mi stint) y los rivales (ancla su edad de goma).
+  const serverOwnUsedRef = useRef<number | null>(null);
+  const serverRivalUsedRef = useRef<Map<string, number>>(new Map());
+
   // Config global (una vez).
   useEffect(() => {
     AsyncStorage.getItem(CONFIG_KEY)
@@ -137,6 +158,9 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
 
   // Estado del stint propio: se carga al cambiar de carrera/piloto.
   useEffect(() => {
+    // Cambió carrera/piloto → olvida el baseline de "usados" propio (que se
+    // vuelve a fijar en la 1ª lectura del servidor, sin reiniciar el stint).
+    serverOwnUsedRef.current = null;
     if (!key) { setStint(EMPTY_STINT); setReady(true); return; }
     let cancelled = false;
     setReady(false);
@@ -157,6 +181,7 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
     rivalChangeRef.current = new Map();
     detectedRef.current = new Map();
     laneLapsRef.current = new Map();
+    serverRivalUsedRef.current = new Map();
     setPending([]);
   }, [raceId]);
 
@@ -164,6 +189,47 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
     const k = keyRef.current;
     if (k) void AsyncStorage.setItem(k, JSON.stringify(next)).catch(() => {});
   }, []);
+
+  // ── Servidor manda: cambio propio → reinicia el stint automáticamente ────
+  // La 1ª lectura sólo fija el baseline (no toca el stint persistido, que puede
+  // traer vueltas válidas de una reconexión). Un incremento posterior de
+  // `used` = el operador registró un cambio → limpiamos el buffer del stint.
+  useEffect(() => {
+    if (!ownTire) { serverOwnUsedRef.current = null; return; }
+    const prev = serverOwnUsedRef.current;
+    serverOwnUsedRef.current = ownTire.used;
+    if (prev != null && ownTire.used > prev) {
+      setStint(() => {
+        const next: StintState = { stintLaps: [], stintRefs: [], changesMade: ownTire.used };
+        persist(next);
+        return next;
+      });
+    }
+  }, [ownTire, persist]);
+
+  // ── Servidor manda: cambios de RIVALES desde los hechos del servidor ─────
+  // Sustituye la heurística "vuelta larga + caída" por la verdad del Manager.
+  // En la 1ª lectura sólo fijamos baseline (los cambios previos a conectar no
+  // tienen vuelta exacta → edad desconocida). Un incremento en vivo ancla la
+  // edad de goma AHORA (nº de vueltas observadas del rival hasta el momento).
+  useEffect(() => {
+    const tc = state.tireControl;
+    if (!hasTireControl(tc)) return;
+    let bumped = false;
+    for (const team of tc!.teams) {
+      if (team.name === entityRef.current) continue;   // el propio va por otra vía
+      const prev = serverRivalUsedRef.current.get(team.name);
+      serverRivalUsedRef.current.set(team.name, team.used);
+      if (prev != null && team.used > prev) {
+        const len = (rivalBuffersRef.current.get(team.name) ?? []).length;
+        rivalChangeRef.current.set(team.name, len);
+        detectedRef.current.set(team.name, len);
+        setPending(cur => cur.filter(p => p.name !== team.name));  // no confirmación manual
+        bumped = true;
+      }
+    }
+    if (bumped) setRivalVersion(v => v + 1);
+  }, [state.tireControl, entity]);
 
   // ── Vueltas: piloto propio (lap-completed) y rivales (entity-lap) ─────────
   useSourceEvent(e => {
@@ -211,6 +277,10 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
       const refs = rivalRefsRef.current.get(e.name) ?? [];
       refs.push(laneRefOf(e.lane));
       rivalRefsRef.current.set(e.name, refs);
+
+      // Con control del servidor, los cambios de goma del rival los marca el
+      // servidor (efecto de arriba): no lanzamos la heurística de detección.
+      if (serverControlRef.current) return;
 
       // Auto-detección solo para el rival de delante/detrás actual.
       const side: RivalSide | null =
@@ -303,12 +373,17 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
       ? buildRivalModel(rivalBuffersRef.current.get(behind.name) ?? [], rivalChangeRef.current.get(behind.name) ?? null, behind, rivalRefsRef.current.get(behind.name))
       : null;
 
+    // Dotación y cambios: servidor si hay control y casa el equipo; si no, manual.
+    const tireInputs = resolveTireInputs(
+      state.tireControl, entity, config.setsTotal, stint.changesMade,
+    );
+
     const res = computeTireStrategy({
       stintLaps: stint.stintLaps,
       stintRefs: stint.stintRefs,
       pitCostMs: config.pitCostSec * 1000,
-      setsTotal: config.setsTotal,
-      changesMade: stint.changesMade,
+      setsTotal: tireInputs.setsTotal,
+      changesMade: tireInputs.changesMade,
       mandatoryChanges: config.mandatoryChanges,
       followed, ahead, behind,
       aheadProjected: aheadModel?.projectedTotal ?? null,
@@ -327,13 +402,14 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
       rivals: { ahead: toView(ahead, aheadModel, 'ahead'), behind: toView(behind, behindModel, 'behind') },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [available, stint.stintLaps, stint.stintRefs, stint.changesMade, config.pitCostSec, config.setsTotal, config.mandatoryChanges, followed, ahead, behind, rivalVersion]);
+  }, [available, stint.stintLaps, stint.stintRefs, stint.changesMade, config.pitCostSec, config.setsTotal, config.mandatoryChanges, followed, ahead, behind, rivalVersion, state.tireControl, entity]);
 
   const value = useMemo<TireStrategy>(() => ({
     available, config, setConfig, changeTires, result, followedName: entity, ready,
+    serverDriven, ownTire,
     pending, pendingCount: pending.length,
     confirmRivalChange, dismissRivalChange, markRivalChange, rivals,
-  }), [available, config, setConfig, changeTires, result, entity, ready, pending,
+  }), [available, config, setConfig, changeTires, result, entity, ready, serverDriven, ownTire, pending,
        confirmRivalChange, dismissRivalChange, markRivalChange, rivals]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
