@@ -1,4 +1,4 @@
-// Cliente SlotTime (fuente preferida).
+// Cliente PitWall (fuente preferida).
 //
 // Protocolo:
 //   • Descubrimiento: mDNS `_voltrace-manager._tcp` (lo hace `discover()`).
@@ -34,7 +34,7 @@ import { SLOTTIME_CAPABILITIES, emptyLiveState } from './types';
 const LAST_MINUTE_MS = 60_000;
 const LAST_30S_MS    = 30_000;
 
-export interface SlotTimeServerLocation {
+export interface PitWallServerLocation {
   host: string;
   port: number;
 }
@@ -119,13 +119,13 @@ interface TiresResponse {
 
 // ── Fuente ────────────────────────────────────────────────────────────────
 
-export type SlotTimeMode = 'race' | 'training' | 'pole';
+export type PitWallMode = 'race' | 'training' | 'pole';
 
-export class SlotTimeSource implements DataSource {
-  readonly kind = 'slottime' as const;
+export class PitWallSource implements DataSource {
+  readonly kind = 'pitwall' as const;
 
-  private server: SlotTimeServerLocation;
-  private mode: SlotTimeMode;
+  private server: PitWallServerLocation;
+  private mode: PitWallMode;
   /** Sólo modo 'race'. Si null, usa /api/mobile/races/current. */
   private raceId: number | null;
   private socket: Socket | null = null;
@@ -162,8 +162,8 @@ export class SlotTimeSource implements DataSource {
   private polePrevStatus: PoleSnapshot['status'] = null;
 
   constructor(
-    server: SlotTimeServerLocation,
-    raceIdOrOpts?: number | { mode: SlotTimeMode; raceId?: number },
+    server: PitWallServerLocation,
+    raceIdOrOpts?: number | { mode: PitWallMode; raceId?: number },
   ) {
     this.server = server;
     if (typeof raceIdOrOpts === 'number') {
@@ -228,7 +228,7 @@ export class SlotTimeSource implements DataSource {
     void this.fetchTires();
 
     return {
-      source: 'slottime',
+      source: 'pitwall',
       raceId: data.race.id,
       name: data.race.name,
       format: data.race.format,
@@ -268,7 +268,7 @@ export class SlotTimeSource implements DataSource {
     this.wireTrainingSocket(this.socket);
 
     return {
-      source: 'slottime',
+      source: 'pitwall',
       mode: 'training',
       name: 'Entrenamiento',
       format: 'individual',
@@ -343,7 +343,7 @@ export class SlotTimeSource implements DataSource {
     this.wirePoleSocket(this.socket);
 
     return {
-      source: 'slottime',
+      source: 'pitwall',
       mode: 'pole',
       name: `${raceData.race.name} · Pole`,
       format: raceData.race.format,
@@ -513,7 +513,7 @@ export class SlotTimeSource implements DataSource {
 
   private wireSocket(socket: Socket): void {
     socket.on('connect', () => {
-      console.log('[SlotTime] socket connected');
+      console.log('[PitWall] socket connected');
       // Si ya hay una manga corriendo cuando entramos, pedimos standings
       // inicial para empezar a pintar inmediatamente.
       socket.emit('standings:request');
@@ -523,12 +523,12 @@ export class SlotTimeSource implements DataSource {
       this.emitEvent({ type: 'connection-restored' });
     });
     socket.on('disconnect', () => {
-      console.log('[SlotTime] socket disconnected');
+      console.log('[PitWall] socket disconnected');
       this.emitEvent({ type: 'connection-lost' });
     });
 
     socket.on('manga:started', async () => {
-      console.log('[SlotTime] manga:started → refetching current race');
+      console.log('[PitWall] manga:started → refetching current race');
       this.firedHalfManga = false;
       this.firedLastMinute = false;
       this.firedLast30s = false;
@@ -589,7 +589,7 @@ export class SlotTimeSource implements DataSource {
   }
 
   private onStandings(payload: StandingsPayload): void {
-    console.log('[SlotTime] standings myLane=', this.currentState.myLane,
+    console.log('[PitWall] standings myLane=', this.currentState.myLane,
       'standings.lanes=', payload.standings.map(r => r.lane).join(','));
 
     // El servidor puede tener una duración de sesión real distinta a la
@@ -625,7 +625,7 @@ export class SlotTimeSource implements DataSource {
         me = byName[0];
         myLane = me!.lane;
         this.currentState = { ...this.currentState, myLane };
-        console.log('[SlotTime] carril corregido por nombre →', myLane);
+        console.log('[PitWall] carril corregido por nombre →', myLane);
       }
     }
     if (!me) return;
@@ -825,9 +825,9 @@ export class SlotTimeSource implements DataSource {
           mangas: p.mangas,
         }));
       }
-      console.log('[SlotTime] refreshCurrentManga → currentMangaNum =', this.currentMangaNum);
+      console.log('[PitWall] refreshCurrentManga → currentMangaNum =', this.currentMangaNum);
     } catch (e) {
-      console.log('[SlotTime] refreshCurrentManga failed:', e);
+      console.log('[PitWall] refreshCurrentManga failed:', e);
     }
   }
 

@@ -1,4 +1,4 @@
-// Selector de carrera (sólo SlotTime). Carga la lista de carreras activas
+// Selector de carrera (sólo PitWall). Carga la lista de carreras activas
 // y pendientes del servidor. Si sólo hay una, salta automáticamente al
 // selector de tanda. Si hay varias, deja al usuario elegir.
 

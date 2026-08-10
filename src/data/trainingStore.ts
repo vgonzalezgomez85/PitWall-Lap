@@ -7,8 +7,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const INDEX_KEY = '@voltrace/training/index/v1';
-const ENTRY_KEY = (id: string) => `@voltrace/training/entry/${id}`;
+const INDEX_KEY = '@pitwall/training/index/v1';
+const ENTRY_KEY = (id: string) => `@pitwall/training/entry/${id}`;
 
 /** Datos opcionales del coche/setup para poder comparar stints. */
 export interface StintSetup {

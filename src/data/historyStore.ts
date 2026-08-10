@@ -1,4 +1,4 @@
-// Almacén local de carreras pasadas. El servidor SlotTime envía un
+// Almacén local de carreras pasadas. El servidor PitWall envía un
 // snapshot completo (`race:stats-snapshot`) cuando termina una carrera;
 // lo persistimos aquí para que el piloto pueda revisar resultados
 // aunque el servidor esté apagado.
@@ -7,8 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { RaceStatsSnapshot } from './types';
 
-const INDEX_KEY = '@slotime/history/index/v1';
-const ENTRY_KEY = (id: string | number) => `@slotime/history/entry/${id}`;
+const INDEX_KEY = '@pitwall/history/index/v1';
+const ENTRY_KEY = (id: string | number) => `@pitwall/history/entry/${id}`;
 
 export interface HistoryEntryMeta {
   raceId: number | string;

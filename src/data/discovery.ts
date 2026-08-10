@@ -1,8 +1,8 @@
 // Descubrimiento de fuente: el usuario elige primero qué quiere conectar
-// (SlotTime o InfoLap), luego intentamos auto-discovery; si falla, la UI
+// (PitWall o InfoLap), luego intentamos auto-discovery; si falla, la UI
 // permite introducir la IP manualmente y reintentar.
 //
-// SlotTime:
+// PitWall:
 //   • Auto: mDNS `_voltrace-manager._tcp`.
 //   • Manual: HTTP a `<host>:3000/api/mobile/races/current`.
 //
@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { DataSource, RaceInfo } from './types';
 import { InfolapSource } from './InfolapSource';
-import { SlotTimeSource, type SlotTimeServerLocation } from './SlotTimeSource';
+import { PitWallSource, type PitWallServerLocation } from './PitWallSource';
 
 // iOS NSNetService.resolveWithTimeout en react-native-zeroconf es 5s.
 const MDNS_TIMEOUT_MS = 6000;
@@ -28,11 +28,11 @@ const MDNS_SERVICE_TYPE = 'voltrace-manager';
 // En iOS hay una sola implementación nativa, así que dejamos el default.
 const MDNS_IMPL = Platform.OS === 'android' ? 'DNSSD' : undefined;
 
-export type SourceKind = 'slottime' | 'infolap';
+export type SourceKind = 'pitwall' | 'infolap';
 
 /**
- * Para SlotTime devolvemos sólo la ubicación del servidor; la app pasará
- * después por RacePicker/TandaPicker antes de crear el `SlotTimeSource`
+ * Para PitWall devolvemos sólo la ubicación del servidor; la app pasará
+ * después por RacePicker/TandaPicker antes de crear el `PitWallSource`
  * real (porque un servidor puede tener varias carreras activas y cada una
  * varias tandas).
  *
@@ -40,7 +40,7 @@ export type SourceKind = 'slottime' | 'infolap';
  * ya conectado y listo para usar.
  */
 export type DiscoveryResult =
-  | { kind: 'slottime'; server: SlotTimeServerLocation }
+  | { kind: 'pitwall'; server: PitWallServerLocation }
   | { kind: 'infolap'; source: DataSource; raceInfo: RaceInfo };
 
 export interface DiscoveryOptions {
@@ -57,13 +57,13 @@ interface ResolvedService {
   addresses?: string[];
 }
 
-// ── Probe mDNS para SlotTime ─────────────────────────────────────────────
+// ── Probe mDNS para PitWall ─────────────────────────────────────────────
 
-function probeSlotTime(): Promise<SlotTimeServerLocation | null> {
+function probePitWall(): Promise<PitWallServerLocation | null> {
   return new Promise((resolve) => {
     const zc = new Zeroconf();
     let settled = false;
-    const finish = (server: SlotTimeServerLocation | null) => {
+    const finish = (server: PitWallServerLocation | null) => {
       if (settled) return;
       settled = true;
       // El .d.ts de la librería va por detrás del runtime (no tipa implType).
@@ -114,7 +114,7 @@ export async function getCachedHost(): Promise<string | null> {
   try { return await AsyncStorage.getItem(LAST_HOST_KEY); } catch { return null; }
 }
 
-async function probeCachedHost(): Promise<SlotTimeServerLocation | null> {
+async function probeCachedHost(): Promise<PitWallServerLocation | null> {
   try {
     const host = await AsyncStorage.getItem(LAST_HOST_KEY);
     if (!host) return null;
@@ -141,7 +141,7 @@ async function probeHttpHost(host: string, port: number): Promise<boolean> {
   }
 }
 
-async function scanSubnetForSlotTime(): Promise<SlotTimeServerLocation | null> {
+async function scanSubnetForPitWall(): Promise<PitWallServerLocation | null> {
   let ip: string;
   try {
     ip = await Network.getIpAddressAsync();
@@ -165,7 +165,7 @@ async function scanSubnetForSlotTime(): Promise<SlotTimeServerLocation | null> {
   for (let i = 1; i <= 254; i++) if (i !== myLast) order.push(i);
 
   const CONCURRENCY = 32;
-  return new Promise<SlotTimeServerLocation | null>((resolve) => {
+  return new Promise<PitWallServerLocation | null>((resolve) => {
     let idx = 0, active = 0, remaining = order.length, settled = false;
     const pump = () => {
       if (settled) return;
@@ -177,7 +177,7 @@ async function scanSubnetForSlotTime(): Promise<SlotTimeServerLocation | null> {
           if (settled) return;
           if (ok) {
             settled = true;
-            console.log('[Discovery] subnet scan found SlotTime at', host);
+            console.log('[Discovery] subnet scan found PitWall at', host);
             resolve({ host, port: SCAN_PORT_DEFAULT });
           } else if (remaining === 0) {
             settled = true;
@@ -211,16 +211,16 @@ function firstNonNull<T>(promises: Promise<T | null>[]): Promise<T | null> {
 // ── Orquestador ──────────────────────────────────────────────────────────
 
 export async function discover(opts: DiscoveryOptions): Promise<DiscoveryResult | null> {
-  if (opts.kind === 'slottime') {
+  if (opts.kind === 'pitwall') {
     // mDNS y subnet scan en PARALELO: el primero que encuentre el servidor
     // gana. Así no dependemos de que el mDNS funcione (falla en Android) ni
     // esperamos su timeout antes de barrer la subred.
     // En PARALELO: IP recordada + mDNS + barrido de subred. El primero que
     // encuentre el servidor gana. La IP recordada es la que salva las redes de
     // club (mDNS filtrado / otra subred): un único unicast a un host conocido.
-    const server: SlotTimeServerLocation | null = opts.manualHost
+    const server: PitWallServerLocation | null = opts.manualHost
       ? { host: opts.manualHost, port: 3000 }
-      : await firstNonNull([probeCachedHost(), probeSlotTime(), scanSubnetForSlotTime()]);
+      : await firstNonNull([probeCachedHost(), probePitWall(), scanSubnetForPitWall()]);
     if (!server) return null;
 
     // Smoke-test: comprueba que /api/mobile/races/active responde 2xx.
@@ -230,16 +230,16 @@ export async function discover(opts: DiscoveryOptions): Promise<DiscoveryResult 
       const url = `http://${server.host}:${server.port}/api/mobile/races/active`;
       const res = await fetch(url);
       if (!res.ok) {
-        console.log('[Discovery] SlotTime smoke-test failed:', res.status);
+        console.log('[Discovery] PitWall smoke-test failed:', res.status);
         return null;
       }
     } catch (e) {
-      console.log('[Discovery] SlotTime unreachable:', (e as Error)?.message);
+      console.log('[Discovery] PitWall unreachable:', (e as Error)?.message);
       return null;
     }
     // Recordar esta IP para la próxima vez (reconexión directa, sin barrido).
     void AsyncStorage.setItem(LAST_HOST_KEY, server.host).catch(() => {});
-    return { kind: 'slottime', server };
+    return { kind: 'pitwall', server };
   }
 
   // kind === 'infolap'

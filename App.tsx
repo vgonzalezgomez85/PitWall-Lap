@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -8,6 +8,7 @@ import { setAudioModeAsync } from 'expo-audio';
 import { SourceProvider } from './src/data/sourceContext';
 import { TireStrategyProvider } from './src/strategy/useTireStrategy';
 import { useAutoSaveHistory } from './src/data/useAutoSaveHistory';
+import { migrateLegacyStorage } from './src/data/migrateStorage';
 import DiscoveryScreen   from './src/screens/DiscoveryScreen';
 import RacePickerScreen  from './src/screens/RacePickerScreen';
 import TandaPickerScreen from './src/screens/TandaPickerScreen';
@@ -56,6 +57,16 @@ function AppInner() {
 }
 
 export default function App() {
+  // Migración de claves AsyncStorage legadas (@slotime/, @voltrace/ →
+  // @pitwall/) antes de montar ninguna pantalla: Discovery/History/etc.
+  // leen su storage en el primer render y no deben ver la clave nueva
+  // vacía mientras la vieja todavía tiene los datos.
+  const [migrated, setMigrated] = useState(false);
+
+  useEffect(() => {
+    migrateLegacyStorage().finally(() => setMigrated(true));
+  }, []);
+
   useEffect(() => {
     // Sesión de audio que permite locución por TTS:
     //   • con la pantalla bloqueada (shouldPlayInBackground)
@@ -69,6 +80,8 @@ export default function App() {
       interruptionMode: 'mixWithOthers',
     }).catch((e) => console.warn('[Audio] setAudioModeAsync failed:', e));
   }, []);
+
+  if (!migrated) return null;
 
   return (
     <SafeAreaProvider>

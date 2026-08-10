@@ -102,7 +102,7 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
 
   const raceId = raceInfo?.raceId ?? null;
   const entity = state.selfName ?? null;
-  const available = raceInfo?.source === 'slottime' && raceId != null && !!entity;
+  const available = raceInfo?.source === 'pitwall' && raceId != null && !!entity;
   const key = available ? stintKey(raceId!, entity!) : null;
 
   const keyRef = useRef<string | null>(key);

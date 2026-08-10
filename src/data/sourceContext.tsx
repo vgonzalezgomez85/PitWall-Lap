@@ -1,4 +1,4 @@
-// Context global con la fuente de datos activa (SlotTime o Infolap).
+// Context global con la fuente de datos activa (PitWall o Infolap).
 //
 // El proveedor expone:
 //   • source            — DataSource activo (o null antes de descubrir / si falla)

@@ -1,5 +1,5 @@
 // Selector de piloto/equipo. Si la navegación trae `tandaNum`, filtra los
-// participantes a los que corren en esa tanda (solo aplica a SlotTime; en
+// participantes a los que corren en esa tanda (solo aplica a PitWall; en
 // InfoLap no se pasa tanda y se ven todos).
 
 import { useMemo } from 'react';
@@ -16,7 +16,7 @@ export default function SelectScreen({ route, navigation }: Props) {
   const { source, raceInfo } = useDataSource();
   const tandaNum = route.params?.tandaNum;
 
-  // Filtrar participantes por tanda si la ruta lo indica. Para SlotTime
+  // Filtrar participantes por tanda si la ruta lo indica. Para PitWall
   // tenemos `participantsPlan` con info de mangas → comprobamos si el
   // participante corre en esa tanda. Para InfoLap o si no hay tanda,
   // pasamos todos.

@@ -36,9 +36,9 @@ function fmtGapLaps(laps: number | null): string {
   return `${laps} ${laps === 1 ? 'vuelta' : 'vueltas'}`;
 }
 
-// Etiqueta visible de la fuente (el id interno sigue siendo 'slottime'/'infolap').
+// Etiqueta visible de la fuente (el id interno sigue siendo 'pitwall'/'infolap').
 function sourceLabel(source: string | undefined): string {
-  if (source === 'slottime') return 'PitWall';
+  if (source === 'pitwall') return 'PitWall';
   if (source === 'infolap') return 'TicTac';
   return '—';
 }
@@ -58,7 +58,7 @@ export default function MyTurnScreen(_props: Props) {
   const { settings, toggle, update } = useVoice();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  const isSlotTime = raceInfo?.source === 'slottime';
+  const isPitWall = raceInfo?.source === 'pitwall';
   const isTraining = raceInfo?.mode === 'training';
 
   // Grabación de stints (solo modo entrenamiento).
@@ -157,10 +157,10 @@ export default function MyTurnScreen(_props: Props) {
         )}
 
         {/* Config disponible mientras esperas (solo carreras PitWall). */}
-        {isSlotTime && !isTraining && (
+        {isPitWall && !isTraining && (
           <>
             <StrategyButton navigation={navigation} pendingCount={pendingCount} />
-            <VoiceControls settings={settings} toggle={toggle} update={update} isSlotTime={isSlotTime} />
+            <VoiceControls settings={settings} toggle={toggle} update={update} isPitWall={isPitWall} />
           </>
         )}
       </ScrollView>
@@ -200,7 +200,7 @@ export default function MyTurnScreen(_props: Props) {
         </View>
       </View>
 
-      {isSlotTime && (
+      {isPitWall && (
         <View style={styles.row}>
           <View style={styles.col}>
             <Text style={styles.label}>Salidas</Text>
@@ -232,14 +232,14 @@ export default function MyTurnScreen(_props: Props) {
         </View>
       )}
 
-      {isSlotTime && state.position != null && (
+      {isPitWall && state.position != null && (
         <View style={styles.block}>
           <Text style={styles.label}>Media para subir</Text>
           <Text style={styles.medTime}>{fmt(state.avgToCatchMs)}</Text>
         </View>
       )}
 
-      {isSlotTime && !isTraining && (
+      {isPitWall && !isTraining && (
         <StrategyButton navigation={navigation} pendingCount={pendingCount} />
       )}
 
@@ -278,7 +278,7 @@ export default function MyTurnScreen(_props: Props) {
       )}
 
       {/* ── Voice toggles ──────────────────────────────────────────────── */}
-      <VoiceControls settings={settings} toggle={toggle} update={update} isSlotTime={isSlotTime} />
+      <VoiceControls settings={settings} toggle={toggle} update={update} isPitWall={isPitWall} />
 
       {/* ── Modal: datos del stint al detener ──────────────────────────── */}
       <Modal
@@ -403,11 +403,11 @@ function StrategyButton({ navigation, pendingCount }: {
 }
 
 // Sección de ajustes de voz. Reutilizada en "mi turno" y en la vista de espera.
-function VoiceControls({ settings, toggle, update, isSlotTime }: {
+function VoiceControls({ settings, toggle, update, isPitWall }: {
   settings: VoiceSettings;
   toggle: (k: keyof VoiceSettings) => void;
   update: (p: Partial<VoiceSettings>) => void;
-  isSlotTime: boolean;
+  isPitWall: boolean;
 }) {
   return (
     <>
@@ -419,7 +419,7 @@ function VoiceControls({ settings, toggle, update, isSlotTime }: {
           onPress={() => toggle('enabled')}
         />
         <ToggleChip label="Vueltas"   active={settings.sayLaps} onPress={() => toggle('sayLaps')} />
-        {isSlotTime && (
+        {isPitWall && (
           <>
             <ToggleChip label="Posición"  active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
             <ToggleChip label="Media manga" active={settings.sayHalfManga}     onPress={() => toggle('sayHalfManga')} />

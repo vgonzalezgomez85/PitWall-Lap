@@ -1,4 +1,4 @@
-// Cliente Infolap (Tic Tac Slot) — fallback cuando no se encuentra SlotTime.
+// Cliente Infolap (Tic Tac Slot) — fallback cuando no se encuentra PitWall.
 //
 // Protocolo (ingeniería inversa, ver memoria project_infolap_protocol.md):
 //   • Descubrimiento: cliente broadcast UDP a 255.255.255.255:4441 cada 2 s

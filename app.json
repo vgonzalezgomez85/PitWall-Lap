@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "PitWall Lap",
-    "slug": "slot-timer-pro",
+    "slug": "pitwall-lap",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -23,10 +23,10 @@
           "audio"
         ]
       },
-      "bundleIdentifier": "com.anonymous.slot-timer-pro"
+      "bundleIdentifier": "com.anonymous.pitwall-lap"
     },
     "android": {
-      "package": "com.anonymous.slottimerpro",
+      "package": "com.anonymous.pitwalllap",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundImage": "./assets/adaptive-icon-bg.png",

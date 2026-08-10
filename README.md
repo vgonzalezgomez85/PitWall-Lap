@@ -54,7 +54,7 @@ App Store.
 src/
 ├── data/
 │   ├── types.ts                Contrato común DataSource + LiveState
-│   ├── SlotTimeSource.ts       Cliente PitWall Manager (socket.io + REST + voz)
+│   ├── PitWallSource.ts       Cliente PitWall Manager (socket.io + REST + voz)
 │   ├── InfolapSource.ts        Cliente InfoLap (UDP unicast/broadcast)
 │   ├── infolapDecode.ts        Decoder XOR del campo tiempo de InfoLap
 │   ├── discovery.ts            Orquestador mDNS / subnet scan / UDP

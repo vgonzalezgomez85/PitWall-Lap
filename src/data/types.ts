@@ -1,4 +1,4 @@
-// Contrato común entre las dos fuentes de datos de la app (SlotTime e
+// Contrato común entre las dos fuentes de datos de la app (PitWall e
 // Infolap). La UI consume DataSource sin saber qué fuente está detrás.
 //
 // Cada fuente publica:
@@ -11,18 +11,18 @@
 // La capacidad de cada fuente difiere; ver `SourceCapabilities` y la
 // matriz documentada en project_slottime_mobile.md.
 
-export type SourceKind = 'slottime' | 'infolap';
+export type SourceKind = 'pitwall' | 'infolap';
 
 export interface Participant {
-  /** SlotTime: team.id o driver.id; Infolap: el código `#001..#999`. */
+  /** PitWall: team.id o driver.id; Infolap: el código `#001..#999`. */
   id: string;
   name: string;
-  /** Color UI. SlotTime lo expone; Infolap no → undefined. */
+  /** Color UI. PitWall lo expone; Infolap no → undefined. */
   color?: string;
 }
 
 export interface ParticipantPlan extends Participant {
-  /** Plan completo de mangas (sólo SlotTime). */
+  /** Plan completo de mangas (sólo PitWall). */
   mangas: {
     tandaNum: number;
     mangaNum: number;
@@ -33,16 +33,16 @@ export interface ParticipantPlan extends Participant {
 
 export interface RaceInfo {
   source: SourceKind;
-  /** 'training' / 'pole' cuando la fuente SlotTime corre en esos modos. */
+  /** 'training' / 'pole' cuando la fuente PitWall corre en esos modos. */
   mode?: 'race' | 'training' | 'pole';
-  /** Id de la carrera en el servidor (SlotTime). Clave de persistencia. */
+  /** Id de la carrera en el servidor (PitWall). Clave de persistencia. */
   raceId?: number;
-  /** Nombre legible de la carrera (SlotTime) o "InfoLap" si no hay otro. */
+  /** Nombre legible de la carrera (PitWall) o "InfoLap" si no hay otro. */
   name: string;
   /** Formato. Infolap se mapea siempre a 'individual'. */
   format: 'team' | 'individual';
   participants: Participant[];
-  /** Sólo SlotTime: planning completo por participante. */
+  /** Sólo PitWall: planning completo por participante. */
   participantsPlan?: ParticipantPlan[];
   capabilities: SourceCapabilities;
 }
@@ -120,13 +120,13 @@ export interface LiveState {
   lapCount: number;
   lastLapMs: number | null;
   bestLapMs: number | null;
-  avgLapMs: number | null;        // sólo SlotTime — media del carril
-  exitCount: number;              // sólo SlotTime — salidas del carril
-  pitStopCount: number;           // sólo SlotTime — pit stops del carril
-  position: number | null;        // sólo SlotTime
+  avgLapMs: number | null;        // sólo PitWall — media del carril
+  exitCount: number;              // sólo PitWall — salidas del carril
+  pitStopCount: number;           // sólo PitWall — pit stops del carril
+  position: number | null;        // sólo PitWall
   totalParticipants: number | null;
-  remainingMs: number | null;     // sólo SlotTime
-  gapAheadMs: number | null;      // sólo SlotTime (calculado en cliente)
+  remainingMs: number | null;     // sólo PitWall
+  gapAheadMs: number | null;      // sólo PitWall (calculado en cliente)
   gapBehindMs: number | null;
   gapAheadLaps: number | null;    // diferencia de vueltas con el de delante
   gapBehindLaps: number | null;   // diferencia de vueltas con el de detrás
@@ -141,7 +141,7 @@ export interface LiveState {
   /** Proyección general completa (todas las entidades). La usa la estrategia
    *  de neumáticos para comparar con el rival de delante/detrás. */
   projection: ProjectionRow[] | null;
-  /** Control de neumáticos de la carrera (sólo SlotTime con control activo).
+  /** Control de neumáticos de la carrera (sólo PitWall con control activo).
    *  Lo usa la estrategia de goma para poblar dotación y cambios desde el
    *  servidor en vez de la configuración manual. null = sin control / sin datos. */
   tireControl: TireControlState | null;
@@ -152,7 +152,7 @@ export interface LiveState {
    *  distinto de "descansa esta manga" (aún le quedan). */
   isFinal?: boolean;
 
-  // ── Sesión de pole (sólo SlotTime, modo 'pole') ───────────────────────
+  // ── Sesión de pole (sólo PitWall, modo 'pole') ───────────────────────
   pole?: PoleSnapshot | null;
 
   // ── Rival seguido (sólo InfoLap) ──────────────────────────────────────
@@ -179,21 +179,21 @@ export type SourceEvent =
   | { type: 'last-30s' }
   | { type: 'race-finished' }
   | { type: 'manga-changed';     newMangaNum: number; newLane: number | null }
-  // Sólo SlotTime: vuelta cuyo tiempo era < Pt (mínimo). El servidor
+  // Sólo PitWall: vuelta cuyo tiempo era < Pt (mínimo). El servidor
   // intenta reasignar automáticamente al carril "overdue" más probable.
   | { type: 'lap-ghost';         lane: number; lapTimeMs: number }
-  // Sólo SlotTime: vuelta fantasma se ha transferido a otro carril.
+  // Sólo PitWall: vuelta fantasma se ha transferido a otro carril.
   // Si `toLane === myLane` mi propio contador acaba de incrementarse.
   | { type: 'lap-reassigned';    fromLane: number; toLane: number; lapTimeMs: number; toName?: string | null }
   | { type: 'connection-lost' }
   | { type: 'connection-restored' };
 
 /**
- * Dossier completo de estadísticas que el servidor SlotTime empuja al cliente
+ * Dossier completo de estadísticas que el servidor PitWall empuja al cliente
  * cuando una carrera entera termina (todas las mangas completadas). La app
  * persiste esto en AsyncStorage para que el histórico funcione offline.
  *
- * Sólo SlotTime emite snapshots. Infolap nunca llamará al callback.
+ * Sólo PitWall emite snapshots. Infolap nunca llamará al callback.
  */
 export interface RaceStatsSnapshot {
   raceId: number | string;
@@ -260,14 +260,14 @@ export interface DataSource {
   onEvent(cb: (event: SourceEvent) => void): () => void;
 
   /**
-   * Recibe el dossier final cuando termina la carrera. Sólo SlotTime emite
+   * Recibe el dossier final cuando termina la carrera. Sólo PitWall emite
    * snapshots; Infolap nunca llama al callback. La UI guarda el snapshot en
    * el histórico local.
    */
   onRaceStatsSnapshot(cb: (snapshot: RaceStatsSnapshot) => void): () => void;
 }
 
-/** Snapshot del estado de una sesión de Pole Position (sólo SlotTime). */
+/** Snapshot del estado de una sesión de Pole Position (sólo PitWall). */
 export interface PoleSnapshot {
   active: boolean;
   status: 'setup' | 'in_progress' | 'done' | null;

@@ -5,7 +5,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
 
-const STORAGE_KEY = '@slotime/voice-settings/v1';
+const STORAGE_KEY = '@pitwall/voice-settings/v1';
 
 export interface VoiceSettings {
   /** Master mute. Si es false, no se dice nada. */

@@ -2,7 +2,7 @@
 // (incluyendo plan completo de mangas por participante) y deriva las tandas
 // únicas. Si solo hay una, salta automáticamente a Select.
 //
-// Es también donde finalmente se crea el `SlotTimeSource` y se guarda en
+// Es también donde finalmente se crea el `PitWallSource` y se guarda en
 // el context — la fuente necesita la carrera concreta para arrancar el
 // socket.io y filtrar el state al participante elegido.
 
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { SlotTimeSource } from '../data/SlotTimeSource';
+import { PitWallSource } from '../data/PitWallSource';
 import { useDataSource } from '../data/sourceContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
@@ -65,7 +65,7 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
   async function connectAndGo(tandaNum: number) {
     setConnecting(true);
     try {
-      const src = new SlotTimeSource({ host, port }, raceId);
+      const src = new PitWallSource({ host, port }, raceId);
       const raceInfo = await src.connect();
       setSource(src, raceInfo);
       // Si entramos en TandaPicker con 1 sola tanda, esta pantalla se

@@ -1,6 +1,6 @@
 // Pantalla inicial: el usuario elige primero qué fuente quiere usar
-// (SlotTime o TicTac/InfoLap). Tras elegir:
-//   1. Auto-discovery para esa fuente (mDNS para SlotTime, UDP broadcast
+// (PitWall o TicTac/InfoLap). Tras elegir:
+//   1. Auto-discovery para esa fuente (mDNS para PitWall, UDP broadcast
 //      para InfoLap). ~6 s.
 //   2. Si no encuentra → pantalla con input de IP + botón "Conectar".
 //      Sigue limitado a la fuente elegida; no salta de una a otra.
@@ -23,7 +23,7 @@ import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Discovery'>;
 
-const LAST_HOST_KEY = (kind: SourceKind) => `@slotime/last-host/${kind}`;
+const LAST_HOST_KEY = (kind: SourceKind) => `@pitwall/last-host/${kind}`;
 
 type Mode =
   | { phase: 'choose' }
@@ -107,12 +107,12 @@ export default function DiscoveryScreen({ navigation }: Props) {
   }, [mode.phase === 'connecting' ? `${mode.kind}|${mode.host}` : null]);
 
   // Decide la siguiente pantalla según la fuente:
-  //   • SlotTime → RacePicker (puede haber varias carreras activas).
+  //   • PitWall → RacePicker (puede haber varias carreras activas).
   //   • InfoLap  → Select directamente (no hay multi-carrera).
   function routeToNext(result: import('../data/discovery').DiscoveryResult) {
     // push (no replace) → mantenemos Discovery en el stack para que la
     // siguiente pantalla pueda volver atrás.
-    if (result.kind === 'slottime') {
+    if (result.kind === 'pitwall') {
       navigation.push('RacePicker', { host: result.server.host, port: result.server.port });
     } else {
       setSource(result.source, result.raceInfo);
@@ -132,8 +132,8 @@ export default function DiscoveryScreen({ navigation }: Props) {
         />
         <Text style={styles.subtitle}>Elige a qué cronometrador conectar</Text>
         <TouchableOpacity
-          style={[styles.bigBtn, styles.btnSlotTime]}
-          onPress={() => setMode({ phase: 'searching', kind: 'slottime' })}
+          style={[styles.bigBtn, styles.btnPitWall]}
+          onPress={() => setMode({ phase: 'searching', kind: 'pitwall' })}
         >
           <Text style={[styles.bigBtnTitle, { color: '#0a0d13' }]}>PitWall</Text>
           <Text style={[styles.bigBtnSub, { color: '#0a0d13' }]}>Cronómetro DS-300 con PitWall Manager</Text>
@@ -162,7 +162,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
   }
 
   if (mode.phase === 'searching') {
-    const label = mode.kind === 'slottime' ? 'PitWall' : 'TicTac';
+    const label = mode.kind === 'pitwall' ? 'PitWall' : 'TicTac';
     return (
       <View style={styles.root}>
         <Text style={styles.title}>{label}</Text>
@@ -183,7 +183,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
   }
 
   if (mode.phase === 'connecting') {
-    const label = mode.kind === 'slottime' ? 'PitWall' : 'TicTac';
+    const label = mode.kind === 'pitwall' ? 'PitWall' : 'TicTac';
     return (
       <View style={styles.root}>
         <Text style={styles.title}>{label}</Text>
@@ -194,7 +194,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
   }
 
   // mode.phase === 'manual'
-  const label = mode.kind === 'slottime' ? 'PitWall' : 'TicTac';
+  const label = mode.kind === 'pitwall' ? 'PitWall' : 'TicTac';
   const submit = () => {
     if (!manualHost.trim()) return;
     Keyboard.dismiss();
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     width: '100%', paddingVertical: 28, paddingHorizontal: 20,
     borderRadius: 12, marginTop: 16, alignItems: 'center',
   },
-  btnSlotTime: { backgroundColor: '#f6c90e' },
+  btnPitWall: { backgroundColor: '#f6c90e' },
   btnInfolap:  { backgroundColor: '#2c5cdd' },
   bigBtnTitle: { fontSize: 26, fontWeight: '800' },
   bigBtnSub:   { fontSize: 13, marginTop: 6, opacity: 0.85 },

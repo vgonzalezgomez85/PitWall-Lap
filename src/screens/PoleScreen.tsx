@@ -1,4 +1,4 @@
-// Pantalla de sesión de Pole Position (sólo SlotTime).
+// Pantalla de sesión de Pole Position (sólo PitWall).
 //
 // Tres fases en una:
 //   • PICKER: elige tu entrada de la lista (orden de salida).
@@ -6,7 +6,7 @@
 //             a ti, tus tiempos en grande.
 //   • DONE:   sesión terminada, muestra la clasificación final.
 //
-// La fuente (SlotTimeSource modo 'pole') hace polling de /pole cada 1s y
+// La fuente (PitWallSource modo 'pole') hace polling de /pole cada 1s y
 // emite estado + evento lap-completed cuando completas una vuelta.
 
 import { useEffect, useRef, useState } from 'react';
@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { SlotTimeSource } from '../data/SlotTimeSource';
+import { PitWallSource } from '../data/PitWallSource';
 import { useDataSource } from '../data/sourceContext';
 import { useVoice } from '../voice/useVoice';
 import BackButton from '../ui/BackButton';
@@ -60,7 +60,7 @@ export default function PoleScreen({ route, navigation }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        const src = new SlotTimeSource({ host, port }, { mode: 'pole', raceId });
+        const src = new PitWallSource({ host, port }, { mode: 'pole', raceId });
         const info = await src.connect();
         if (cancelled) { src.disconnect(); return; }
         setSource(src, info);

@@ -1,6 +1,6 @@
-// Selector de carril cuando el servidor SlotTime está en modo
+// Selector de carril cuando el servidor PitWall está en modo
 // entrenamiento. Cada carril es un "participante" — al elegirlo, se
-// crea el SlotTimeSource en modo 'training' y vamos a MyTurn.
+// crea el PitWallSource en modo 'training' y vamos a MyTurn.
 
 import { useEffect, useState } from 'react';
 import {
@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { SlotTimeSource } from '../data/SlotTimeSource';
+import { PitWallSource } from '../data/PitWallSource';
 import { useDataSource } from '../data/sourceContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
@@ -56,7 +56,7 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
   async function pickLane(lane: number) {
     setConnecting(true);
     try {
-      const src = new SlotTimeSource({ host, port }, { mode: 'training' });
+      const src = new PitWallSource({ host, port }, { mode: 'training' });
       const raceInfo = await src.connect();
       setSource(src, raceInfo);
       src.selectParticipant(String(lane));
