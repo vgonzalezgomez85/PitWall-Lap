@@ -1,0 +1,29 @@
+Esto es la Fase 3 de la estrategia de neumáticos de PitWall Lap. Las Fases 1 (recomendación de cambio óptimo del piloto seguido + decisión por posición) y 2 (modelado de la goma de los rivales de delante/detrás, auto-detección + confirmación) ya están hechas.
+
+Objetivo de la Fase 3: dar RIGOR al modelo de degradación. Tras validar `computeTireStrategy.ts` contra datos reales (24h Modena, equipo SLOTMANIA PALMARES P1) han salido 3 debilidades. El servidor NO se toca: todo se resuelve con lo que la app ya recibe por socket (evento `lap` = {lane, lapNumber, lapTimeMs, name, color} de TODAS las entidades).
+
+Antes de codificar, confírmame el enfoque.
+
+── Mejora 1 (LA PRINCIPAL): normalizar la degradación por CARRIL ──
+Problema: `fitDegradation` ajusta la pendiente d sobre tiempos de vuelta BRUTOS, y `useStintRecorder` solo guarda `laps: number[]` (sin carril). En resistencia con rotación, un stint de neumático cruza VARIAS mangas (7 cambios en 22 mangas → una goma dura ~2,5–3,5 h ≈ 2,75 mangas), y cada manga es un CARRIL distinto que rueda a distinto ritmo. Resultado: la pendiente d mezcla el efecto-carril con el desgaste real → puede INVENTAR degradación (carril rápido→lento) o ESCONDERLA. En el análisis hubo que normalizar cada vuelta como delta vs la mediana de ESE carril para aislar goma de carril.
+
+Fix:
+- El recorder debe capturar, por vuelta del stint, además del tiempo: el CARRIL (lane) y una referencia de ritmo de ese carril = la mediana del lapTime de ese carril en esa manga (la app ya observa las vueltas de todas las entidades por el evento `lap`, así que puede mantener una mediana por carril en vivo).
+- `fitDegradation` debe ajustar la recta (T ≈ T0 + d·k) sobre el DELTA normalizado (lapTime − mediana_de_ese_carril_en_esa_manga), NO sobre el tiempo bruto. Así d = desgaste puro, comparable entre carriles.
+- Mantener el rechazo de outliers (pit/incidentes) y el salto de la out-lap.
+
+── Mejora 2: el plan PAUTADO no debe sobre-recomendar cambios cuando no hay desgaste ──
+Problema: cuando d ≤ 0 (lo normal en slot, ya validado), el fallback reparte TODOS los juegos disponibles sobre las vueltas restantes → recomienda "cambia" aunque el cambio cueste 25–48 s sin beneficio de ritmo (en Modena 6/7 cambios dejaron al coche MÁS LENTO con goma nueva). Si el reglamento no obliga a un mínimo de cambios, eso es tiempo regalado.
+
+Fix:
+- Añadir a la config un input "cambios mínimos obligatorios" (por reglamento; por defecto 0).
+- Si NO hay degradación medible: recomendar cumplir solo el mínimo obligatorio, lo más TARDE posible (no repartir todos los juegos). Si el mínimo es 0 → aguantar hasta el final.
+- Si SÍ hay degradación (d > 0): mantener el óptimo actual √(2·P/d). Sin cambios ahí.
+
+── Mejora 3: tests unitarios ──
+`computeTireStrategy.ts` se declara "puro y testeable" pero no tiene tests. Añadir tests unitarios (Jest/vitest, lo que use el proyecto) que cubran: sin degradación → scheduled/hold-to-end (con y sin mínimo obligatorio); con degradación → change-in por √(2P/d); normalización por carril (misma goma en carriles distintos NO debe dar degradación falsa); capa de posición change/hold/neutral; niveles de confianza (MIN_CONFIDENCE_LAPS).
+
+Caveats:
+- No tocar el servidor; usar solo lo que llega por socket.
+- Mantener compatibilidad con las Fases 1 y 2 (la normalización por carril también beneficia al modelado de rivales de la Fase 2: aplícala igual a d_rival si es fácil).
+- Si no hay datos de carril suficientes (p.ej. inicio de stint), degradar con elegancia a la lógica actual (bruto) con confianza baja.
