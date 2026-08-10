@@ -45,8 +45,7 @@
     },
     "plugins": [
       "expo-audio",
-      "./plugins/withScriptSandboxDisabled.js",
-      "expo-secure-store"
+      "./plugins/withScriptSandboxDisabled.js"
     ]
   }
 }
