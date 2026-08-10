@@ -17,7 +17,7 @@
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "PitWall se conecta al cronómetro de tu pista (DS-300 o InfoLap) en la WiFi local para mostrar los tiempos en vivo.",
         "NSBonjourServices": [
-          "_voltrace-manager._tcp"
+          "_pitwall-manager._tcp"
         ],
         "UIBackgroundModes": [
           "audio"

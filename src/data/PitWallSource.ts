@@ -1,7 +1,7 @@
 // Cliente PitWall (fuente preferida).
 //
 // Protocolo:
-//   • Descubrimiento: mDNS `_voltrace-manager._tcp` (lo hace `discover()`).
+//   • Descubrimiento: mDNS `_pitwall-manager._tcp` (lo hace `discover()`).
 //   • Bootstrap REST:
 //       GET /api/mobile/races/current   → carrera activa + participantes
 //   • Streaming socket.io:

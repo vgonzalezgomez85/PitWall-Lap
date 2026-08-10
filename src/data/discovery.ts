@@ -3,7 +3,7 @@
 // permite introducir la IP manualmente y reintentar.
 //
 // PitWall:
-//   • Auto: mDNS `_voltrace-manager._tcp`.
+//   • Auto: mDNS `_pitwall-manager._tcp`.
 //   • Manual: HTTP a `<host>:3000/api/mobile/races/current`.
 //
 // InfoLap (Tic Tac Slot):
@@ -22,7 +22,7 @@ import { PitWallSource, type PitWallServerLocation } from './PitWallSource';
 
 // iOS NSNetService.resolveWithTimeout en react-native-zeroconf es 5s.
 const MDNS_TIMEOUT_MS = 6000;
-const MDNS_SERVICE_TYPE = 'voltrace-manager';
+const MDNS_SERVICE_TYPE = 'pitwall-manager';
 // En Android el descubrimiento por defecto (NsdManager) es poco fiable; la
 // implementación DNSSD embebida (mdnsresponder de Apple) sí funciona bien.
 // En iOS hay una sola implementación nativa, así que dejamos el default.

@@ -93,10 +93,9 @@ firma (7 días con Apple ID gratuito, 1 año con Apple Developer Program).
 
 ## Servidor
 
-Requiere el servidor PitWall Manager (proyecto separado, `~/SloTime`)
+Requiere el servidor PitWall Manager (proyecto separado, `~/PitWall`)
 corriendo en la misma WiFi. La app lo descubre automáticamente vía mDNS
-(`_voltrace-manager._tcp`, nombre de servicio legado que se mantiene por
-compatibilidad) o por IP manual.
+(`_pitwall-manager._tcp`) o por IP manual.
 
 Para modo InfoLap necesita el Gestor de Carreras de Tic Tac Slot en un
 PC de la red.
