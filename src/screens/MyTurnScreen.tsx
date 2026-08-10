@@ -38,7 +38,7 @@ function fmtGapLaps(laps: number | null): string {
 
 // Etiqueta visible de la fuente (el id interno sigue siendo 'slottime'/'infolap').
 function sourceLabel(source: string | undefined): string {
-  if (source === 'slottime') return 'PitWall Lap';
+  if (source === 'slottime') return 'PitWall';
   if (source === 'infolap') return 'TicTac';
   return '—';
 }
@@ -171,7 +171,7 @@ export default function MyTurnScreen(_props: Props) {
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
       <BackButton />
-      <Text style={styles.kind}>{raceInfo?.source ?? '—'}</Text>
+      <Text style={styles.kind}>{sourceLabel(raceInfo?.source)}</Text>
       {state.selfName && <Text style={styles.selfName}>{state.selfName}</Text>}
       <View style={styles.headerRow}>
         <Text style={styles.lane}>Carril {state.myLane ?? '—'}</Text>
