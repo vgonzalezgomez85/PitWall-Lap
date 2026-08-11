@@ -47,13 +47,26 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         const t = speakTime(e.lapTimeMs);
         const ms = e.lapTimeMs;
         const prevBest = bestLapRef.current;
-        const isFastest =
-          ms != null && e.lapCount > 1 && (prevBest == null || ms < prevBest);
+        // Si la fuente ya manda `isFastest` (p.ej. Pole, calculado en el
+        // servidor a partir de su propio bestLapMs) nos fiamos de eso en vez
+        // de recalcularlo con la referencia local — la local puede quedarse
+        // obsoleta si el cliente no detecta un "cambio de turno" (reintento
+        // del mismo piloto) que el servidor sí resetea.
+        const isFastest = e.isFastest ??
+          (ms != null && e.lapCount > 1 && (prevBest == null || ms < prevBest));
         if (ms != null && (prevBest == null || ms < prevBest)) {
           bestLapRef.current = ms;
         }
-        console.log('[Voice] speak lap:', e.lapCount, t, isFastest ? '(rápida)' : '');
-        speak(isFastest ? `Vuelta rápida, ${t}` : t);
+        // En Pole: si además de tu mejor marca personal es mejor que la de
+        // todos los pilotos ya terminados (standings, que solo incluye a
+        // quien ya completó su turno), vas primero de la clasificación.
+        const pole = stateRef.current.pole;
+        const poleLeaderMs = pole?.standings[0]?.lapTimeMs ?? null;
+        const isPoleLeader =
+          pole != null && isFastest && ms != null &&
+          (poleLeaderMs == null || ms < poleLeaderMs);
+        console.log('[Voice] speak lap:', e.lapCount, t, isFastest ? '(rápida)' : '', isPoleLeader ? '(líder pole)' : '');
+        speak(isPoleLeader ? `Vuelta rápida, primero, ${t}` : isFastest ? `Vuelta rápida, ${t}` : t);
         break;
       }
       case 'position-changed': {

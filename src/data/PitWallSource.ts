@@ -423,7 +423,17 @@ export class PitWallSource implements DataSource {
       const snap = this.currentState.pole;
       const selectedEntryId = this.selectedId != null ? parseInt(this.selectedId, 10) : null;
       if (snap?.currentEntry?.entryId !== selectedEntryId) return; // no es mi vuelta
-      this.emitEvent({ type: 'lap-completed', lapTimeMs: p.lapTimeMs, lapCount: p.lapNumber });
+      // `improved` viene del servidor, que resetea bestLapMs en cada
+      // start() del intento — así no depende de que el cliente detecte
+      // correctamente un "cambio de turno" (p.ej. si se reintenta la pole
+      // del mismo piloto tras un aborto, sigue siendo el mismo currentEntry
+      // y el cliente nunca vería el "cambio").
+      this.emitEvent({
+        type: 'lap-completed',
+        lapTimeMs: p.lapTimeMs,
+        lapCount: p.lapNumber,
+        isFastest: p.lapNumber > 1 && p.improved,
+      });
     });
 
     // Estos eventos solo son señales para refrescar antes — el polling ya

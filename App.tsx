@@ -9,6 +9,7 @@ import { SourceProvider } from './src/data/sourceContext';
 import { TireStrategyProvider } from './src/strategy/useTireStrategy';
 import { useAutoSaveHistory } from './src/data/useAutoSaveHistory';
 import { migrateLegacyStorage } from './src/data/migrateStorage';
+import { prewarmLocalNetworkPermission } from './src/data/discovery';
 import DiscoveryScreen   from './src/screens/DiscoveryScreen';
 import RacePickerScreen  from './src/screens/RacePickerScreen';
 import TandaPickerScreen from './src/screens/TandaPickerScreen';
@@ -65,6 +66,10 @@ export default function App() {
 
   useEffect(() => {
     migrateLegacyStorage().finally(() => setMigrated(true));
+  }, []);
+
+  useEffect(() => {
+    prewarmLocalNetworkPermission();
   }, []);
 
   useEffect(() => {

@@ -168,7 +168,7 @@ export interface LiveState {
 
 /** Eventos discretos. La capa de voz los traduce a locuciones. */
 export type SourceEvent =
-  | { type: 'lap-completed';     lapTimeMs: number | null; lapCount: number; isExit?: boolean; isFirstCrossing?: boolean }
+  | { type: 'lap-completed';     lapTimeMs: number | null; lapCount: number; isExit?: boolean; isFirstCrossing?: boolean; isFastest?: boolean }
   // Vuelta de CUALQUIER entidad (no solo el seguido). La usa la estrategia de
   // neumáticos para modelar la goma de los rivales (Fase 2).
   | { type: 'entity-lap';        lane: number; name: string; lapTimeMs: number | null; lapNumber: number; isExit?: boolean; isFirstCrossing?: boolean }

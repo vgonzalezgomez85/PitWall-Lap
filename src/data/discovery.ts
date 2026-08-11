@@ -94,6 +94,31 @@ function probePitWall(): Promise<PitWallServerLocation | null> {
   });
 }
 
+/**
+ * Dispara un scan mDNS mudo al arrancar la app, sin esperar resultado.
+ *
+ * iOS no pide el permiso "Red local" de forma proactiva: lo muestra la
+ * primera vez que la app hace un scan mDNS o un fetch a una IP de la LAN.
+ * Sin este precalentado, ese primer intento ocurría dentro de `discover()`
+ * (timeout de 6s / 900ms por IP) justo cuando el usuario ya había elegido
+ * fuente — el tiempo que tarda en aparecer el diálogo + que el usuario lo
+ * lea y pulse "Permitir" se comía el timeout, y la primera búsqueda de la
+ * app siempre fallaba (aunque el usuario concediera el permiso). Llamando
+ * a esto en cuanto arranca la app, el diálogo se resuelve mientras el
+ * usuario todavía está en la pantalla de elección de fuente.
+ */
+export function prewarmLocalNetworkPermission(): void {
+  try {
+    const zc = new Zeroconf();
+    (zc as unknown as { scan: (t: string, p: string, d: string, i?: string) => void })
+      .scan(MDNS_SERVICE_TYPE, 'tcp', 'local.', MDNS_IMPL);
+    setTimeout(() => {
+      try { (zc as unknown as { stop: (i?: string) => void }).stop(MDNS_IMPL); } catch { /* ignore */ }
+      try { zc.removeDeviceListeners(); } catch { /* ignore */ }
+    }, 3000);
+  } catch { /* ignore */ }
+}
+
 // ── Fallback: subnet scan ────────────────────────────────────────────────
 // iOS Bonjour falla resolviendo hostnames Windows (`DESKTOP-XXX.local`)
 // — el browse encuentra el servicio pero `resolveWithTimeout` muere con
