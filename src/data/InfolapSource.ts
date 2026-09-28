@@ -8,8 +8,17 @@
 //     UDP, uno por carril, ciclando ~830 ms entre paquetes. Cliente NO envía
 //     nada más después del primer probe.
 //
-// Capacidades: sólo tiempo por vuelta. Sin posición/gap/avisos de fin/
-// histórico (la matriz completa está en types.ts).
+// TicTac nuevo (2026): el descubrimiento es idéntico, pero el estado ya no
+// llega por UDP sino por un WebSocket TLS en wss://<pc>:12543/ con mensajes
+// JSON (ver infolapWss.ts). Tras el "OK" intentamos abrir ese WSS: si
+// conecta usamos el protocolo nuevo; si no, seguimos con el UDP de siempre.
+//
+// Capacidades: protocolo antiguo, sólo tiempo por vuelta. Protocolo nuevo,
+// casi lo mismo que PitWall: posición y gaps (el TicTac), más lo que aquí se
+// calcula en cliente — media de carril, gaps en vueltas, tiempo restante y
+// avisos de fin (con la duración de manga que configura el usuario),
+// proyección, media para subir y dossier para el histórico (infolapRace.ts).
+// No hay salidas, pit stops, plan de mangas ni pole: el TicTac no los manda.
 
 import dgram from 'react-native-udp';
 import { Buffer } from 'buffer';
@@ -21,12 +30,24 @@ import type {
   DataSource,
   LiveState,
   Participant,
+  ProjectionRow,
   RaceInfo,
   RaceStatsSnapshot,
   SourceEvent,
 } from './types';
-import { INFOLAP_CAPABILITIES, emptyLiveState } from './types';
+import { INFOLAP_CAPABILITIES, INFOLAP_WSS_CAPABILITIES, emptyLiveState } from './types';
 import { decodeLapField } from './infolapDecode';
+import {
+  INFOLAP_WSS_PORT, parseWsMessage, standingForLane, standingOf,
+  type InfolapConfigMessage, type InfolapLapMessage, type InfolapRival,
+  type InfolapRivalsMessage, type InfolapStanding,
+} from './infolapWss';
+import {
+  buildProjection, buildSnapshot, catchUpPaceMs, gapMsToLaps, normName, statsAvgMs,
+  type PilotStats,
+} from './infolapRace';
+import { loadMangaDurationMin } from './infolapSettings';
+import { openInfolapWs, type InfolapWsConnection } from '../../modules/infolapws';
 
 const SERVER_PORT = 4441;
 const CLIENT_PORT = 12543;
@@ -59,6 +80,16 @@ const PROBE_ESCALATE_MS = 2500;
 // servidor ya nos empuja paquetes de estado, resolvemos con los nombres que
 // vengan en el estado tras recolectar este plazo.
 const STATE_RESOLVE_MS = 1200;
+// TicTac nuevo: plazo para que abra el WSS tras el "OK". Un TicTac antiguo no
+// escucha en TCP 12543 y rechaza al instante; el plazo cubre un firewall que
+// descarte la conexión en silencio.
+const WSS_OPEN_TIMEOUT_MS = 2500;
+const WSS_RECONNECT_MS = 2000;
+// "Test de transmisión" del TicTac envía 100 vueltas falsas de 0,001–0,1 s
+// al carril 1. Ninguna vuelta real de slot baja de esto.
+const MIN_WSS_LAP_MS = 500;
+const LAST_MINUTE_MS = 60_000;
+const LAST_30S_MS = 30_000;
 
 // ── Parsers puros (testables sin red) ─────────────────────────────────────
 
@@ -161,6 +192,30 @@ export class InfolapSource implements DataSource {
   private sweepEnabled = false;
   /** IP desde la que respondió el servidor en esta sesión (para recordarla). */
   private serverHost: string | null = null;
+  /** WSS del TicTac nuevo (null = protocolo UDP antiguo o reconectando). */
+  private wsConn: InfolapWsConnection | null = null;
+  /** true si el servidor habla el protocolo nuevo (WSS + JSON). */
+  private wssMode = false;
+  private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** false tras disconnect(): no reconectar ni procesar nada más. */
+  private active = false;
+  /** Ya llegó algún CONFIG (inicio de manga) en esta sesión. */
+  private configSeen = false;
+  /** Duración de manga configurada en la app (el TicTac no la manda). */
+  private mangaDurationMs: number | null = null;
+  /** Date.now() del CONFIG de la manga en curso (null = no la vimos empezar). */
+  private mangaStartAt: number | null = null;
+  private mangaTimer: ReturnType<typeof setInterval> | null = null;
+  private firedHalf = false;
+  private firedLastMinute = false;
+  private firedLast30s = false;
+  private firedEnd = false;
+  /** Acumulado de toda la carrera por piloto (nombre normalizado). */
+  private pilotStats = new Map<string, PilotStats>();
+  /** Última clasificación oficial recibida (RIVALS_UPDATE). */
+  private lastRivals: InfolapRival[] = [];
+  private snapshotListeners: ((s: RaceStatsSnapshot) => void)[] = [];
+  private sessionStartedAt = new Date();
   private stateListeners: ((s: LiveState) => void)[] = [];
   private eventListeners: ((e: SourceEvent) => void)[] = [];
   private currentState: LiveState = emptyLiveState();
@@ -203,6 +258,17 @@ export class InfolapSource implements DataSource {
     console.log('[Infolap] connect() start');
     this.discovered = false;
     this.sweeping = false;
+    this.active = true;
+    this.wssMode = false;
+    this.configSeen = false;
+    this.mangaStartAt = null;
+    this.pilotStats.clear();
+    this.lastRivals = [];
+    this.sessionStartedAt = new Date();
+    try {
+      const min = await loadMangaDurationMin();
+      this.mangaDurationMs = min > 0 ? min * 60_000 : null;
+    } catch { /* sin duración */ }
 
     // Detectar la IP local del dispositivo para el probe único inicial.
     // Si no responde, el escalado de abajo pasa al barrido completo.
@@ -299,7 +365,11 @@ export class InfolapSource implements DataSource {
           void AsyncStorage.setItem(LAST_HOST_KEY, this.serverHost).catch(() => {});
         }
         this.participants = participants;
-        resolve(this.buildRaceInfo());
+        // TicTac nuevo: el estado va por WSS. Esperamos a saber si abre para
+        // publicar las capacidades correctas (posición/gaps).
+        const host = this.serverHost;
+        if (host) this.openWss(host, () => resolve(this.buildRaceInfo()));
+        else resolve(this.buildRaceInfo());
       };
 
       sock.on('message', (msg, rinfo) => {
@@ -316,7 +386,9 @@ export class InfolapSource implements DataSource {
           if (participants.length > 0) settle(participants);
           return;
         }
-        if (buf.length === 52) {
+        // Con el protocolo nuevo el estado llega por WSS; ignoramos UDP para no
+        // contar dos veces si un servidor mandase ambos.
+        if (buf.length === 52 && !this.wssMode) {
           const pkt = parseStatePacket(buf);
           if (pkt) this.ingestPacket(pkt);
           // Fallback (iOS): si el "OK" se pierde pero el servidor ya nos
@@ -346,7 +418,22 @@ export class InfolapSource implements DataSource {
   }
 
   disconnect(): void {
+    // Guardar lo corrido antes de soltar los listeners (histórico).
+    if (this.active) this.emitSnapshot();
+    this.active = false;
     this.sweeping = false;
+    if (this.mangaTimer) {
+      clearInterval(this.mangaTimer);
+      this.mangaTimer = null;
+    }
+    if (this.wsReconnectTimer) {
+      clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
+    if (this.wsConn) {
+      this.wsConn.close();
+      this.wsConn = null;
+    }
     if (this.probeTimer) {
       clearInterval(this.probeTimer);
       this.probeTimer = null;
@@ -357,6 +444,10 @@ export class InfolapSource implements DataSource {
     }
     this.stateListeners = [];
     this.eventListeners = [];
+    this.snapshotListeners = [];
+    this.pilotStats.clear();
+    this.lastRivals = [];
+    this.mangaStartAt = null;
     this.laneLastMs.clear();
     this.laneLastSeq.clear();
     this.laneLapCount.clear();
@@ -383,14 +474,19 @@ export class InfolapSource implements DataSource {
     const lane = this.selectedLane;
     this.currentState = {
       ...emptyLiveState(),
-      status: 'my-turn',
+      // Con la manga ya empezada (CONFIG visto) sin mi piloto → descansa.
+      status: this.configSeen && lane == null ? 'resting' : 'my-turn',
       myLane: lane,
       selfName: this.selectedName,
       lapCount: lane != null ? this.laneLapCount.get(lane) ?? 0 : 0,
       lastLapMs: lane != null ? this.laneLastMs.get(lane) ?? null : null,
       bestLapMs: null,
+      avgLapMs: lane != null ? this.laneAvgMs(lane) : null,
+      currentMangaNum: this.configSeen ? this.mangaCount : null,
+      remainingMs: this.remainingMsNow(),
       totalParticipants: this.participants.length,
     };
+    this.refreshDerived();
     this.emitState();
   }
 
@@ -557,9 +653,20 @@ export class InfolapSource implements DataSource {
     };
   }
 
-  onRaceStatsSnapshot(_cb: (snapshot: RaceStatsSnapshot) => void): () => void {
-    // Infolap no emite snapshot al final de carrera. Callback nunca se llama.
-    return () => {};
+  onRaceStatsSnapshot(cb: (snapshot: RaceStatsSnapshot) => void): () => void {
+    // Sólo el protocolo nuevo: el dossier se construye en cliente y se emite
+    // al acabar cada manga y al desconectar (mismo raceId → se actualiza).
+    this.snapshotListeners.push(cb);
+    return () => {
+      this.snapshotListeners = this.snapshotListeners.filter(l => l !== cb);
+    };
+  }
+
+  setMangaDurationMs(ms: number | null): void {
+    this.mangaDurationMs = ms != null && ms > 0 ? ms : null;
+    // Sin avisos de golpe por umbrales que ya han pasado.
+    this.armMangaFlags();
+    this.tickManga(true);
   }
 
   // ── Internals ───────────────────────────────────────────────────────────
@@ -643,12 +750,309 @@ export class InfolapSource implements DataSource {
       source: 'infolap',
       name: 'InfoLap',
       format: 'individual',
+      // Clave de la estrategia de neumáticos (una por día de carrera).
+      raceId: this.wssMode ? dayKey(this.sessionStartedAt) : undefined,
       participants: this.participants,
-      capabilities: INFOLAP_CAPABILITIES,
+      capabilities: this.wssMode ? INFOLAP_WSS_CAPABILITIES : INFOLAP_CAPABILITIES,
     };
   }
 
-  private ingestPacket(pkt: InfolapStatePacket): void {
+  // ── Protocolo nuevo (WSS) ───────────────────────────────────────────────
+
+  /**
+   * Abre el WSS del TicTac nuevo. `onReady` (solo el primer intento) se llama
+   * una vez: al abrir, o al fallar/agotar el plazo (→ protocolo UDP antiguo).
+   * Si una conexión ya establecida se cae, reintenta cada WSS_RECONNECT_MS.
+   */
+  private openWss(host: string, onReady?: () => void): void {
+    if (!this.active) { onReady?.(); return; }
+    let ready = onReady;
+    const markReady = () => { const r = ready; ready = undefined; r?.(); };
+    const url = `wss://${host}:${INFOLAP_WSS_PORT}/`;
+    let opened = false;
+    let openTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const conn = openInfolapWs(url, {
+      onOpen: () => {
+        opened = true;
+        if (openTimer) clearTimeout(openTimer);
+        const wasWss = this.wssMode;
+        this.wssMode = true;
+        console.log('[Infolap] WSS conectado', url);
+        if (!this.mangaTimer) this.mangaTimer = setInterval(() => this.tickManga(), 1000);
+        if (wasWss) this.emitEvent({ type: 'connection-restored' });
+        markReady();
+      },
+      onMessage: (data) => this.handleWsMessage(data),
+      onClose: (reason) => {
+        if (openTimer) clearTimeout(openTimer);
+        if (this.wsConn === conn) this.wsConn = null;
+        console.log('[Infolap] WSS cerrado:', reason);
+        if (!this.active) return;
+        if (!this.wssMode) { markReady(); return; }   // TicTac antiguo
+        if (opened) this.emitEvent({ type: 'connection-lost' });
+        this.wsReconnectTimer = setTimeout(() => {
+          this.wsReconnectTimer = null;
+          if (this.active && !this.wsConn) this.openWss(host);
+        }, WSS_RECONNECT_MS);
+      },
+    });
+    this.wsConn = conn;
+
+    if (onReady) {
+      openTimer = setTimeout(() => {
+        if (opened) return;
+        console.log('[Infolap] WSS sin respuesta → protocolo UDP antiguo');
+        conn.close();
+        if (this.wsConn === conn) this.wsConn = null;
+        markReady();
+      }, WSS_OPEN_TIMEOUT_MS);
+    }
+  }
+
+  private handleWsMessage(text: string): void {
+    if (!this.active) return;
+    const msg = parseWsMessage(text);
+    if (!msg) {
+      console.log('[Infolap] WSS mensaje no reconocido:', text.slice(0, 120));
+      return;
+    }
+    switch (msg.type) {
+      case 'LAP': this.ingestWsLap(msg); break;
+      case 'CONFIG': this.ingestConfig(msg); break;
+      case 'RIVALS_UPDATE': this.ingestRivals(msg); break;
+    }
+  }
+
+  private ingestWsLap(msg: InfolapLapMessage): void {
+    if (msg.lapTimeMs != null && msg.lapTimeMs < MIN_WSS_LAP_MS) return;  // test de transmisión
+    this.ingestPacket({
+      sequence: msg.frame,
+      lane: msg.laneId,
+      driverName: msg.pilotName,
+      lastLapMs: msg.lapTimeMs,
+      isNewLap: true,
+      laneCode: msg.laneId,
+    }, true);
+    if (msg.laneId === this.selectedLane && msg.position != null) {
+      this.applyStanding({
+        position: msg.position,
+        total: null,
+        aheadName: msg.aheadName,
+        aheadGapMs: msg.aheadGapMs,
+        behindName: msg.behindName,
+        behindGapMs: msg.behindGapMs,
+      });
+    }
+  }
+
+  /** CONFIG = empieza una manga: pilotos por carril (ya rotados). */
+  private ingestConfig(msg: InfolapConfigMessage): void {
+    if (msg.pilots.length === 0) return;
+    const anyLaps = [...this.laneLapCount.values()].some(n => n > 0);
+    if (anyLaps) this.emitSnapshot();   // cierra la manga anterior en el histórico
+    if (this.configSeen || anyLaps) this.mangaCount += 1;
+    const first = !this.configSeen;
+    this.configSeen = true;
+    this.mangaStartAt = Date.now();
+    this.armMangaFlags();
+    if (first) this.emitEvent({ type: 'race-started' });
+
+    this.laneName.clear();
+    for (const p of msg.pilots) this.laneName.set(p.laneId, p.name);
+    this.laneLapCount.clear();
+    this.laneSumMs.clear();
+    this.laneLastSeq.clear();
+    this.laneLastMs.clear();
+    this.laneLastIngestAt.clear();
+
+    const lane = this.laneForName(this.selectedName);
+    this.selectedLane = lane;
+    this.rivalLane = this.laneForName(this.rivalSelectedName);
+    this.currentState = {
+      ...this.currentState,
+      // Si mi piloto no está en la lista de esta manga, descansa.
+      status: this.selectedName && lane == null ? 'resting' : 'my-turn',
+      myLane: lane,
+      lapCount: 0,
+      lastLapMs: null,
+      bestLapMs: null,
+      avgLapMs: null,
+      currentMangaNum: this.mangaCount,
+      remainingMs: this.remainingMsNow(),
+      position: null,
+      gapAheadMs: null,
+      gapBehindMs: null,
+      gapAheadLaps: null,
+      gapBehindLaps: null,
+      aheadName: null,
+      behindName: null,
+      avgToCatchMs: null,
+    };
+    this.applyRivalToState();
+    this.refreshDerived();
+    this.emitState();
+    if (lane != null) this.emitEvent({ type: 'manga-changed', newMangaNum: this.mangaCount, newLane: lane });
+  }
+
+  private ingestRivals(msg: InfolapRivalsMessage): void {
+    this.lastRivals = msg.rivals;
+    // Corriendo: por carril. Descansando: por nombre (sigue en la general).
+    const name = this.selectedName;
+    const s = this.selectedLane != null
+      ? standingForLane(msg.rivals, this.selectedLane)
+      : name ? standingOf(msg.rivals, r => this.nameMatches(r.name, name)) : null;
+    if (s) this.applyStanding(s);
+  }
+
+  /** Posición y gaps del piloto propio (en tiempo del TicTac y en vueltas). */
+  private applyStanding(s: Omit<InfolapStanding, 'total'> & { total: number | null }): void {
+    const prev = this.currentState.position;
+    const pace = this.myPaceMs();
+    this.currentState = {
+      ...this.currentState,
+      position: s.position,
+      totalParticipants: s.total ?? this.currentState.totalParticipants,
+      aheadName: s.aheadName,
+      gapAheadMs: s.aheadGapMs,
+      gapAheadLaps: gapMsToLaps(s.aheadGapMs, pace),
+      behindName: s.behindName,
+      gapBehindMs: s.behindGapMs,
+      gapBehindLaps: gapMsToLaps(s.behindGapMs, pace),
+    };
+    this.refreshDerived();
+    this.emitState();
+    if (prev != null && prev !== s.position) {
+      this.emitEvent({ type: 'position-changed', from: prev, to: s.position });
+    }
+  }
+
+  /** Mi ritmo de referencia: media del carril en esta manga, media de la
+   *  carrera, `vme` del TicTac o, en último caso, la última vuelta. */
+  private myPaceMs(): number | null {
+    const lane = this.selectedLane;
+    const name = this.selectedName;
+    return (lane != null ? this.laneAvgMs(lane) : null)
+      ?? (name ? statsAvgMs(this.pilotStats.get(normName(name))) : null)
+      ?? (name ? this.lastRivals.find(r => this.nameMatches(r.name, name))?.vmeMs ?? null : null)
+      ?? this.currentState.lastLapMs;
+  }
+
+  /** Proyección, vueltas proyectadas y media para subir (sin emitir). Solo
+   *  con duración de manga configurada y la manga vista empezar. */
+  private refreshDerived(): void {
+    if (!this.wssMode) return;
+    const rem = this.remainingMsNow();
+    const name = this.selectedName;
+    let projection: ProjectionRow[] | null = null;
+    let projectedTotal: number | null = null;
+    let avgToCatchMs: number | null = null;
+    if (rem != null && this.lastRivals.length > 0) {
+      const racing = new Set([...this.laneName.values()].map(normName));
+      projection = buildProjection(this.lastRivals, this.pilotStats, racing, rem);
+      projectedTotal = name
+        ? projection.find(r => this.nameMatches(r.name, name))?.projectedTotal ?? null
+        : null;
+      const aheadName = this.currentState.aheadName;
+      const ahead = aheadName ? this.lastRivals.find(r => this.nameMatches(r.name, aheadName)) : undefined;
+      if (ahead && this.currentState.status === 'my-turn') {
+        avgToCatchMs = catchUpPaceMs({
+          remainingMs: rem,
+          gapMs: this.currentState.gapAheadMs,
+          aheadPaceMs: statsAvgMs(this.pilotStats.get(normName(ahead.name))) ?? ahead.vmeMs,
+          aheadRacing: ahead.isRacing && racing.has(normName(ahead.name)),
+          myPaceMs: this.myPaceMs(),
+          myBestMs: name ? this.pilotStats.get(normName(name))?.bestMs ?? null : null,
+        });
+      }
+    }
+    this.currentState = { ...this.currentState, projection, projectedTotal, avgToCatchMs };
+  }
+
+  // ── Reloj de manga (duración configurada por el usuario) ────────────────
+
+  private remainingMsNow(): number | null {
+    if (this.mangaDurationMs == null || this.mangaStartAt == null) return null;
+    return Math.max(0, this.mangaDurationMs - (Date.now() - this.mangaStartAt));
+  }
+
+  /** Marca como ya lanzados los avisos cuyo umbral ya pasó. */
+  private armMangaFlags(): void {
+    const rem = this.remainingMsNow();
+    const d = this.mangaDurationMs;
+    this.firedHalf = rem != null && d != null && rem <= d / 2;
+    this.firedLastMinute = rem != null && rem <= LAST_MINUTE_MS;
+    this.firedLast30s = rem != null && rem <= LAST_30S_MS;
+    this.firedEnd = rem != null && rem <= 0;
+  }
+
+  private tickManga(force = false): void {
+    if (!this.active) return;
+    const rem = this.remainingMsNow();
+    const shown = rem == null ? null : Math.ceil(rem / 1000) * 1000;
+    if (force || shown !== this.currentState.remainingMs) {
+      this.currentState = { ...this.currentState, remainingMs: shown };
+      this.refreshDerived();
+      this.emitState();
+    }
+    if (rem == null) return;
+    const d = this.mangaDurationMs!;
+    if (!this.firedHalf && rem <= d / 2 && rem > LAST_MINUTE_MS) {
+      this.firedHalf = true;
+      this.emitEvent({ type: 'half-manga' });
+    }
+    if (!this.firedLastMinute && rem <= LAST_MINUTE_MS && rem > LAST_30S_MS) {
+      this.firedLastMinute = true;
+      this.emitEvent({ type: 'last-minute' });
+    }
+    if (!this.firedLast30s && rem <= LAST_30S_MS && rem > 0) {
+      this.firedLast30s = true;
+      this.emitEvent({ type: 'last-30s' });
+    }
+    if (!this.firedEnd && rem <= 0) {
+      this.firedEnd = true;
+      this.emitEvent({ type: 'race-finished' });
+      this.emitSnapshot();
+    }
+  }
+
+  // ── Histórico ───────────────────────────────────────────────────────────
+
+  private emitSnapshot(): void {
+    if (!this.wssMode) return;
+    const d = this.sessionStartedAt;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const snap = buildSnapshot({
+      raceId: `tictac-${d.getTime()}`,
+      name: `TicTac ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      startedAt: d.toISOString(),
+      finishedAt: new Date().toISOString(),
+      stats: this.pilotStats,
+      rivals: this.lastRivals,
+    });
+    if (!snap) return;
+    for (const l of this.snapshotListeners) l(snap);
+  }
+
+  private recordPilotLap(name: string, lapMs: number): void {
+    const key = normName(name);
+    if (!key) return;
+    let st = this.pilotStats.get(key);
+    if (!st) {
+      st = { name, laps: 0, sumMs: 0, bestMs: null, mangas: new Set() };
+      this.pilotStats.set(key, st);
+    }
+    st.laps += 1;
+    st.sumMs += lapMs;
+    st.bestMs = st.bestMs == null ? lapMs : Math.min(st.bestMs, lapMs);
+    st.mangas.add(this.mangaCount);
+  }
+
+  // ── Común ───────────────────────────────────────────────────────────────
+
+  /** `reliable`: paquete del WSS (cada vuelta llega una sola vez), sin la
+   *  red de seguridad contra retransmisiones UDP tardías. */
+  private ingestPacket(pkt: InfolapStatePacket, reliable = false): void {
     if (pkt.driverName) {
       this.laneName.set(pkt.lane, pkt.driverName);
 
@@ -690,7 +1094,7 @@ export class InfolapSource implements DataSource {
     const prevMs = this.laneLastMs.get(pkt.lane);
     const prevAt = this.laneLastIngestAt.get(pkt.lane) ?? 0;
     const now = Date.now();
-    if (prevMs === pkt.lastLapMs && now - prevAt < 3000) {
+    if (!reliable && prevMs === pkt.lastLapMs && now - prevAt < 3000) {
       return;
     }
     this.laneLastIngestAt.set(pkt.lane, now);
@@ -700,6 +1104,17 @@ export class InfolapSource implements DataSource {
     this.laneLapCount.set(pkt.lane, newCount);
     this.laneSumMs.set(pkt.lane, (this.laneSumMs.get(pkt.lane) ?? 0) + pkt.lastLapMs);
 
+    // Vuelta de CUALQUIER piloto → acumulado de carrera y estrategia de rivales.
+    const pilot = pkt.driverName || this.laneName.get(pkt.lane) || `Carril ${pkt.lane}`;
+    this.recordPilotLap(pilot, pkt.lastLapMs);
+    this.emitEvent({
+      type: 'entity-lap',
+      lane: pkt.lane,
+      name: pilot,
+      lapTimeMs: pkt.lastLapMs,
+      lapNumber: newCount,
+    });
+
     if (this.selectedLane === pkt.lane) {
       const best = this.currentState.bestLapMs;
       const newBest = best === null || pkt.lastLapMs < best ? pkt.lastLapMs : best;
@@ -708,8 +1123,10 @@ export class InfolapSource implements DataSource {
         lapCount: newCount,
         lastLapMs: pkt.lastLapMs,
         bestLapMs: newBest,
+        avgLapMs: this.laneAvgMs(pkt.lane),
       };
       this.applyRivalToState();
+      this.refreshDerived();
       this.emitState();
       this.emitEvent({ type: 'lap-completed', lapTimeMs: pkt.lastLapMs, lapCount: newCount });
     } else if (this.rivalLane === pkt.lane) {
@@ -726,4 +1143,9 @@ export class InfolapSource implements DataSource {
   private emitEvent(e: SourceEvent): void {
     for (const l of this.eventListeners) l(e);
   }
+}
+
+/** yyyymmdd como número (clave de estrategia de un día de carrera). */
+function dayKey(d: Date): number {
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
 }

@@ -10,6 +10,8 @@
 //   • Auto: broadcast UDP a :4441 (no funciona en iOS sin multicast
 //     entitlement → suele caer al manual).
 //   • Manual: unicast UDP a `<host>:4441`.
+//   • TicTac nuevo: mismo descubrimiento; después InfolapSource abre el WSS
+//     `wss://<host>:12543/` (si no responde, protocolo UDP antiguo).
 
 import { Platform } from 'react-native';
 import Zeroconf from 'react-native-zeroconf';

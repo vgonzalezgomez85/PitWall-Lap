@@ -29,7 +29,9 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   const isInfolapRef = useRef(false);
   settingsRef.current = settings;
   stateRef.current    = state;
-  isInfolapRef.current = raceInfo?.source === 'infolap';
+  // Solo el TicTac antiguo (sin clasificación): el nuevo usa los mismos avisos
+  // de media/gaps/para subir que PitWall.
+  isInfolapRef.current = raceInfo?.source === 'infolap' && !raceInfo.capabilities.positions;
 
   // ── Eventos discretos ──────────────────────────────────────────────────
   useSourceEvent(e => {

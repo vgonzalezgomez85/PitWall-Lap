@@ -3,7 +3,7 @@
 // La voz se activa con `useVoice()` y se controla en vivo con los botones
 // inferiores. Los toggles son persistentes (AsyncStorage).
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
@@ -11,6 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useDataSource } from '../data/sourceContext';
+import { useMangaDurationMin } from '../data/infolapSettings';
 import { useStintRecorder } from '../data/useStintRecorder';
 import { saveStint, type StintSetup } from '../data/trainingStore';
 import { useVoice } from '../voice/useVoice';
@@ -36,6 +37,13 @@ function fmtGapLaps(laps: number | null): string {
   return `${laps} ${laps === 1 ? 'vuelta' : 'vueltas'}`;
 }
 
+// Gap en vueltas (PitWall) o, si la fuente solo lo da en tiempo (TicTac
+// nuevo), en segundos.
+function fmtGap(laps: number | null, ms: number | null): string {
+  if (laps != null || ms == null) return fmtGapLaps(laps);
+  return `${fmt(ms)} s`;
+}
+
 // Etiqueta visible de la fuente (el id interno sigue siendo 'pitwall'/'infolap').
 function sourceLabel(source: string | undefined): string {
   if (source === 'pitwall') return 'PitWall';
@@ -54,11 +62,14 @@ function fmtRemaining(ms: number | null): string {
 export default function MyTurnScreen(_props: Props) {
   void _props;
   const { state, raceInfo, source } = useDataSource();
-  const { pendingCount } = useTireStrategy();
+  const { pendingCount, available: strategyAvailable } = useTireStrategy();
   const { settings, toggle, update } = useVoice();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const isPitWall = raceInfo?.source === 'pitwall';
+  // TicTac nuevo (WSS): mismos datos que PitWall salvo salidas/pits/plan.
+  const isTicTacLive = raceInfo?.source === 'infolap' && (raceInfo.capabilities.positions ?? false);
+  const fullData = isPitWall || isTicTacLive;
   const isTraining = raceInfo?.mode === 'training';
 
   // Grabación de stints (solo modo entrenamiento).
@@ -150,17 +161,20 @@ export default function MyTurnScreen(_props: Props) {
               </View>
             ) : (
               <View style={styles.block}>
-                <Text style={styles.label}>Sin próxima manga programada</Text>
+                <Text style={styles.label}>
+                  {isPitWall ? 'Sin próxima manga programada' : 'El TicTac no envía el plan de mangas: te avisaré cuando empiece la tuya'}
+                </Text>
               </View>
             )}
           </>
         )}
 
-        {/* Config disponible mientras esperas (solo carreras PitWall). */}
-        {isPitWall && !isTraining && (
+        {/* Config disponible mientras esperas (PitWall y TicTac nuevo). */}
+        {fullData && !isTraining && (
           <>
-            <StrategyButton navigation={navigation} pendingCount={pendingCount} />
-            <VoiceControls settings={settings} toggle={toggle} update={update} isPitWall={isPitWall} />
+            {strategyAvailable && <StrategyButton navigation={navigation} pendingCount={pendingCount} />}
+            {isTicTacLive && <MangaDurationControl />}
+            <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
           </>
         )}
       </ScrollView>
@@ -223,25 +237,27 @@ export default function MyTurnScreen(_props: Props) {
           </View>
           <View style={styles.col}>
             <Text style={styles.label}>Gap delante</Text>
-            <Text style={styles.medTime}>{fmtGapLaps(state.gapAheadLaps)}</Text>
+            <Text style={styles.medTime}>{fmtGap(state.gapAheadLaps, state.gapAheadMs)}</Text>
           </View>
           <View style={styles.col}>
             <Text style={styles.label}>Gap detrás</Text>
-            <Text style={styles.medTime}>{fmtGapLaps(state.gapBehindLaps)}</Text>
+            <Text style={styles.medTime}>{fmtGap(state.gapBehindLaps, state.gapBehindMs)}</Text>
           </View>
         </View>
       )}
 
-      {isPitWall && state.position != null && (
+      {fullData && state.position != null && (
         <View style={styles.block}>
           <Text style={styles.label}>Media para subir</Text>
           <Text style={styles.medTime}>{fmt(state.avgToCatchMs)}</Text>
         </View>
       )}
 
-      {isPitWall && !isTraining && (
+      {strategyAvailable && !isTraining && (
         <StrategyButton navigation={navigation} pendingCount={pendingCount} />
       )}
+
+      {isTicTacLive && <MangaDurationControl />}
 
       {/* ── Entreno GO (solo modo entrenamiento) ───────────────────────── */}
       {isTraining && (
@@ -278,7 +294,7 @@ export default function MyTurnScreen(_props: Props) {
       )}
 
       {/* ── Voice toggles ──────────────────────────────────────────────── */}
-      <VoiceControls settings={settings} toggle={toggle} update={update} isPitWall={isPitWall} />
+      <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
 
       {/* ── Modal: datos del stint al detener ──────────────────────────── */}
       <Modal
@@ -402,12 +418,40 @@ function StrategyButton({ navigation, pendingCount }: {
   );
 }
 
+// Duración de manga para TicTac: el TicTac no la transmite y sin ella no hay
+// tiempo restante, avisos de fin, proyección ni media para subir.
+function MangaDurationControl() {
+  const { source } = useDataSource();
+  const [min, setMin] = useMangaDurationMin();
+  useEffect(() => {
+    source?.setMangaDurationMs?.(min > 0 ? min * 60_000 : null);
+  }, [source, min]);
+  return (
+    <>
+      <Text style={styles.section}>Duración de manga (TicTac)</Text>
+      <View style={styles.stepperRow}>
+        <Pressable style={styles.stepBtn} onPress={() => setMin(min - 1)}>
+          <Text style={styles.stepBtnText}>−</Text>
+        </Pressable>
+        <Text style={styles.stepValue}>{min > 0 ? `${min} min` : 'Sin configurar'}</Text>
+        <Pressable style={styles.stepBtn} onPress={() => setMin(min + 1)}>
+          <Text style={styles.stepBtnText}>+</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.stepHint}>
+        Cuenta desde que empieza la manga en el TicTac. Si te conectas con la manga ya empezada, el tiempo aparece en la siguiente.
+      </Text>
+    </>
+  );
+}
+
 // Sección de ajustes de voz. Reutilizada en "mi turno" y en la vista de espera.
-function VoiceControls({ settings, toggle, update, isPitWall }: {
+// `full`: PitWall o TicTac nuevo (todos los avisos); TicTac antiguo, solo vueltas.
+function VoiceControls({ settings, toggle, update, full }: {
   settings: VoiceSettings;
   toggle: (k: keyof VoiceSettings) => void;
   update: (p: Partial<VoiceSettings>) => void;
-  isPitWall: boolean;
+  full: boolean;
 }) {
   return (
     <>
@@ -419,7 +463,7 @@ function VoiceControls({ settings, toggle, update, isPitWall }: {
           onPress={() => toggle('enabled')}
         />
         <ToggleChip label="Vueltas"   active={settings.sayLaps} onPress={() => toggle('sayLaps')} />
-        {isPitWall && (
+        {full && (
           <>
             <ToggleChip label="Posición"  active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
             <ToggleChip label="Media manga" active={settings.sayHalfManga}     onPress={() => toggle('sayHalfManga')} />
@@ -468,6 +512,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   togglesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  stepBtn: {
+    width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#3a4350',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  stepBtnText: { color: '#f6c90e', fontSize: 24, fontWeight: '700' },
+  stepValue: { color: '#fff', fontSize: 20, fontWeight: '700', minWidth: 130, textAlign: 'center' },
+  stepHint: { color: '#6b7480', fontSize: 12, marginTop: 8 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
   },

@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.infolapws'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.infolapws"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // OkHttp ya lo trae React Native; lo declaramos para compilar contra él.
+  implementation 'com.squareup.okhttp3:okhttp:4.9.2'
+}

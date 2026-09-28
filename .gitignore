@@ -40,3 +40,7 @@ yarn-error.*
 /ios
 /android
 credentials.json
+
+# build de módulos nativos locales
+modules/*/android/build/
+modules/*/android/.cxx/

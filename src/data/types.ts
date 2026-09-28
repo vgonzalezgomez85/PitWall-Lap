@@ -123,10 +123,10 @@ export interface LiveState {
   avgLapMs: number | null;        // sólo PitWall — media del carril
   exitCount: number;              // sólo PitWall — salidas del carril
   pitStopCount: number;           // sólo PitWall — pit stops del carril
-  position: number | null;        // sólo PitWall
+  position: number | null;        // PitWall y TicTac nuevo
   totalParticipants: number | null;
   remainingMs: number | null;     // sólo PitWall
-  gapAheadMs: number | null;      // sólo PitWall (calculado en cliente)
+  gapAheadMs: number | null;      // PitWall (calculado en cliente) y TicTac nuevo
   gapBehindMs: number | null;
   gapAheadLaps: number | null;    // diferencia de vueltas con el de delante
   gapBehindLaps: number | null;   // diferencia de vueltas con el de detrás
@@ -253,6 +253,12 @@ export interface DataSource {
    */
   setRival?(id: string | null): void;
 
+  /**
+   * Sólo InfoLap: duración de manga configurada por el usuario (el TicTac no
+   * la transmite). null = sin configurar.
+   */
+  setMangaDurationMs?(ms: number | null): void;
+
   /** Suscribirse al stream de estado. Devuelve función de unsubscribe. */
   onStateChange(cb: (state: LiveState) => void): () => void;
 
@@ -347,4 +353,14 @@ export const INFOLAP_CAPABILITIES: SourceCapabilities = {
   laneAverages: false,
   multiMangaPlan: false,
   history: false,
+};
+
+/** TicTac nuevo (WSS): además manda la clasificación con gaps en tiempo. El
+ *  tiempo restante sale de la duración de manga que configura el usuario. */
+export const INFOLAP_WSS_CAPABILITIES: SourceCapabilities = {
+  ...INFOLAP_CAPABILITIES,
+  positions: true,
+  gaps: true,
+  raceTimeRemaining: true,
+  laneAverages: true,
 };

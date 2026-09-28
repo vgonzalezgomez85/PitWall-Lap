@@ -1,0 +1,10 @@
+{
+  "name": "infolapws",
+  "version": "1.0.0",
+  "description": "WebSocket TLS con certificado autofirmado para el InfoLap nuevo de TicTac (local Expo module).",
+  "main": "index.ts",
+  "platforms": ["ios", "android"],
+  "scripts": {},
+  "keywords": ["expo-modules"],
+  "license": "MIT"
+}
