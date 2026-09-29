@@ -562,7 +562,11 @@ export class PitWallSource implements DataSource {
     });
 
     socket.on('standings', (payload: StandingsPayload) => this.onStandings(payload));
-    socket.on('lap',       (payload: LapPayload)       => this.onLap(payload));
+    // Desde PitWall Manager v1.29.1 `lap` llega en lote (array, de 1 elemento
+    // sin carga); se acepta también el objeto suelto de servidores anteriores.
+    socket.on('lap', (payload: LapPayload | LapPayload[]) => {
+      for (const lap of Array.isArray(payload) ? payload : [payload]) this.onLap(lap);
+    });
     socket.on('tick',      (payload: { elapsedMs: number }) => this.onTick(payload));
 
     socket.on('lap:ghost', (p: { lane: number; lapTimeMs: number }) => {
