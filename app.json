@@ -37,7 +37,9 @@
         "INTERNET",
         "ACCESS_NETWORK_STATE",
         "ACCESS_WIFI_STATE",
-        "CHANGE_WIFI_MULTICAST_STATE"
+        "CHANGE_WIFI_MULTICAST_STATE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -46,7 +48,14 @@
     "plugins": [
       "expo-audio",
       "./plugins/withScriptSandboxDisabled.js",
+      "./plugins/withAndroidCleartextTraffic.js",
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "7de36662-a4c6-4399-aeee-ab297c740bdf"
+      }
+    },
+    "owner": "victorggomez"
   }
 }
