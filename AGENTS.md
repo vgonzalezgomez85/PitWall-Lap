@@ -22,6 +22,8 @@ UI y mensajes de commit. Escribe el código nuevo en castellano.
   `noUncheckedIndexedAccess` activo.
 - `npm run changelog:sync` — regenera `src/generated/changelog.ts` desde
   `CHANGELOG.md`.
+- `npm run apk` — APK de release: sync del changelog + `expo prebuild` +
+  gradle `assembleRelease` + copia a `~/Desktop/pitwall-lap-<versión>.apk`.
 
 ## Versionado (regla dura)
 
@@ -39,6 +41,11 @@ La versión que muestra la app (`src/data/appVersion.ts`) se lee del binario ví
 `expo-constants` (el `app.config` embebido en build-time): **subir la versión no
 se refleja hasta reconstruir**, no basta con recargar Metro. Si el manifest no
 está disponible, se cae a la última versión del changelog.
+
+Para el APK, usa siempre **`npm run apk`**: incluye el `expo prebuild` sin el
+cual `versionName`/`versionCode` del APK no se actualizan (salen de
+`android/app/build.gradle`, generado desde `app.json`), aunque el resto del
+build sí.
 
 ## Arquitectura
 

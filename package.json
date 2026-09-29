@@ -9,7 +9,8 @@
     "web": "expo start --web",
     "test": "jest",
     "typecheck": "tsc --noEmit",
-    "changelog:sync": "node scripts/sync-changelog.js"
+    "changelog:sync": "node scripts/sync-changelog.js",
+    "apk": "bash scripts/build-apk.sh"
   },
   "jest": {
     "preset": "jest-expo",

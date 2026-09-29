@@ -141,6 +141,14 @@ Tests:
 npm test
 ```
 
+APK de Android (release, firmado con la keystore de debug, con la versión en
+el nombre — incluye `expo prebuild`, necesario para que el APK lleve el
+`versionName` correcto):
+
+```bash
+npm run apk          # → ~/Desktop/pitwall-lap-<versión>.apk
+```
+
 Una vez instalado, la app funciona sin Mac/Metro hasta que caduque la
 firma (7 días con Apple ID gratuito, 1 año con Apple Developer Program).
 
