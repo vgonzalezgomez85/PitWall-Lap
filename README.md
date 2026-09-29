@@ -99,9 +99,13 @@ src/
 │   ├── sourceContext.tsx       Context React con la fuente activa
 │   ├── historyStore.ts         Persistencia local de carreras (AsyncStorage)
 │   ├── trainingStore.ts        Persistencia local de stints de entreno
+│   ├── changelog.ts            Parser del historial de versiones
+│   ├── appVersion.ts           Versión de la app (expo-constants + fallback)
 │   └── useAutoSaveHistory.ts · useStintRecorder.ts · excelCache.ts · migrateStorage.ts
+├── generated/                  changelog.ts embebido (generado por scripts/sync-changelog.js)
 ├── screens/                    Pantallas: Discovery → RacePicker → TandaPicker →
-│                               Select → MyTurn → Strategy; Pole; Training; History
+│                               Select → MyTurn → Strategy; Pole; Training; History;
+│                               Changelog (Novedades)
 ├── strategy/                   Estrategia de goma (Fases 1–3) + control del servidor
 ├── voice/                      TTS (nativo + fallback), toggles y motor de eventos
 └── ui/                         Componentes compartidos (LapChart, BackButton)
@@ -109,6 +113,7 @@ modules/backgroundtts/          Módulo Swift local para background audio
 modules/infolapws/              Módulo nativo local del WSS del TicTac nuevo
 plugins/                        Config plugins Expo (script sandboxing iOS,
                                 cleartext HTTP Android)
+scripts/                        Utilidades de desarrollo (sync-changelog.js)
 tools/                          Probes Node para ingeniería inversa del protocolo
                                 InfoLap (UDP, WSS, decoders)
 ```
@@ -138,6 +143,22 @@ npm test
 
 Una vez instalado, la app funciona sin Mac/Metro hasta que caduque la
 firma (7 días con Apple ID gratuito, 1 año con Apple Developer Program).
+
+## Versionado
+
+La versión vive en `app.json` (`expo.version`) y se muestra en el pie de la
+pantalla inicial y en la pantalla **Novedades**, que renderiza `CHANGELOG.md`.
+
+Cada cambio sube la versión (en `app.json` y `package.json`, en lockstep) y
+añade su entrada al `CHANGELOG.md`; después:
+
+```bash
+npm run changelog:sync   # regenera src/generated/changelog.ts (se commitea)
+```
+
+El criterio de numeración está documentado en la cabecera de `CHANGELOG.md`.
+La versión que muestra la app sale del binario (build-time): subirla exige
+reconstruir la app, no basta con recargar Metro. Ver `AGENTS.md`.
 
 ## Servidor
 

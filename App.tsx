@@ -20,6 +20,7 @@ import MyTurnScreen      from './src/screens/MyTurnScreen';
 import StrategyScreen    from './src/screens/StrategyScreen';
 import HistoryScreen     from './src/screens/HistoryScreen';
 import HistoryDetailScreen from './src/screens/HistoryDetailScreen';
+import ChangelogScreen from './src/screens/ChangelogScreen';
 import TrainingScreen     from './src/screens/TrainingScreen';
 import StintDetailScreen  from './src/screens/StintDetailScreen';
 import type { RootStackParamList } from './src/navigation';
@@ -50,6 +51,7 @@ function AppInner() {
         <Stack.Screen name="Strategy"      component={StrategyScreen} />
         <Stack.Screen name="History"       component={HistoryScreen} />
         <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
+        <Stack.Screen name="Changelog"     component={ChangelogScreen} />
         <Stack.Screen name="Training"      component={TrainingScreen} />
         <Stack.Screen name="StintDetail"   component={StintDetailScreen} />
       </Stack.Navigator>

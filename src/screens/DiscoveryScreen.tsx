@@ -10,13 +10,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Image, Keyboard, StyleSheet, Text, TextInput,
+  ActivityIndicator, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { getCurrentVersion } from '../data/appVersion';
 import { discover, type SourceKind } from '../data/discovery';
 import { useDataSource } from '../data/sourceContext';
 import type { RootStackParamList } from '../navigation';
@@ -33,6 +35,7 @@ type Mode =
 
 export default function DiscoveryScreen({ navigation }: Props) {
   const { setSource } = useDataSource();
+  const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>({ phase: 'choose' });
   const [manualHost, setManualHost] = useState('');
 
@@ -123,8 +126,14 @@ export default function DiscoveryScreen({ navigation }: Props) {
   // ── Render por phase ────────────────────────────────────────────────────
 
   if (mode.phase === 'choose') {
+    // ScrollView: con los tres enlaces del pie el contenido puede no caber en
+    // pantallas pequeñas (iPhone SE); centrado cuando sobra sitio.
     return (
-      <View style={styles.root}>
+      <ScrollView
+        style={styles.chooseRoot}
+        contentContainerStyle={[styles.chooseContent, { paddingBottom: insets.bottom + 24 }]}
+        showsVerticalScrollIndicator={false}
+      >
         <Image
           source={require('../../assets/icon.png')}
           style={styles.logo}
@@ -157,7 +166,13 @@ export default function DiscoveryScreen({ navigation }: Props) {
         >
           <Text style={styles.historyLinkText}>Mis entrenamientos</Text>
         </TouchableOpacity>
-      </View>
+        <TouchableOpacity
+          style={styles.versionLink}
+          onPress={() => navigation.push('Changelog')}
+        >
+          <Text style={styles.versionLinkText}>Novedades · v{getCurrentVersion()}</Text>
+        </TouchableOpacity>
+      </ScrollView>
     );
   }
 
@@ -291,4 +306,11 @@ const styles = StyleSheet.create({
 
   historyLink: { marginTop: 32, paddingVertical: 8 },
   historyLinkText: { color: '#9aa3ad', fontSize: 14, textDecorationLine: 'underline' },
+  versionLink: { marginTop: 20, paddingVertical: 8 },
+  versionLinkText: { color: '#5a6573', fontSize: 12 },
+  chooseRoot: { flex: 1, backgroundColor: '#0a0d13' },
+  chooseContent: {
+    flexGrow: 1, alignItems: 'center', justifyContent: 'center',
+    padding: 24, paddingBottom: 24,
+  },
 });
