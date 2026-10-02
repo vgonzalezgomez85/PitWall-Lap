@@ -10,7 +10,8 @@ Compatible con tres protocolos de cronometraje:
 - **PitWall Manager** (sistema propio, basado en hardware DS-300;
   socket.io + REST).
 - **Tic Tac Slot / InfoLap antiguo** (paquete UDP de 52 bytes, sistema
-  legado de muchos clubes).
+  legado de muchos clubes). Solo manda tiempos de vuelta: la clasificación
+  y los gaps se calculan en el móvil.
 - **Tic Tac nuevo (TICTAC_Slot 2026)** (WebSocket sobre TLS en `:12543`
   con mensajes JSON).
 
@@ -94,7 +95,7 @@ src/
 │   ├── InfolapSource.ts        Cliente InfoLap (UDP antiguo y WSS del nuevo)
 │   ├── infolapDecode.ts        Decoder XOR del campo tiempo del UDP antiguo
 │   ├── infolapWss.ts           Parser JSON del TicTac nuevo (CONFIG/LAP/RIVALS_UPDATE)
-│   ├── infolapRace.ts          Proyección/gaps/dossier que el TicTac no calcula
+│   ├── infolapRace.ts          Clasificación (UDP), proyección y dossier que el TicTac no calcula
 │   ├── discovery.ts            Orquestador mDNS / subnet scan / UDP
 │   ├── sourceContext.tsx       Context React con la fuente activa
 │   ├── historyStore.ts         Persistencia local de carreras (AsyncStorage)

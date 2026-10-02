@@ -13,12 +13,13 @@
 // JSON (ver infolapWss.ts). Tras el "OK" intentamos abrir ese WSS: si
 // conecta usamos el protocolo nuevo; si no, seguimos con el UDP de siempre.
 //
-// Capacidades: protocolo antiguo, sólo tiempo por vuelta. Protocolo nuevo,
-// casi lo mismo que PitWall: posición y gaps (el TicTac), más lo que aquí se
-// calcula en cliente — media de carril, gaps en vueltas, tiempo restante y
-// avisos de fin (con la duración de manga que configura el usuario),
-// proyección, media para subir y dossier para el histórico (infolapRace.ts).
-// No hay salidas, pit stops, plan de mangas ni pole: el TicTac no los manda.
+// Capacidades: casi lo mismo que PitWall con los dos protocolos. Posición y
+// gaps los manda el TicTac nuevo; con el antiguo se calculan aquí a partir de
+// los tiempos de vuelta (`clasificacionLocal`, exacta solo si conectamos antes
+// de la salida). Además, en cliente: media de carril, gaps en vueltas, tiempo
+// restante y avisos de fin (con la duración de manga que configura el
+// usuario), proyección, media para subir y dossier para el histórico
+// (infolapRace.ts). No hay salidas, pit stops, plan de mangas ni pole.
 
 import dgram from 'react-native-udp';
 import { Buffer } from 'buffer';
@@ -35,7 +36,7 @@ import type {
   RaceStatsSnapshot,
   SourceEvent,
 } from './types';
-import { INFOLAP_CAPABILITIES, INFOLAP_WSS_CAPABILITIES, emptyLiveState } from './types';
+import { INFOLAP_CAPABILITIES, emptyLiveState } from './types';
 import { decodeLapField } from './infolapDecode';
 import {
   INFOLAP_WSS_PORT, claveConfig, clasificarConfig, parseWsMessage, standingForLane, standingOf,
@@ -43,8 +44,8 @@ import {
   type InfolapRivalsMessage, type InfolapStanding,
 } from './infolapWss';
 import {
-  buildProjection, buildSnapshot, catchUpPaceMs, gapMsToLaps, normName, statsAvgMs,
-  type PilotStats,
+  buildProjection, buildSnapshot, catchUpPaceMs, clasificacionLocal, gapMsToLaps, normName,
+  statsAvgMs, type PilotStats,
 } from './infolapRace';
 import { loadMangaDurationMin } from './infolapSettings';
 import { openInfolapWs, type InfolapWsConnection } from '../../modules/infolapws';
@@ -217,6 +218,9 @@ export class InfolapSource implements DataSource {
   private firedEnd = false;
   /** Acumulado de toda la carrera por piloto (nombre normalizado). */
   private pilotStats = new Map<string, PilotStats>();
+  /** Tiempo acumulado tras cada vuelta, por piloto (nombre normalizado):
+   *  base de la clasificación local del TicTac antiguo. */
+  private pilotCumMs = new Map<string, number[]>();
   /** Última clasificación oficial recibida (RIVALS_UPDATE). */
   private lastRivals: InfolapRival[] = [];
   private snapshotListeners: ((s: RaceStatsSnapshot) => void)[] = [];
@@ -270,8 +274,11 @@ export class InfolapSource implements DataSource {
     this.raceLapsSinceConfig = false;
     this.mangaStartAt = null;
     this.pilotStats.clear();
+    this.pilotCumMs.clear();
     this.lastRivals = [];
     this.sessionStartedAt = new Date();
+    // Reloj de manga (tiempo restante y avisos): con los dos protocolos.
+    if (!this.mangaTimer) this.mangaTimer = setInterval(() => this.tickManga(), 1000);
     try {
       const min = await loadMangaDurationMin();
       this.mangaDurationMs = min > 0 ? min * 60_000 : null;
@@ -472,6 +479,7 @@ export class InfolapSource implements DataSource {
     this.eventListeners = [];
     this.snapshotListeners = [];
     this.pilotStats.clear();
+    this.pilotCumMs.clear();
     this.lastRivals = [];
     this.lastConfigKey = null;
     this.raceLapsSinceConfig = false;
@@ -580,6 +588,13 @@ export class InfolapSource implements DataSource {
    *  los contadores de todos los carriles y seguimos a mi piloto y al
    *  rival a sus nuevos carriles. */
   private handleLaneRotation(newLane: number): void {
+    if (!this.wssMode) {
+      // TicTac antiguo: sin CONFIG, la rotación es el único aviso de manga
+      // nueva. Guardamos la anterior y el reloj arranca con la primera vuelta.
+      this.emitSnapshot();
+      this.mangaStartAt = null;
+      this.armMangaFlags();
+    }
     this.mangaCount += 1;
     this.laneLapCount.clear();
     this.laneSumMs.clear();
@@ -682,8 +697,8 @@ export class InfolapSource implements DataSource {
   }
 
   onRaceStatsSnapshot(cb: (snapshot: RaceStatsSnapshot) => void): () => void {
-    // Sólo el protocolo nuevo: el dossier se construye en cliente y se emite
-    // al acabar cada manga y al desconectar (mismo raceId → se actualiza).
+    // El dossier se construye en cliente y se emite al acabar cada manga y al
+    // desconectar (mismo raceId → se actualiza).
     this.snapshotListeners.push(cb);
     return () => {
       this.snapshotListeners = this.snapshotListeners.filter(l => l !== cb);
@@ -783,9 +798,9 @@ export class InfolapSource implements DataSource {
       name: 'InfoLap',
       format: 'individual',
       // Clave de la estrategia de neumáticos (una por día de carrera).
-      raceId: this.wssMode ? dayKey(this.sessionStartedAt) : undefined,
+      raceId: dayKey(this.sessionStartedAt),
       participants: this.participants,
-      capabilities: this.wssMode ? INFOLAP_WSS_CAPABILITIES : INFOLAP_CAPABILITIES,
+      capabilities: INFOLAP_CAPABILITIES,
     };
   }
 
@@ -811,7 +826,6 @@ export class InfolapSource implements DataSource {
         const wasWss = this.wssMode;
         this.wssMode = true;
         console.log('[Infolap] WSS conectado', url);
-        if (!this.mangaTimer) this.mangaTimer = setInterval(() => this.tickManga(), 1000);
         if (wasWss) this.emitEvent({ type: 'connection-restored' });
         markReady();
       },
@@ -901,8 +915,10 @@ export class InfolapSource implements DataSource {
     if (tipo === 'reinicio') {
       // Carrera reiniciada: lo corrido hasta aquí ya está guardado aparte.
       this.pilotStats.clear();
+      this.pilotCumMs.clear();
       this.lastRivals = [];
-      this.sessionStartedAt = new Date();
+      // raceId del histórico = esta fecha en ms: nunca la misma que la anterior.
+      this.sessionStartedAt = new Date(Math.max(Date.now(), this.sessionStartedAt.getTime() + 1));
       this.mangaCount = 1;
     } else if (tipo === 'nueva-manga') {
       this.mangaCount += 1;
@@ -997,7 +1013,6 @@ export class InfolapSource implements DataSource {
   /** Proyección, vueltas proyectadas y media para subir (sin emitir). Solo
    *  con duración de manga configurada y la manga vista empezar. */
   private refreshDerived(): void {
-    if (!this.wssMode) return;
     const rem = this.remainingMsNow();
     const name = this.selectedName;
     let projection: ProjectionRow[] | null = null;
@@ -1075,7 +1090,6 @@ export class InfolapSource implements DataSource {
   // ── Histórico ───────────────────────────────────────────────────────────
 
   private emitSnapshot(): void {
-    if (!this.wssMode) return;
     const d = this.sessionStartedAt;
     const pad = (n: number) => String(n).padStart(2, '0');
     const snap = buildSnapshot({
@@ -1102,6 +1116,22 @@ export class InfolapSource implements DataSource {
     st.sumMs += lapMs;
     st.bestMs = st.bestMs == null ? lapMs : Math.min(st.bestMs, lapMs);
     st.mangas.add(this.mangaCount);
+    const cum = this.pilotCumMs.get(key) ?? [];
+    cum.push((cum[cum.length - 1] ?? 0) + lapMs);
+    this.pilotCumMs.set(key, cum);
+  }
+
+  /** TicTac antiguo: no manda clasificación → la calculamos con los tiempos
+   *  de vuelta y la tratamos como si fuera un RIVALS_UPDATE del nuevo. */
+  private updateLocalRivals(): void {
+    const laneOf = new Map<string, number>();
+    for (const [lane, name] of this.laneName) laneOf.set(normName(name), lane);
+    const rivals = clasificacionLocal([...this.pilotStats.entries()].map(([key, st]) => ({
+      name: st.name,
+      laneId: laneOf.get(key) ?? null,
+      cumMs: this.pilotCumMs.get(key) ?? [],
+    })));
+    this.ingestRivals({ type: 'RIVALS_UPDATE', rivals });
   }
 
   // ── Común ───────────────────────────────────────────────────────────────
@@ -1162,6 +1192,13 @@ export class InfolapSource implements DataSource {
     this.laneLapCount.set(pkt.lane, newCount);
     this.laneSumMs.set(pkt.lane, (this.laneSumMs.get(pkt.lane) ?? 0) + pkt.lastLapMs);
 
+    // TicTac antiguo: la manga empieza (para el reloj) con la primera vuelta
+    // que vemos, descontando lo que ha tardado en darla.
+    if (!this.wssMode && this.mangaStartAt == null) {
+      this.mangaStartAt = now - pkt.lastLapMs;
+      this.armMangaFlags();
+    }
+
     // Vuelta de CUALQUIER piloto → acumulado de carrera y estrategia de rivales.
     if (race) {
       const pilot = pkt.driverName || this.laneName.get(pkt.lane) || `Carril ${pkt.lane}`;
@@ -1194,6 +1231,8 @@ export class InfolapSource implements DataSource {
       this.applyRivalToState();
       this.emitState();
     }
+
+    if (race && !this.wssMode) this.updateLocalRivals();
   }
 
   private emitState(): void {

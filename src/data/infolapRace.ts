@@ -101,6 +101,44 @@ export function buildProjection(
   return rows;
 }
 
+/** Piloto para la clasificación calculada en el móvil (TicTac antiguo). */
+export interface PilotoLocal {
+  name: string;
+  /** Carril en la manga en curso; null si no corre ahora. */
+  laneId: number | null;
+  /** Tiempo acumulado tras cada vuelta (ms), de toda la carrera vista. */
+  cumMs: number[];
+}
+
+/**
+ * Clasificación calculada en el móvil para el TicTac antiguo, que no la
+ * manda: con el mismo formato que el `RIVALS_UPDATE` del nuevo, para que
+ * posición, gaps, proyección e histórico salgan por el mismo camino.
+ *
+ * Orden: más vueltas primero; a igualdad, menos tiempo acumulado. `gap` =
+ * cuánto tardó cada uno en llegar a su vuelta respecto a cuando la cerró el
+ * líder (el "gap en meta" clásico). El tramo de salida no está cronometrado,
+ * así que no cuenta. Solo entran pilotos con alguna vuelta.
+ */
+export function clasificacionLocal(pilotos: PilotoLocal[]): InfolapRival[] {
+  const conVueltas = pilotos.filter(p => p.cumMs.length > 0);
+  const total = (p: PilotoLocal) => p.cumMs[p.cumMs.length - 1]!;
+  conVueltas.sort((a, b) => b.cumMs.length - a.cumMs.length || total(a) - total(b));
+  const lider = conVueltas[0];
+  return conVueltas.map((p, i) => {
+    const n = p.cumMs.length;
+    const liderEnMiVuelta = lider?.cumMs[n - 1];
+    return {
+      position: i + 1,
+      laneId: p.laneId ?? 0,
+      name: p.name,
+      gapMs: liderEnMiVuelta != null ? Math.max(0, total(p) - liderEnMiVuelta) : null,
+      vmeMs: Math.round(total(p) / n),
+      isRacing: p.laneId != null,
+    };
+  });
+}
+
 /** Dossier final para el histórico local (como el `race:stats-snapshot` de PitWall). */
 export function buildSnapshot(o: {
   raceId: string;

@@ -38,6 +38,18 @@ jest.mock('../../modules/infolapws', () => ({
 
 import { InfolapSource } from './InfolapSource';
 
+// Paquete de estado de 52 bytes del TicTac antiguo (ver infolapDecode.ts).
+function paqueteUdp(seq: number, lane: number, name: string, ms: number): Uint8Array {
+  const d = [
+    Math.floor(ms / 100) % 10, Math.floor(ms / 10000) % 10, ms % 10,
+    Math.floor(ms / 10) % 10, Math.floor(ms / 100000) % 10, Math.floor(ms / 1000) % 10, 0,
+  ];
+  const tiempo = d.map((x, i) => (x ^ Number('7654321'[i])).toString(16).toUpperCase()).join('');
+  const s = String(seq).padStart(4, '0') + String(lane) + name.padEnd(20) + ' '.repeat(5)
+    + tiempo + ' ' + ' '.repeat(6) + '1' + String(lane).padStart(3, '0') + ' '.repeat(4);
+  return new Uint8Array(Buffer.from(s, 'ascii'));
+}
+
 const lap = (frame: number, lane: number, name: string, sec: number, extra = '') =>
   `{"type":"LAP","frame":${frame},"laneId":${lane},"pilotName":"${name}","lapTime":${sec},"isFastLap":false,"position":0,"isRace":true,"isFirstLap":${sec === 0}${extra}}`;
 
@@ -227,15 +239,41 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     expect(snaps[1]!.raceId).not.toBe(snaps[0]!.raceId);   // carrera nueva en el histórico
   });
 
-  it('TicTac antiguo: si el WSS falla sigue con UDP', async () => {
+  it('TicTac antiguo: si el WSS falla sigue con UDP y calcula la clasificación', async () => {
     udp.handlers = {}; ws.opened = [];
     const src = new InfolapSource();
     const p = src.connect();
     for (let i = 0; i < 5 && !udp.handlers.message; i++) await Promise.resolve();
-    udp.handlers.message!(new Uint8Array(Buffer.from('OK Piloto 1;#001')), { address: '192.168.10.9' });
+    udp.handlers.message!(new Uint8Array(Buffer.from('OK Piloto 1;#001Piloto 2;#002')), { address: '192.168.10.9' });
     ws.opened[0]!.h.onClose('ECONNREFUSED');
     const info = await p;
-    expect(info.capabilities.positions).toBe(false);
+    expect(info.capabilities.positions).toBe(true);
+
+    let state!: LiveState;
+    const events: SourceEvent[] = [];
+    src.onStateChange(s => { state = s; });
+    src.onEvent(e => events.push(e));
+    src.selectParticipant('#002');
+    const send = (seq: number, lane: number, name: string, ms: number) =>
+      udp.handlers.message!(paqueteUdp(seq, lane, name, ms), { address: '192.168.10.9' });
+
+    send(1, 1, 'Piloto 1', 3000);
+    send(1, 2, 'Piloto 2', 3200);
+    expect(state.position).toBe(2);
+    expect(state.aheadName).toBe('Piloto 1');
+    expect(state.gapAheadMs).toBe(200);
+
+    send(2, 1, 'Piloto 1', 3010);
+    send(2, 2, 'Piloto 2', 3100);
+    expect(state.gapAheadMs).toBe(290);   // 6300 − 6010 al cerrar la vuelta 2
+
+    send(3, 1, 'Piloto 1', 3500);         // P1 va una vuelta por delante
+    expect(state.position).toBe(2);
+    send(3, 2, 'Piloto 2', 2900);         // 9200 < 9510 → adelanto
+    expect(state.position).toBe(1);
+    expect(state.behindName).toBe('Piloto 1');
+    expect(state.gapBehindMs).toBe(310);
+    expect(events).toContainEqual({ type: 'position-changed', from: 2, to: 1 });
     src.disconnect();
   });
 });

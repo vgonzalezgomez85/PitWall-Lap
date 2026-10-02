@@ -1,5 +1,5 @@
 import {
-  buildProjection, buildSnapshot, catchUpPaceMs, gapMsToLaps, type PilotStats,
+  buildProjection, buildSnapshot, catchUpPaceMs, clasificacionLocal, gapMsToLaps, type PilotStats,
 } from './infolapRace';
 import type { InfolapRival } from './infolapWss';
 
@@ -78,5 +78,27 @@ describe('buildSnapshot', () => {
     expect(buildSnapshot({
       raceId: 'x', name: 'x', startedAt: 'a', finishedAt: 'b', stats: new Map(), rivals: [],
     })).toBeNull();
+  });
+});
+
+describe('clasificacionLocal (TicTac antiguo)', () => {
+  it('ordena por vueltas y tiempo, con gap en meta respecto al líder', () => {
+    const r = clasificacionLocal([
+      { name: 'B', laneId: 2, cumMs: [3200, 6300] },
+      { name: 'A', laneId: 1, cumMs: [3000, 6010, 9510] },
+      { name: 'C', laneId: null, cumMs: [3100, 6200] },
+      { name: 'Sin vueltas', laneId: 3, cumMs: [] },
+    ]);
+    expect(r.map(x => [x.position, x.name, x.gapMs])).toEqual([
+      [1, 'A', 0],
+      [2, 'C', 190],   // 6200 − 6010: cuando A cerró su vuelta 2
+      [3, 'B', 290],
+    ]);
+    expect(r[1]).toMatchObject({ isRacing: false, laneId: 0, vmeMs: 3100 });
+    expect(r[2]).toMatchObject({ isRacing: true, laneId: 2, vmeMs: 3150 });
+  });
+
+  it('sin vueltas no hay clasificación', () => {
+    expect(clasificacionLocal([{ name: 'A', laneId: 1, cumMs: [] }])).toEqual([]);
   });
 });

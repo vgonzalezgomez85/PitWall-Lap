@@ -345,22 +345,15 @@ export const SLOTTIME_CAPABILITIES: SourceCapabilities = {
   history: true,
 };
 
+/** TicTac (los dos protocolos): posición y gaps en tiempo (el nuevo los manda;
+ *  con el antiguo se calculan en el móvil a partir de los tiempos de vuelta).
+ *  El tiempo restante sale de la duración de manga que configura el usuario. */
 export const INFOLAP_CAPABILITIES: SourceCapabilities = {
   lapTimes: true,
-  positions: false,
-  gaps: false,
-  raceTimeRemaining: false,
-  laneAverages: false,
-  multiMangaPlan: false,
-  history: false,
-};
-
-/** TicTac nuevo (WSS): además manda la clasificación con gaps en tiempo. El
- *  tiempo restante sale de la duración de manga que configura el usuario. */
-export const INFOLAP_WSS_CAPABILITIES: SourceCapabilities = {
-  ...INFOLAP_CAPABILITIES,
   positions: true,
   gaps: true,
   raceTimeRemaining: true,
   laneAverages: true,
+  multiMangaPlan: false,
+  history: false,
 };

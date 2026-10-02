@@ -18,6 +18,14 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.1.0] — 2026-10-02
+
+### Añadido
+- **TicTac antiguo (UDP): posición, gaps y todo lo del TicTac nuevo.** El TicTac antiguo solo manda el tiempo de vuelta de cada carril, así que la clasificación se calcula en el móvil (`clasificacionLocal`): por vueltas y, a igualdad, por tiempo acumulado, con el gap en meta respecto al líder. Con ella funcionan los avisos de posición, gaps en tiempo y en vueltas, tiempo restante (con la duración de manga configurada), proyección, media para subir e histórico. Es exacta si la app se conecta antes de la salida; el tramo de salida no está cronometrado y no cuenta. El reloj de manga arranca con la primera vuelta y se reinicia al detectar la rotación de carriles.
+
+### Corregido
+- **TicTac nuevo: una carrera reiniciada en el mismo milisegundo** que la anterior podía reutilizar su entrada del histórico.
+
 ## [1.0.3] — 2026-10-02
 
 ### Corregido
