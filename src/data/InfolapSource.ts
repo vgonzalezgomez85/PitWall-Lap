@@ -146,7 +146,7 @@ export function parseStatePacket(buf: Uint8Array): InfolapStatePacket | null {
 // ── Fuente ────────────────────────────────────────────────────────────────
 
 interface UdpSocket {
-  bind: (port: number, cb?: () => void) => void;
+  bind: (port: number, cb?: (err?: unknown) => void) => void;
   setBroadcast: (flag: boolean) => void;
   send: (
     buf: Buffer, offset: number, length: number,
@@ -274,7 +274,12 @@ export class InfolapSource implements DataSource {
     // Si no responde, el escalado de abajo pasa al barrido completo.
     try {
       const ip = await Network.getIpAddressAsync();
-      const lastOctet = parseInt(ip.split('.').pop() ?? '', 10);
+      // 169.254.x.x es link-local (p. ej. el iPhone conectado por cable al
+      // Mac), no la WiFi: su último octeto daría un ID de probe que el TicTac
+      // no reconoce. La tratamos como IP desconocida.
+      const lastOctet = ip.startsWith('169.254.')
+        ? NaN
+        : parseInt(ip.split('.').pop() ?? '', 10);
       if (Number.isFinite(lastOctet) && lastOctet >= 1 && lastOctet <= 254) {
         this.ownProbe = buildProbe(lastOctet);
         this.probePayloads = [this.ownProbe];
@@ -323,9 +328,11 @@ export class InfolapSource implements DataSource {
           this.sendProbe();
         }
       }, PROBE_ESCALATE_MS);
+      // reusePort: si queda un socket anterior sin soltar el 12543 (reintento
+      // rápido), el bind no falla con "address in use".
       const sock = (dgram as unknown as {
-        createSocket: (o: { type: string }) => UdpSocket;
-      }).createSocket({ type: 'udp4' });
+        createSocket: (o: { type: string; reusePort?: boolean }) => UdpSocket;
+      }).createSocket({ type: 'udp4', reusePort: true });
       this.socket = sock;
 
       const timeout = setTimeout(() => {
@@ -408,9 +415,21 @@ export class InfolapSource implements DataSource {
         }
       });
 
-      sock.bind(CLIENT_PORT, () => {
+      // react-native-udp llama a este callback TAMBIÉN cuando el bind falla
+      // (con el error como argumento, y luego emite 'error'). Sin esta guarda,
+      // setBroadcast lanzaba EBADF sobre un socket sin bindear y la app se
+      // cerraba. El fallo lo gestiona el handler de 'error' de arriba.
+      sock.bind(CLIENT_PORT, (err?: unknown) => {
+        if (err) {
+          console.log('[Infolap] bind falló en :', CLIENT_PORT, err);
+          return;
+        }
         console.log('[Infolap] bound on :', CLIENT_PORT);
-        sock.setBroadcast(true);
+        try {
+          sock.setBroadcast(true);
+        } catch (e) {
+          console.log('[Infolap] setBroadcast falló:', e);
+        }
         this.sendProbe();
         this.probeTimer = setInterval(() => this.sendProbe(), PROBE_INTERVAL_MS);
       });
@@ -712,7 +731,11 @@ export class InfolapSource implements DataSource {
         this.sweepEnabled ? `sweep ${this.subnetHosts.length}` : '(sin barrido)',
         Platform.OS === 'android' ? '+ broadcast' : '');
     } else {
-      // Sin IP local detectada: broadcast con todos los IDs (fallback antiguo).
+      // Sin IP local detectada: todos los IDs a la IP recordada (un único
+      // host, pasa el anti-escaneo de iOS) y por broadcast (fallback antiguo).
+      if (this.cachedHost) {
+        for (const payload of this.probePayloads) send(payload, this.cachedHost);
+      }
       for (const host of broadcastAddrs) {
         for (const payload of this.probePayloads) send(payload, host);
       }

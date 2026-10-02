@@ -18,6 +18,18 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.0.2] — 2026-10-02
+
+### Corregido
+- **La app se cerraba al conectar con un TicTac antiguo (UDP)** cuando el puerto `12543` no se podía bindear: `react-native-udp` llama al callback de `bind` también en caso de error y `setBroadcast` lanzaba `EBADF` sin capturar. Ahora el fallo se trata como error de conexión, y el socket se crea con `reusePort` para que un reintento rápido no choque con el socket anterior.
+- **No se podía volver a conectar al TicTac antiguo tras volver atrás** sin cerrar la app: la conexión anterior seguía con el puerto UDP cogido y se quedaba las respuestas. Ahora cada búsqueda o conexión manual libera antes la fuente activa, y los resultados de una búsqueda abandonada se desconectan.
+- **IP local mal detectada con el iPhone conectado por cable al Mac** (`169.254.x.x`): ya no se usa para el ID del probe; se prueban todos los IDs contra la IP recordada.
+
+## [1.0.1] — 2026-10-01
+
+### Corregido
+- **La app se cerraba al abrirla en iOS 27** al compilar con Xcode 27: ahora adopta el ciclo de vida de UIScene (`SceneDelegate`) mediante el config plugin `plugins/withSceneLifecycle.js`, que además sube a iOS 15.1 el deployment target de los pods que Xcode 27 ya no acepta.
+
 ## [1.0.0] — 2026-09-29
 
 ### Añadido

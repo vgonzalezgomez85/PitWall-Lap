@@ -34,17 +34,21 @@ type Mode =
   | { phase: 'connecting'; kind: SourceKind; host: string };
 
 export default function DiscoveryScreen({ navigation }: Props) {
-  const { setSource } = useDataSource();
+  const { setSource, clearSource } = useDataSource();
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>({ phase: 'choose' });
   const [manualHost, setManualHost] = useState('');
 
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  // Ref para usar clearSource en los efectos sin re-dispararlos cada vez que
+  // cambia la fuente (clearSource depende de `source`).
+  const clearSourceRef = useRef(clearSource);
+  clearSourceRef.current = clearSource;
 
   // Si volvemos a esta pantalla (back desde RacePicker/Select/etc),
-  // reseteamos al estado inicial pero NO desconectamos la fuente — si el
-  // usuario vuelve a entrar al mismo flujo no quiere reconectar.
+  // reseteamos al estado inicial pero NO desconectamos la fuente aquí: se
+  // libera al lanzar una nueva búsqueda o conexión manual.
   useFocusEffect(
     useCallback(() => {
       if (modeRef.current.phase !== 'choose') {
@@ -66,10 +70,17 @@ export default function DiscoveryScreen({ navigation }: Props) {
     if (mode.phase !== 'searching') return;
     const kind = mode.kind;
     let cancelled = false;
+    // Una nueva búsqueda libera la fuente anterior: TicTac antiguo necesita el
+    // puerto UDP 12543, y si sigue cogido por la conexión previa las
+    // respuestas le llegan a ese socket y esta búsqueda caduca.
+    clearSourceRef.current();
 
     discover({ kind })
       .then(result => {
-        if (cancelled || modeRef.current.phase !== 'searching') return;
+        if (cancelled || modeRef.current.phase !== 'searching') {
+          descartar(result);
+          return;
+        }
         if (result) {
           routeToNext(result);
         } else {
@@ -89,10 +100,14 @@ export default function DiscoveryScreen({ navigation }: Props) {
     if (mode.phase !== 'connecting') return;
     const { kind, host } = mode;
     let cancelled = false;
+    clearSourceRef.current();
 
     discover({ kind, manualHost: host })
       .then(result => {
-        if (cancelled || modeRef.current.phase !== 'connecting') return;
+        if (cancelled || modeRef.current.phase !== 'connecting') {
+          descartar(result);
+          return;
+        }
         if (result) {
           void AsyncStorage.setItem(LAST_HOST_KEY(kind), host);
           routeToNext(result);
@@ -108,6 +123,14 @@ export default function DiscoveryScreen({ navigation }: Props) {
 
     return () => { cancelled = true; };
   }, [mode.phase === 'connecting' ? `${mode.kind}|${mode.host}` : null]);
+
+  // Resultado que llega cuando el usuario ya cambió de modo: si trae una
+  // fuente conectada (InfoLap) hay que cerrarla, o deja el socket cogido.
+  function descartar(result: import('../data/discovery').DiscoveryResult | null) {
+    if (result?.kind === 'infolap') {
+      try { result.source.disconnect(); } catch { /* ignore */ }
+    }
+  }
 
   // Decide la siguiente pantalla según la fuente:
   //   • PitWall → RacePicker (puede haber varias carreras activas).
