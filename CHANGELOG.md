@@ -18,6 +18,13 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.2.0] — 2026-10-02
+
+### Añadido
+- **Seguimiento de rivales.** Pantalla nueva **Seguimiento** (botón en *Mi turno*, junto a *Estrategia de neumáticos*): tu equipo o piloto, marcado «Tú», y hasta 5 rivales que elijas, cada uno con una tabla por carril (**Carril · Vueltas · Rápida · Media** y fila **Total**). Solo cuentan las mangas terminadas: la manga en curso entra al cerrarse.
+- **Con PitWall Manager** (carreras por equipos, v1.37.0 o posterior): datos y lista de seguidos salen del servidor y se comparten con el Lap web del box; añade la columna **Limpia** (sin salidas). Cambiar la lista pide el PIN de 4 cifras del equipo si la carrera lo exige, y se guarda en el móvil. Se refresca al cambiar la lista, al acabar cada manga y cada minuto.
+- **Con TicTac** (nuevo y antiguo): todo se calcula y guarda en este móvil (`laneTracking.ts`), solo con **Media** (el TicTac no marca salidas). La manga se cierra con el `CONFIG` de la siguiente (TicTac nuevo), con la rotación de carriles (antiguo), al acabar el reloj de manga o tras 90 s sin vueltas; si vuelven las vueltas sin manga nueva, se reabre. El acumulado sobrevive a cerrar la app durante una hora, y la pantalla tiene **Reiniciar datos**.
+
 ## [1.1.0] — 2026-10-02
 
 ### Añadido

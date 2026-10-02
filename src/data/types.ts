@@ -271,7 +271,64 @@ export interface DataSource {
    * el histórico local.
    */
   onRaceStatsSnapshot(cb: (snapshot: RaceStatsSnapshot) => void): () => void;
+
+  /**
+   * Seguimiento de rivales: mi equipo/piloto y los que sigo, por carril, solo
+   * con mangas terminadas. PitWall (carreras por equipos) lo saca del
+   * servidor; TicTac lo calcula en el móvil. null = no disponible.
+   */
+  getTracking?(): Promise<TrackingData | null>;
+  /** Cambia la lista de seguidos (máx. `TrackingData.max`). Con PitWall puede
+   *  pedir el PIN del equipo (`error: 'pin'`). */
+  setTracked?(names: string[], pin?: string): Promise<SetTrackedResult>;
+  /** Avisa cuando conviene volver a pedir `getTracking()`. */
+  onTrackingChange?(cb: () => void): () => void;
+  /** Solo TicTac (datos locales): borra el acumulado. */
+  resetTracking?(): void;
 }
+
+/** Fila por carril del seguimiento de rivales. */
+export interface TrackingLane {
+  lane: number;
+  laps: number;
+  bestMs: number | null;
+  /** «Media»: todas las vueltas con tiempo (con salidas en PitWall). */
+  avgMs: number | null;
+  /** «Limpia»: sin salidas. Solo PitWall (el TicTac no las marca). */
+  avgCleanMs: number | null;
+}
+
+export interface TrackingTeam {
+  name: string;
+  isMe: boolean;
+  color: string | null;
+  laps: number;
+  bestMs: number | null;
+  avgMs: number | null;
+  avgCleanMs: number | null;
+  lanes: TrackingLane[];
+}
+
+export interface TrackingData {
+  /** Máximo de seguidos. */
+  max: number;
+  /** Nombres seguidos, en orden. */
+  tracked: string[];
+  /** Equipos/pilotos que se pueden seguir (sin el propio). */
+  candidates: { name: string; color: string | null }[];
+  /** El propio primero (`isMe`), luego los seguidos en su orden. */
+  teams: TrackingTeam[];
+  /** Hay columna «Limpia» (solo PitWall). */
+  hasClean: boolean;
+  /** Cambiar la lista pide el PIN del equipo (PitWall). */
+  pinRequired: boolean;
+  /** Datos calculados en este móvil (TicTac) en vez de en el servidor. */
+  local: boolean;
+}
+
+export type SetTrackedResult =
+  | { ok: true }
+  | { ok: false; error: 'pin' | 'network' | 'unavailable' };
 
 /** Snapshot del estado de una sesión de Pole Position (sólo PitWall). */
 export interface PoleSnapshot {

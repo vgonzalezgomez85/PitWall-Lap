@@ -28,7 +28,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type {
-  DataSource,
+  DataSource, SetTrackedResult, TrackingData,
   LiveState,
   Participant,
   ProjectionRow,
@@ -49,6 +49,8 @@ import {
 } from './infolapRace';
 import { loadMangaDurationMin } from './infolapSettings';
 import { openInfolapWs, type InfolapWsConnection } from '../../modules/infolapws';
+import { LaneTracker, MAX_TRACKED, buildLocalTracking } from './laneTracking';
+import { loadLocalRivals, loadTracker, saveLocalRivals, saveTracker } from './trackingStore';
 
 const SERVER_PORT = 4441;
 const CLIENT_PORT = 12543;
@@ -221,6 +223,12 @@ export class InfolapSource implements DataSource {
   /** Tiempo acumulado tras cada vuelta, por piloto (nombre normalizado):
    *  base de la clasificación local del TicTac antiguo. */
   private pilotCumMs = new Map<string, number[]>();
+  /** Seguimiento de rivales: acumulado por carril (solo mangas terminadas) y
+   *  lista de seguidos, ambos locales del móvil. */
+  private tracker = new LaneTracker();
+  private trackedNames: string[] = [];
+  private trackingListeners: (() => void)[] = [];
+  private trackerSavedAt = 0;
   /** Última clasificación oficial recibida (RIVALS_UPDATE). */
   private lastRivals: InfolapRival[] = [];
   private snapshotListeners: ((s: RaceStatsSnapshot) => void)[] = [];
@@ -277,6 +285,7 @@ export class InfolapSource implements DataSource {
     this.pilotCumMs.clear();
     this.lastRivals = [];
     this.sessionStartedAt = new Date();
+    void this.restoreTracking();
     // Reloj de manga (tiempo restante y avisos): con los dos protocolos.
     if (!this.mangaTimer) this.mangaTimer = setInterval(() => this.tickManga(), 1000);
     try {
@@ -453,6 +462,7 @@ export class InfolapSource implements DataSource {
   disconnect(): void {
     // Guardar lo corrido antes de soltar los listeners (histórico).
     if (this.active) this.emitSnapshot();
+    if (this.active) void saveTracker(this.tracker);
     this.active = false;
     this.sweeping = false;
     if (this.mangaTimer) {
@@ -478,6 +488,7 @@ export class InfolapSource implements DataSource {
     this.stateListeners = [];
     this.eventListeners = [];
     this.snapshotListeners = [];
+    this.trackingListeners = [];
     this.pilotStats.clear();
     this.pilotCumMs.clear();
     this.lastRivals = [];
@@ -874,6 +885,12 @@ export class InfolapSource implements DataSource {
     if (msg.lapTimeMs != null && msg.lapTimeMs < MIN_WSS_LAP_MS) return;  // test de transmisión
     // Tanda libre (`isRace` false): se canta, pero no cuenta para la carrera.
     if (msg.isRace && msg.lapTimeMs != null) this.raceLapsSinceConfig = true;
+    // El cruce de salida cuenta como vuelta en el seguimiento (como en el
+    // TicTac y en PitWall), pero sin tiempo. Las vueltas con tiempo entran
+    // por ingestPacket.
+    if (msg.isRace && msg.isFirstLap) {
+      this.trackLap(msg.pilotName || `Carril ${msg.laneId}`, msg.laneId, null);
+    }
     this.ingestPacket({
       sequence: msg.frame,
       lane: msg.laneId,
@@ -912,7 +929,10 @@ export class InfolapSource implements DataSource {
       return;
     }
     if (tipo !== 'misma-manga') this.emitSnapshot();   // cierra la manga (o la carrera reiniciada)
+    if (tipo === 'nueva-manga') this.closeTrackedManga();
     if (tipo === 'reinicio') {
+      this.tracker.reset();
+      this.trackingChanged();
       // Carrera reiniciada: lo corrido hasta aquí ya está guardado aparte.
       this.pilotStats.clear();
       this.pilotCumMs.clear();
@@ -1059,6 +1079,7 @@ export class InfolapSource implements DataSource {
 
   private tickManga(force = false): void {
     if (!this.active) return;
+    if (this.tracker.checkSilence()) this.trackingChanged();
     const rem = this.remainingMsNow();
     const shown = rem == null ? null : Math.ceil(rem / 1000) * 1000;
     if (force || shown !== this.currentState.remainingMs) {
@@ -1084,6 +1105,7 @@ export class InfolapSource implements DataSource {
       this.firedEnd = true;
       this.emitEvent({ type: 'race-finished' });
       this.emitSnapshot();
+      if (this.tracker.softClose()) this.trackingChanged();
     }
   }
 
@@ -1134,6 +1156,70 @@ export class InfolapSource implements DataSource {
     this.ingestRivals({ type: 'RIVALS_UPDATE', rivals });
   }
 
+  // ── Seguimiento de rivales (local) ──────────────────────────────────────
+
+  async getTracking(): Promise<TrackingData | null> {
+    return buildLocalTracking({
+      stats: this.tracker.stats(),
+      selfName: this.selectedName,
+      tracked: this.trackedNames,
+      participants: this.participants.map(p => p.name),
+    });
+  }
+
+  async setTracked(names: string[]): Promise<SetTrackedResult> {
+    this.trackedNames = names.slice(0, MAX_TRACKED);
+    await saveLocalRivals(this.trackedNames);
+    this.trackingChanged(false);
+    return { ok: true };
+  }
+
+  onTrackingChange(cb: () => void): () => void {
+    this.trackingListeners.push(cb);
+    return () => {
+      this.trackingListeners = this.trackingListeners.filter(l => l !== cb);
+    };
+  }
+
+  resetTracking(): void {
+    this.tracker.reset();
+    this.trackingChanged();
+  }
+
+  /** Recupera el acumulado guardado (si es reciente) y la lista de seguidos.
+   *  Si ya han llegado vueltas mientras tanto, gana lo nuevo. */
+  private async restoreTracking(): Promise<void> {
+    const [saved, names] = await Promise.all([loadTracker(), loadLocalRivals()]);
+    if (!this.active) return;
+    if (saved && this.tracker.lastActivityAt === 0) this.tracker = saved;
+    this.trackedNames = names;
+    this.trackingChanged(false);
+  }
+
+  private trackLap(name: string, lane: number, lapMs: number | null): void {
+    const wasIncluded = this.tracker.openIncluded;
+    this.tracker.addCrossing(name, lane, lapMs);
+    if (wasIncluded) {
+      this.trackingChanged();   // era una pausa: la manga se reabre
+    } else if (Date.now() - this.trackerSavedAt > 15_000) {
+      this.trackerSavedAt = Date.now();
+      void saveTracker(this.tracker);
+    }
+  }
+
+  private closeTrackedManga(): void {
+    if (this.tracker.closeManga()) this.trackingChanged();
+  }
+
+  /** Avisa a la pantalla y, si cambió el acumulado, lo guarda. */
+  private trackingChanged(persist = true): void {
+    if (persist) {
+      this.trackerSavedAt = Date.now();
+      void saveTracker(this.tracker);
+    }
+    for (const l of this.trackingListeners) l();
+  }
+
   // ── Común ───────────────────────────────────────────────────────────────
 
   /** `reliable`: paquete del WSS (cada vuelta llega una sola vez), sin la
@@ -1142,6 +1228,12 @@ export class InfolapSource implements DataSource {
    *  acumulado de carrera (histórico, proyección) ni en la estrategia. */
   private ingestPacket(pkt: InfolapStatePacket, reliable = false, race = true): void {
     if (pkt.driverName) {
+      // TicTac antiguo: otro piloto en un carril = manga nueva (rotación).
+      // Para el seguimiento basta con CUALQUIER carril, no solo el mío.
+      const prevName = this.laneName.get(pkt.lane);
+      if (!this.wssMode && prevName && normName(prevName) !== normName(pkt.driverName)) {
+        this.closeTrackedManga();
+      }
       this.laneName.set(pkt.lane, pkt.driverName);
 
       // Mi piloto ha aparecido en otro carril → rotación de carriles
@@ -1203,6 +1295,7 @@ export class InfolapSource implements DataSource {
     if (race) {
       const pilot = pkt.driverName || this.laneName.get(pkt.lane) || `Carril ${pkt.lane}`;
       this.recordPilotLap(pilot, pkt.lastLapMs);
+      this.trackLap(pilot, pkt.lane, pkt.lastLapMs);
       this.emitEvent({
         type: 'entity-lap',
         lane: pkt.lane,

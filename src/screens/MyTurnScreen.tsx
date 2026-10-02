@@ -71,6 +71,11 @@ export default function MyTurnScreen(_props: Props) {
   const isTicTacLive = raceInfo?.source === 'infolap' && (raceInfo.capabilities.positions ?? false);
   const fullData = isPitWall || isTicTacLive;
   const isTraining = raceInfo?.mode === 'training';
+  // Seguimiento de rivales: TicTac (local) y carreras por equipos de PitWall.
+  const trackingAvailable = !isTraining && !!source?.getTracking && (
+    raceInfo?.source === 'infolap'
+    || (isPitWall && raceInfo?.format === 'team' && (raceInfo.mode ?? 'race') === 'race')
+  );
 
   // Grabación de stints (solo modo entrenamiento).
   const recorder = useStintRecorder();
@@ -173,6 +178,7 @@ export default function MyTurnScreen(_props: Props) {
         {fullData && !isTraining && (
           <>
             {strategyAvailable && <StrategyButton navigation={navigation} pendingCount={pendingCount} />}
+            {trackingAvailable && <TrackingButton navigation={navigation} />}
             {isTicTacLive && <MangaDurationControl />}
             <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
           </>
@@ -256,6 +262,7 @@ export default function MyTurnScreen(_props: Props) {
       {strategyAvailable && !isTraining && (
         <StrategyButton navigation={navigation} pendingCount={pendingCount} />
       )}
+      {trackingAvailable && <TrackingButton navigation={navigation} />}
 
       {isTicTacLive && <MangaDurationControl />}
 
@@ -414,6 +421,17 @@ function StrategyButton({ navigation, pendingCount }: {
       <Text style={styles.strategyBtnText}>
         Estrategia de neumáticos{pendingCount > 0 ? ` · ${pendingCount} ●` : ''} →
       </Text>
+    </Pressable>
+  );
+}
+
+// Acceso al seguimiento de rivales por carril (junto al de estrategia).
+function TrackingButton({ navigation }: {
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+}) {
+  return (
+    <Pressable style={styles.strategyBtn} onPress={() => navigation.push('Tracking')}>
+      <Text style={styles.strategyBtnText}>Seguimiento de rivales →</Text>
     </Pressable>
   );
 }

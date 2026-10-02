@@ -100,12 +100,14 @@ src/
 │   ├── sourceContext.tsx       Context React con la fuente activa
 │   ├── historyStore.ts         Persistencia local de carreras (AsyncStorage)
 │   ├── trainingStore.ts        Persistencia local de stints de entreno
+│   ├── laneTracking.ts         Seguimiento de rivales por carril (TicTac, en el móvil)
+│   ├── trackingStore.ts        Persistencia del seguimiento (acumulado, rivales, PIN)
 │   ├── changelog.ts            Parser del historial de versiones
 │   ├── appVersion.ts           Versión de la app (expo-constants + fallback)
 │   └── useAutoSaveHistory.ts · useStintRecorder.ts · excelCache.ts · migrateStorage.ts
 ├── generated/                  changelog.ts embebido (generado por scripts/sync-changelog.js)
 ├── screens/                    Pantallas: Discovery → RacePicker → TandaPicker →
-│                               Select → MyTurn → Strategy; Pole; Training; History;
+│                               Select → MyTurn → Strategy / Tracking; Pole; Training; History;
 │                               Changelog (Novedades)
 ├── strategy/                   Estrategia de goma (Fases 1–3) + control del servidor
 ├── voice/                      TTS (nativo + fallback), toggles y motor de eventos

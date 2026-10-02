@@ -18,6 +18,7 @@ import PoleScreen          from './src/screens/PoleScreen';
 import SelectScreen      from './src/screens/SelectScreen';
 import MyTurnScreen      from './src/screens/MyTurnScreen';
 import StrategyScreen    from './src/screens/StrategyScreen';
+import TrackingScreen    from './src/screens/TrackingScreen';
 import HistoryScreen     from './src/screens/HistoryScreen';
 import HistoryDetailScreen from './src/screens/HistoryDetailScreen';
 import ChangelogScreen from './src/screens/ChangelogScreen';
@@ -49,6 +50,7 @@ function AppInner() {
         <Stack.Screen name="Select"        component={SelectScreen} />
         <Stack.Screen name="MyTurn"        component={MyTurnScreen} />
         <Stack.Screen name="Strategy"      component={StrategyScreen} />
+        <Stack.Screen name="Tracking"      component={TrackingScreen} />
         <Stack.Screen name="History"       component={HistoryScreen} />
         <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
         <Stack.Screen name="Changelog"     component={ChangelogScreen} />

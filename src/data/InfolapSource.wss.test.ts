@@ -239,6 +239,30 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     expect(snaps[1]!.raceId).not.toBe(snaps[0]!.raceId);   // carrera nueva en el histórico
   });
 
+  it('seguimiento de rivales: solo mangas cerradas por CONFIG de manga nueva', async () => {
+    const { src, conn } = await connectNew();
+    src.selectParticipant('#001');
+    let avisos = 0;
+    src.onTrackingChange(() => { avisos++; });
+    conn.h.onMessage('{"type":"CONFIG","mangaPilots":[{"laneId":1,"name":"Piloto 1"},{"laneId":2,"name":"Piloto 2"}]}');
+    conn.h.onMessage(lap(1, 1, 'Piloto 1', 0));      // salida: cuenta sin tiempo
+    conn.h.onMessage(lap(2, 1, 'Piloto 1', 3.0));
+    conn.h.onMessage(lap(3, 2, 'Piloto 2', 3.2));
+    let d = (await src.getTracking())!;
+    expect(d.teams[0]).toMatchObject({ name: 'Piloto 1', isMe: true, laps: 0 });
+
+    conn.h.onMessage('{"type":"CONFIG","mangaPilots":[{"laneId":1,"name":"Piloto 2"},{"laneId":2,"name":"Piloto 1"}]}');
+    expect(avisos).toBeGreaterThan(0);
+    await src.setTracked(['Piloto 2']);
+    d = (await src.getTracking())!;
+    expect(d.teams.map(t => [t.name, t.laps, t.avgMs])).toEqual([['Piloto 1', 2, 3000], ['Piloto 2', 1, 3200]]);
+    expect(d.teams[0]!.lanes).toEqual([{ lane: 1, laps: 2, bestMs: 3000, avgMs: 3000, avgCleanMs: null }]);
+
+    src.resetTracking();
+    expect((await src.getTracking())!.teams[0]!.laps).toBe(0);
+    src.disconnect();
+  });
+
   it('TicTac antiguo: si el WSS falla sigue con UDP y calcula la clasificación', async () => {
     udp.handlers = {}; ws.opened = [];
     const src = new InfolapSource();
@@ -274,6 +298,12 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     expect(state.behindName).toBe('Piloto 1');
     expect(state.gapBehindMs).toBe(310);
     expect(events).toContainEqual({ type: 'position-changed', from: 2, to: 1 });
+
+    // Rotación de carriles (otro piloto en el carril 1) → manga cerrada.
+    expect((await src.getTracking())!.teams[0]!.laps).toBe(0);
+    send(4, 1, 'Piloto 2', 3300);
+    const d = (await src.getTracking())!;
+    expect(d.teams[0]).toMatchObject({ name: 'Piloto 2', laps: 3, bestMs: 2900 });
     src.disconnect();
   });
 });

@@ -12,6 +12,7 @@ export type RootStackParamList = {
   Select: { tandaNum?: number } | undefined;
   MyTurn: undefined;
   Strategy: undefined;
+  Tracking: undefined;
   History: undefined;
   HistoryDetail: { raceId: number | string };
   Changelog: undefined;

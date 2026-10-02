@@ -24,8 +24,10 @@ import type {
   ProjectionRow,
   RaceInfo,
   RaceStatsSnapshot,
+  SetTrackedResult,
   SourceEvent,
   TireControlState,
+  TrackingData,
 } from './types';
 import { SLOTTIME_CAPABILITIES, emptyLiveState } from './types';
 
@@ -97,6 +99,26 @@ interface RaceCurrentResponse {
   participants: (ParticipantPlan & { id: number | string })[];
 }
 
+// GET/POST /api/mobile/races/:id/tracking (PitWall Manager ≥ v1.37.0)
+interface TrackingStats {
+  laps: number;
+  bestMs: number | null;
+  avgAllMs: number | null;
+  avgCleanMs: number | null;
+}
+interface TrackingResponse {
+  max: number;
+  tracked: string[];
+  candidates: { name: string; color: string | null }[];
+  teams: (TrackingStats & {
+    name: string;
+    isMe: boolean;
+    color: string | null;
+    lanes: (TrackingStats & { lane: number })[];
+  })[];
+  pinRequired: boolean;
+}
+
 // GET /api/mobile/races/:id/tires
 interface TiresResponse {
   raceId: number;
@@ -140,6 +162,9 @@ export class PitWallSource implements DataSource {
    *  currentState desde cero (p. ej. al seleccionar piloto) y lo borrarían. */
   private tireControlState: TireControlState | null = null;
   private currentMangaNum: number | null = null;
+  private raceFormat: 'team' | 'individual' | null = null;
+  private trackingListeners: (() => void)[] = [];
+  private trackingTimer: ReturnType<typeof setTimeout> | null = null;
   /** Tanda de la manga activa. La numeración de manga es POR TANDA (tanda 2
    *  vuelve a manga 1), así que hace falta la tanda para identificar la manga. */
   private currentTandaNum: number | null = null;
@@ -215,6 +240,7 @@ export class PitWallSource implements DataSource {
     this.currentTandaNum = data.activeManga?.tandaNum ?? null;
     this.baseUrl = baseUrl;
     this.resolvedRaceId = data.race.id;
+    this.raceFormat = data.race.format;
     this.currentState = {
       ...emptyLiveState(),
       currentMangaNum: this.currentMangaNum,
@@ -287,6 +313,11 @@ export class PitWallSource implements DataSource {
       clearInterval(this.polePollTimer);
       this.polePollTimer = null;
     }
+    if (this.trackingTimer) {
+      clearTimeout(this.trackingTimer);
+      this.trackingTimer = null;
+    }
+    this.trackingListeners = [];
     this.stateListeners = [];
     this.eventListeners = [];
     this.snapshotListeners = [];
@@ -553,6 +584,13 @@ export class PitWallSource implements DataSource {
 
     socket.on('manga:stopped', (payload: { nextMangaId: number | null; nextLanes?: unknown }) => {
       this.emitEvent({ type: 'race-finished' });
+      // La manga terminada entra ya en el seguimiento. Con retardo aleatorio
+      // para que no lleguen todos los móviles a la vez.
+      if (this.trackingTimer) clearTimeout(this.trackingTimer);
+      this.trackingTimer = setTimeout(() => {
+        this.trackingTimer = null;
+        this.notifyTracking();
+      }, 1500 + Math.random() * 3000);
       // Si hay próxima manga, recalculamos cuál es mi carril ahora.
       if (this.selectedId && payload?.nextMangaId != null) {
         // El servidor expone el nuevo manga via subsiguiente standings; aquí
@@ -589,6 +627,13 @@ export class PitWallSource implements DataSource {
     socket.on('tires:changed', (p: { raceId?: number }) => {
       if (p?.raceId != null && this.resolvedRaceId != null && p.raceId !== this.resolvedRaceId) return;
       void this.fetchTires();
+    });
+
+    // Alguien de mi equipo (aquí o en el Lap web) cambió la lista de seguidos.
+    socket.on('lap:tracking', (p: { raceId?: number; teamName?: string }) => {
+      if (p?.raceId != null && p.raceId !== this.resolvedRaceId) return;
+      if (p?.teamName && p.teamName !== this.selectedTeamName()) return;
+      this.notifyTracking();
     });
 
     socket.on('race:stats-snapshot', (snap: RaceStatsSnapshot) => {
@@ -951,6 +996,87 @@ export class PitWallSource implements DataSource {
   private emitEvent(e: SourceEvent): void {
     for (const l of this.eventListeners) l(e);
   }
+
+  // ── Seguimiento de rivales (servidor) ───────────────────────────────────
+
+  private trackingUrl(): string | null {
+    if (this.mode !== 'race' || this.raceFormat !== 'team') return null;
+    if (!this.baseUrl || this.resolvedRaceId == null || !this.selectedId) return null;
+    return `${this.baseUrl}/api/mobile/races/${this.resolvedRaceId}/tracking`;
+  }
+
+  private selectedTeamName(): string | null {
+    return this.participants.find(p => p.id === this.selectedId)?.name ?? null;
+  }
+
+  /** null = no aplica (no es carrera por equipos o servidor sin endpoint).
+   *  Lanza si falla la red, para que la pantalla conserve lo que tenía. */
+  async getTracking(): Promise<TrackingData | null> {
+    const url = this.trackingUrl();
+    if (!url) return null;
+    const res = await fetch(`${url}?team=${encodeURIComponent(this.selectedId!)}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`tracking-${res.status}`);
+    return mapTracking(await res.json());
+  }
+
+  async setTracked(names: string[], pin?: string): Promise<SetTrackedResult> {
+    const url = this.trackingUrl();
+    if (!url) return { ok: false, error: 'unavailable' };
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ team: Number(this.selectedId), names, pin: pin ?? '' }),
+      });
+      if (res.status === 403) return { ok: false, error: 'pin' };
+      if (res.status === 404) return { ok: false, error: 'unavailable' };
+      if (!res.ok) return { ok: false, error: 'network' };
+      this.notifyTracking();
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'network' };
+    }
+  }
+
+  onTrackingChange(cb: () => void): () => void {
+    this.trackingListeners.push(cb);
+    return () => {
+      this.trackingListeners = this.trackingListeners.filter(l => l !== cb);
+    };
+  }
+
+  private notifyTracking(): void {
+    for (const l of this.trackingListeners) l();
+  }
+}
+
+/** Respuesta del Manager → contrato común (avgAllMs = «Media», avgCleanMs = «Limpia»). */
+export function mapTracking(d: TrackingResponse): TrackingData {
+  return {
+    max: d.max ?? 5,
+    tracked: d.tracked ?? [],
+    candidates: (d.candidates ?? []).map(c => ({ name: c.name, color: c.color ?? null })),
+    teams: (d.teams ?? []).map(t => ({
+      name: t.name,
+      isMe: t.isMe,
+      color: t.color ?? null,
+      laps: t.laps ?? 0,
+      bestMs: t.bestMs ?? null,
+      avgMs: t.avgAllMs ?? null,
+      avgCleanMs: t.avgCleanMs ?? null,
+      lanes: (t.lanes ?? []).map(l => ({
+        lane: l.lane,
+        laps: l.laps ?? 0,
+        bestMs: l.bestMs ?? null,
+        avgMs: l.avgAllMs ?? null,
+        avgCleanMs: l.avgCleanMs ?? null,
+      })),
+    })),
+    hasClean: true,
+    pinRequired: d.pinRequired === true,
+    local: false,
+  };
 }
 
 // Para silenciar tsc sobre `Participant` no usado en este archivo (lo
