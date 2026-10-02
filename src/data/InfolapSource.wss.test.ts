@@ -179,6 +179,54 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     src.disconnect();
   });
 
+  it('secuencia real: tanda libre, CONFIG duplicado y carrera reiniciada', async () => {
+    const { src, conn } = await connectNew();
+    let state!: LiveState;
+    const events: SourceEvent[] = [];
+    const snaps: { raceId: string; standings: { name: string }[] }[] = [];
+    src.onStateChange(s => { state = s; });
+    src.onEvent(e => events.push(e));
+    src.onRaceStatsSnapshot(s => snaps.push(s as never));
+    src.selectParticipant('#002');
+
+    // Tanda libre: carriles sin piloto, isRace false, sin CONFIG.
+    const libre = (frame: number, lane: number, sec: number) =>
+      `{"type":"LAP","frame":${frame},"laneId":${lane},"pilotName":"Carril ${lane}","lapTime":${sec},"isFastLap":false,"position":0,"isRace":false,"isFirstLap":false}`;
+    conn.h.onMessage(libre(53, 1, 16.0));
+    conn.h.onMessage(libre(54, 2, 17.1));
+    conn.h.onMessage(libre(55, 1, 15.4));
+    expect(events.filter(e => e.type === 'entity-lap')).toHaveLength(0);
+
+    // El TicTac manda RIVALS + CONFIG dos veces al arrancar la carrera.
+    const rivals = '{"type":"RIVALS_UPDATE","rivals":[{"position":1,"name":"Piloto 1","vme":0.0,"isRacing":true,"laneId":1,"gap":null},{"position":2,"name":"Piloto 2","vme":0.0,"isRacing":true,"laneId":2,"gap":null}]}';
+    const config = '{"type":"CONFIG","mangaPilots":[{"laneId":1,"name":"Piloto 1"},{"laneId":2,"name":"Piloto 2"}],"rivals":[]}';
+    conn.h.onMessage(rivals); conn.h.onMessage(config);
+    conn.h.onMessage(rivals); conn.h.onMessage(config);
+    expect(events.filter(e => e.type === 'race-started')).toHaveLength(1);
+    expect(events.filter(e => e.type === 'manga-changed')).toEqual([{ type: 'manga-changed', newMangaNum: 1, newLane: 2 }]);
+    expect(state.currentMangaNum).toBe(1);
+    expect(snaps).toHaveLength(0);   // la tanda libre no va al histórico
+
+    conn.h.onMessage(lap(111, 2, 'Piloto 2', 0));
+    conn.h.onMessage(lap(112, 1, 'Piloto 1', 16.2));
+    conn.h.onMessage(lap(113, 2, 'Piloto 2', 16.5));
+    expect(state.lapCount).toBe(1);
+    expect(events.filter(e => e.type === 'entity-lap')).toHaveLength(2);
+
+    // Reinicio: clasificación a cero y CONFIG con los mismos carriles.
+    conn.h.onMessage(rivals); conn.h.onMessage(config);
+    expect(snaps).toHaveLength(1);
+    expect(snaps[0]!.standings.map(x => x.name).sort()).toEqual(['Piloto 1', 'Piloto 2']);
+    expect(state.currentMangaNum).toBe(1);
+    expect(state.lapCount).toBe(0);
+    expect(events.filter(e => e.type === 'race-started')).toHaveLength(2);
+
+    conn.h.onMessage(lap(120, 2, 'Piloto 2', 16.0));
+    src.disconnect();
+    expect(snaps).toHaveLength(2);
+    expect(snaps[1]!.raceId).not.toBe(snaps[0]!.raceId);   // carrera nueva en el histórico
+  });
+
   it('TicTac antiguo: si el WSS falla sigue con UDP', async () => {
     udp.handlers = {}; ws.opened = [];
     const src = new InfolapSource();

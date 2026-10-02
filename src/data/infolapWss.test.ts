@@ -1,4 +1,6 @@
-import { parseWsMessage, standingForLane, type InfolapRival } from './infolapWss';
+import {
+  claveConfig, clasificarConfig, parseWsMessage, standingForLane, type InfolapRival,
+} from './infolapWss';
 
 // Mensajes reales capturados del TICTAC_Slot nuevo (carrera con simulador).
 const CONFIG = '{"type":"CONFIG","minAppVersionCode":1,"minAppVersion":"1.0","mangaPilots":[{"laneId":1,"name":"Piloto 1"},{"laneId":2,"name":"Piloto 2"},{"laneId":3,"name":"Piloto 3"},{"laneId":4,"name":"Carril 4"},{"laneId":5,"name":"Carril 5"},{"laneId":6,"name":"Carril 6"}],"rivals":[]}';
@@ -72,5 +74,35 @@ describe('standingForLane', () => {
 
   it('carril que no está en la clasificación → null', () => {
     expect(standingForLane(rivals(RIVALS), 5)).toBeNull();
+  });
+});
+
+describe('clasificarConfig', () => {
+  const a = claveConfig([{ laneId: 2, name: 'Piloto 2' }, { laneId: 1, name: 'piloto 1' }]);
+  const rotada = claveConfig([{ laneId: 1, name: 'Piloto 2' }, { laneId: 2, name: 'Piloto 1' }]);
+
+  it('la huella no depende del orden ni de mayúsculas', () => {
+    expect(claveConfig([{ laneId: 1, name: 'Piloto 1 ' }, { laneId: 2, name: 'PILOTO 2' }])).toBe(a);
+  });
+
+  it('distingue primer CONFIG, duplicado, reinicio y nueva manga', () => {
+    expect(clasificarConfig({ claveAnterior: null, clave: a, vueltasCarrera: false })).toBe('misma-manga');
+    expect(clasificarConfig({ claveAnterior: null, clave: a, vueltasCarrera: true })).toBe('nueva-manga');
+    expect(clasificarConfig({ claveAnterior: a, clave: a, vueltasCarrera: false })).toBe('duplicado');
+    expect(clasificarConfig({ claveAnterior: a, clave: a, vueltasCarrera: true })).toBe('reinicio');
+    expect(clasificarConfig({ claveAnterior: a, clave: rotada, vueltasCarrera: true })).toBe('nueva-manga');
+    expect(clasificarConfig({ claveAnterior: a, clave: rotada, vueltasCarrera: false })).toBe('misma-manga');
+  });
+});
+
+describe('parseWsMessage — capturas de la demo (oct 2026)', () => {
+  it('tanda libre: isRace false y sin posición', () => {
+    const m = parseWsMessage('{"type":"LAP","frame":95,"laneId":6,"pilotName":"Carril 6","lapTime":16.0005,"isFastLap":false,"position":0,"isRace":false,"isFirstLap":false}');
+    expect(m).toMatchObject({ type: 'LAP', isRace: false, position: null, lapTimeMs: 16000 });
+  });
+
+  it('CONFIG con la parrilla en rivals', () => {
+    const m = parseWsMessage('{"type":"CONFIG","minAppVersionCode":1,"minAppVersion":"1.0","mangaPilots":[{"laneId":1,"name":"piloto 1"}],"rivals":[{"position":1,"name":"piloto 1","vme":0.0,"isRacing":true,"laneId":1,"gap":null}]}');
+    expect(m).toEqual({ type: 'CONFIG', pilots: [{ laneId: 1, name: 'piloto 1' }] });
   });
 });

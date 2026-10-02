@@ -18,6 +18,13 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.0.3] — 2026-10-02
+
+### Corregido
+- **TicTac nuevo: las vueltas de tanda libre se mezclaban con la carrera.** Aparecían pilotos falsos ("Carril 1"…) en la proyección y el histórico, y la carrera empezaba anunciada como manga 2 o 3. Ahora se usa el campo `isRace` del TicTac: en tanda libre las vueltas se siguen cantando, pero no cuentan para la carrera.
+- **TicTac nuevo: el `CONFIG` duplicado al arrancar contaba como una manga más.** Ahora se ignora (solo reajusta el reloj de manga al momento real de la salida).
+- **TicTac nuevo: una carrera reiniciada se sumaba como manga nueva.** Si llega un `CONFIG` con los mismos pilotos en los mismos carriles tras haber corrido, se guarda lo corrido y la carrera empieza de cero como una nueva en el histórico.
+
 ## [1.0.2] — 2026-10-02
 
 ### Corregido

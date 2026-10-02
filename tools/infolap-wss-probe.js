@@ -9,12 +9,15 @@
 // Uso:
 //   node tools/infolap-wss-probe.js <ip-del-pc> [segundos]
 //   (y pulsa "Test de transmisión de datos" en el TicTac o arranca carrera)
+//   segundos = 0 → graba hasta Ctrl+C. Para analizarlo luego:
+//   node tools/infolap-wss-probe.js <ip> 0 | tee captura.log
+//   node tools/infolap-wss-analyze.js captura.log
 
 const tls = require('tls');
 const crypto = require('crypto');
 
 const HOST = process.argv[2] || '192.168.10.144';
-const DURATION_S = Number(process.argv[3]) || 120;
+const DURATION_S = process.argv[3] != null ? Number(process.argv[3]) : 120;
 const PORT = 12543;
 
 const t0 = Date.now();
@@ -75,4 +78,4 @@ sock.on('data', (d) => {
 
 sock.on('error', (e) => console.log(`${ts()} error: ${e.message}`));
 sock.on('close', () => { console.log(`${ts()} cerrado`); process.exit(0); });
-setTimeout(() => process.exit(0), DURATION_S * 1000);
+if (DURATION_S > 0) setTimeout(() => process.exit(0), DURATION_S * 1000);

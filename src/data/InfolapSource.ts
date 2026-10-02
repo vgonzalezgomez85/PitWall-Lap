@@ -38,7 +38,7 @@ import type {
 import { INFOLAP_CAPABILITIES, INFOLAP_WSS_CAPABILITIES, emptyLiveState } from './types';
 import { decodeLapField } from './infolapDecode';
 import {
-  INFOLAP_WSS_PORT, parseWsMessage, standingForLane, standingOf,
+  INFOLAP_WSS_PORT, claveConfig, clasificarConfig, parseWsMessage, standingForLane, standingOf,
   type InfolapConfigMessage, type InfolapLapMessage, type InfolapRival,
   type InfolapRivalsMessage, type InfolapStanding,
 } from './infolapWss';
@@ -201,6 +201,11 @@ export class InfolapSource implements DataSource {
   private active = false;
   /** Ya llegó algún CONFIG (inicio de manga) en esta sesión. */
   private configSeen = false;
+  /** Huella (`claveConfig`) del último CONFIG, para detectar duplicados y
+   *  reinicios de carrera. */
+  private lastConfigKey: string | null = null;
+  /** Hubo vueltas cronometradas de carrera (`isRace`) desde el último CONFIG. */
+  private raceLapsSinceConfig = false;
   /** Duración de manga configurada en la app (el TicTac no la manda). */
   private mangaDurationMs: number | null = null;
   /** Date.now() del CONFIG de la manga en curso (null = no la vimos empezar). */
@@ -261,6 +266,8 @@ export class InfolapSource implements DataSource {
     this.active = true;
     this.wssMode = false;
     this.configSeen = false;
+    this.lastConfigKey = null;
+    this.raceLapsSinceConfig = false;
     this.mangaStartAt = null;
     this.pilotStats.clear();
     this.lastRivals = [];
@@ -466,6 +473,8 @@ export class InfolapSource implements DataSource {
     this.snapshotListeners = [];
     this.pilotStats.clear();
     this.lastRivals = [];
+    this.lastConfigKey = null;
+    this.raceLapsSinceConfig = false;
     this.mangaStartAt = null;
     this.laneLastMs.clear();
     this.laneLastSeq.clear();
@@ -849,6 +858,8 @@ export class InfolapSource implements DataSource {
 
   private ingestWsLap(msg: InfolapLapMessage): void {
     if (msg.lapTimeMs != null && msg.lapTimeMs < MIN_WSS_LAP_MS) return;  // test de transmisión
+    // Tanda libre (`isRace` false): se canta, pero no cuenta para la carrera.
+    if (msg.isRace && msg.lapTimeMs != null) this.raceLapsSinceConfig = true;
     this.ingestPacket({
       sequence: msg.frame,
       lane: msg.laneId,
@@ -856,8 +867,8 @@ export class InfolapSource implements DataSource {
       lastLapMs: msg.lapTimeMs,
       isNewLap: true,
       laneCode: msg.laneId,
-    }, true);
-    if (msg.laneId === this.selectedLane && msg.position != null) {
+    }, true, msg.isRace);
+    if (msg.isRace && msg.laneId === this.selectedLane && msg.position != null) {
       this.applyStanding({
         position: msg.position,
         total: null,
@@ -872,11 +883,33 @@ export class InfolapSource implements DataSource {
   /** CONFIG = empieza una manga: pilotos por carril (ya rotados). */
   private ingestConfig(msg: InfolapConfigMessage): void {
     if (msg.pilots.length === 0) return;
-    const anyLaps = [...this.laneLapCount.values()].some(n => n > 0);
-    if (anyLaps) this.emitSnapshot();   // cierra la manga anterior en el histórico
-    if (this.configSeen || anyLaps) this.mangaCount += 1;
-    const first = !this.configSeen;
+    const clave = claveConfig(msg.pilots);
+    const tipo = clasificarConfig({
+      claveAnterior: this.lastConfigKey,
+      clave,
+      vueltasCarrera: this.raceLapsSinceConfig,
+    });
+    this.lastConfigKey = clave;
+    if (tipo === 'duplicado') {
+      // El TicTac repite el CONFIG al arrancar: la carrera empieza ahora.
+      this.mangaStartAt = Date.now();
+      this.armMangaFlags();
+      this.tickManga(true);
+      return;
+    }
+    if (tipo !== 'misma-manga') this.emitSnapshot();   // cierra la manga (o la carrera reiniciada)
+    if (tipo === 'reinicio') {
+      // Carrera reiniciada: lo corrido hasta aquí ya está guardado aparte.
+      this.pilotStats.clear();
+      this.lastRivals = [];
+      this.sessionStartedAt = new Date();
+      this.mangaCount = 1;
+    } else if (tipo === 'nueva-manga') {
+      this.mangaCount += 1;
+    }
+    const first = !this.configSeen || tipo === 'reinicio';
     this.configSeen = true;
+    this.raceLapsSinceConfig = false;
     this.mangaStartAt = Date.now();
     this.armMangaFlags();
     if (first) this.emitEvent({ type: 'race-started' });
@@ -1074,8 +1107,10 @@ export class InfolapSource implements DataSource {
   // ── Común ───────────────────────────────────────────────────────────────
 
   /** `reliable`: paquete del WSS (cada vuelta llega una sola vez), sin la
-   *  red de seguridad contra retransmisiones UDP tardías. */
-  private ingestPacket(pkt: InfolapStatePacket, reliable = false): void {
+   *  red de seguridad contra retransmisiones UDP tardías. `race`: false en
+   *  tanda libre del TicTac nuevo → la vuelta se canta, pero no entra en el
+   *  acumulado de carrera (histórico, proyección) ni en la estrategia. */
+  private ingestPacket(pkt: InfolapStatePacket, reliable = false, race = true): void {
     if (pkt.driverName) {
       this.laneName.set(pkt.lane, pkt.driverName);
 
@@ -1128,15 +1163,17 @@ export class InfolapSource implements DataSource {
     this.laneSumMs.set(pkt.lane, (this.laneSumMs.get(pkt.lane) ?? 0) + pkt.lastLapMs);
 
     // Vuelta de CUALQUIER piloto → acumulado de carrera y estrategia de rivales.
-    const pilot = pkt.driverName || this.laneName.get(pkt.lane) || `Carril ${pkt.lane}`;
-    this.recordPilotLap(pilot, pkt.lastLapMs);
-    this.emitEvent({
-      type: 'entity-lap',
-      lane: pkt.lane,
-      name: pilot,
-      lapTimeMs: pkt.lastLapMs,
-      lapNumber: newCount,
-    });
+    if (race) {
+      const pilot = pkt.driverName || this.laneName.get(pkt.lane) || `Carril ${pkt.lane}`;
+      this.recordPilotLap(pilot, pkt.lastLapMs);
+      this.emitEvent({
+        type: 'entity-lap',
+        lane: pkt.lane,
+        name: pilot,
+        lapTimeMs: pkt.lastLapMs,
+        lapNumber: newCount,
+      });
+    }
 
     if (this.selectedLane === pkt.lane) {
       const best = this.currentState.bestLapMs;

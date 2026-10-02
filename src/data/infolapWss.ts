@@ -9,19 +9,29 @@
 // Mensajes capturados (tiempos y gaps en SEGUNDOS con decimales):
 //   • CONFIG — al empezar cada manga (no se repite al conectar a mitad):
 //       {"type":"CONFIG","minAppVersionCode":1,"minAppVersion":"1.0",
-//        "mangaPilots":[{"laneId":1,"name":"Piloto 1"},…],"rivals":[]}
-//     Incluye todos los carriles; los libres llevan "Carril N".
+//        "mangaPilots":[{"laneId":1,"name":"Piloto 1"},…],"rivals":[…]}
+//     Incluye todos los carriles; los libres llevan "Carril N". `rivals` es
+//     la parrilla (a veces vacía). Al arrancar una carrera llega DOS veces
+//     seguidas, sin vueltas entre medias; y si se reinicia la carrera llega
+//     otra vez con los mismos pilotos en los mismos carriles (una manga
+//     nueva, en cambio, los rota). Ver `clasificarConfig`.
 //   • LAP — cada cruce de meta (y 100 vueltas falsas con "Test de transmisión"):
 //       {"type":"LAP","frame":105,"laneId":2,"pilotName":"Piloto 2",
 //        "lapTime":2.9400,"isFastLap":true,"position":2,"isRace":true,
 //        "isFirstLap":false,"pilotAheadName":"Piloto 1","pilotAheadVme":3.9334,
 //        "gapAhead":0.9274,"pilotBehindName":"Piloto 3","pilotBehindVme":0.0}
-//     `frame` es un contador global. `isFirstLap` = cruce de salida (lapTime 0).
-//     `gapAhead`/`gapBehind` solo vienen cuando se conocen.
-//   • RIVALS_UPDATE — tras cada vuelta, clasificación completa:
+//     `frame` es un contador global de la sesión del TicTac (no se reinicia
+//     entre tandas). `isFirstLap` = cruce de salida (lapTime 0).
+//     `isRace` = false en tanda libre (sin CONFIG, carriles "Carril N",
+//     position 0); true en carrera. `isFastLap` = mejor vuelta PERSONAL de
+//     la carrera (la primera cronometrada siempre lo es; no es la mejor de
+//     todos). `gapAhead`/`gapBehind` solo vienen cuando se conocen.
+//   • RIVALS_UPDATE — clasificación completa; llega justo ANTES de cada LAP
+//     y de cada CONFIG (mismo milisegundo):
 //       {"type":"RIVALS_UPDATE","rivals":[{"position":1,"name":"Piloto 1",
 //        "vme":3.9334,"isRacing":true,"laneId":1,"gap":0.0},…]}
-//     `gap` = distancia en tiempo al líder (null hasta que se conoce).
+//     `gap` = distancia en tiempo al líder (null hasta que se conoce: en cada
+//     salida llegan todos a null, no indica reinicio).
 //     `vme` = tiempo total / vueltas (incluye el tramo de salida); 0 = sin datos.
 
 export const INFOLAP_WSS_PORT = 12543;
@@ -183,4 +193,35 @@ export function standingOf(rivals: InfolapRival[], match: (r: InfolapRival) => b
     behindName: behind?.name ?? null,
     behindGapMs: diff(behind?.gapMs, me.gapMs),
   };
+}
+
+/** Qué supone un CONFIG respecto al anterior:
+ *  - `duplicado`: mismos pilotos y ninguna vuelta de carrera desde el último
+ *    (el TicTac lo manda dos veces al arrancar). Solo reajusta el reloj.
+ *  - `reinicio`: mismos pilotos en los mismos carriles tras vueltas de
+ *    carrera → se ha reiniciado la carrera; empieza de cero.
+ *  - `nueva-manga`: hubo vueltas de carrera y los pilotos han cambiado de
+ *    carril (o es el primer CONFIG tras conectar a mitad de manga).
+ *  - `misma-manga`: primer CONFIG, o pilotos cambiados antes de correr. */
+export type TipoConfig = 'duplicado' | 'reinicio' | 'nueva-manga' | 'misma-manga';
+
+/** Huella de la asignación de pilotos a carriles de un CONFIG. */
+export function claveConfig(pilots: InfolapConfigMessage['pilots']): string {
+  return [...pilots]
+    .sort((a, b) => a.laneId - b.laneId)
+    .map(p => `${p.laneId}:${p.name.trim().toLowerCase()}`)
+    .join('|');
+}
+
+export function clasificarConfig(args: {
+  /** Huella del CONFIG anterior en esta sesión (null = no hubo). */
+  claveAnterior: string | null;
+  clave: string;
+  /** ¿Ha habido vueltas cronometradas de carrera desde el CONFIG anterior
+   *  (o desde que conectamos, si no hubo)? */
+  vueltasCarrera: boolean;
+}): TipoConfig {
+  const { claveAnterior, clave, vueltasCarrera } = args;
+  if (claveAnterior === clave) return vueltasCarrera ? 'reinicio' : 'duplicado';
+  return vueltasCarrera ? 'nueva-manga' : 'misma-manga';
 }
