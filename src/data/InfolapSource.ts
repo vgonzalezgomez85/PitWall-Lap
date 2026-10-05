@@ -1057,7 +1057,9 @@ export class InfolapSource implements DataSource {
         });
       }
     }
-    this.currentState = { ...this.currentState, projection, projectedTotal, avgToCatchMs };
+    const miMedia = name ? statsAvgMs(this.pilotStats.get(normName(name))) : null;
+    const raceAvgLapMs = miMedia != null ? Math.round(miMedia) : null;
+    this.currentState = { ...this.currentState, projection, projectedTotal, avgToCatchMs, raceAvgLapMs };
   }
 
   // ── Reloj de manga (duración configurada por el usuario) ────────────────

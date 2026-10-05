@@ -4,7 +4,6 @@
 // Reglas:
 //   • Solo habla si el piloto está en su turno (state.status === 'my-turn').
 //   • Si el master `enabled` está off, silencio total.
-//   • Modo Infolap (capabilities.lapTimes only): sólo dispara "lap-completed".
 //   • En descanso → silencio + un único aviso al volver a "my-turn" con la
 //     próxima manga (lo dispara el evento 'manga-changed').
 //
@@ -17,6 +16,7 @@ import { AppState } from 'react-native';
 import { useDataSource, useSourceEvent } from '../data/sourceContext';
 import { speak, speakTime, shutUp } from './speak';
 import { useVoiceSettings, type VoiceSettings } from './settings';
+import { cuentaParaMedia, mediaAnunciable } from './avisos';
 
 export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSettings) => void; update: (p: Partial<VoiceSettings>) => void; ready: boolean } {
   const { state, raceInfo } = useDataSource();
@@ -26,13 +26,8 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   // re-renders del callback).
   const settingsRef = useRef(settings);
   const stateRef    = useRef(state);
-  const isInfolapRef = useRef(false);
   settingsRef.current = settings;
   stateRef.current    = state;
-  // Solo una fuente TicTac sin clasificación. Desde v1.1.0 los dos protocolos
-  // la tienen (el antiguo, calculada en el móvil) y usan los mismos avisos de
-  // media/gaps/para subir que PitWall.
-  isInfolapRef.current = raceInfo?.source === 'infolap' && !raceInfo.capabilities.positions;
 
   // ── Eventos discretos ──────────────────────────────────────────────────
   useSourceEvent(e => {
@@ -44,8 +39,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
 
     switch (e.type) {
       case 'lap-completed': {
-        // Acumular para la media de carrera (independiente de sayLaps).
-        if (e.lapTimeMs != null) raceLapsRef.current.push(e.lapTimeMs);
+        if (cuentaParaMedia(e)) vueltasValidasRef.current += 1;
         if (!s.sayLaps) return;
         const t = speakTime(e.lapTimeMs);
         const ms = e.lapTimeMs;
@@ -86,9 +80,12 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       case 'last-30s':
         if (s.sayLast30s) speak('Últimos treinta segundos');
         break;
+      case 'race-started':
+        vueltasValidasRef.current = 0;
+        break;
       case 'manga-changed':
         bestLapRef.current = null;
-        raceLapsRef.current = [];
+        vueltasValidasRef.current = 0;
         if (e.newLane != null) {
           if (stateRef.current.pole) {
             speak(`Pole, tu turno, carril ${e.newLane}`);
@@ -99,6 +96,19 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         break;
       case 'race-finished':
         speak(stateRef.current.pole ? 'Fin de la pole' : 'Fin de la manga');
+        break;
+      case 'manga-paused':
+        speak('Manga en pausa');
+        break;
+      case 'manga-resumed':
+        speak('Manga reanudada');
+        break;
+      // STOP manual: la manga se repite desde cero, así que su mejor vuelta y
+      // su media ya no cuentan como referencia.
+      case 'manga-cancelled':
+        bestLapRef.current = null;
+        vueltasValidasRef.current = 0;
+        speak('Manga detenida');
         break;
       // Vuelta fantasma en MI carril (cruce demasiado rápido, no cuenta): no
       // es vuelta rápida — se avisa como ignorada.
@@ -118,7 +128,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         }
         break;
       }
-      // race-started, connection-*: no se locutan.
+      // connection-*: no se locutan.
       default:
         break;
     }
@@ -131,29 +141,28 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       const s = settingsRef.current;
       const st = stateRef.current;
       if (!s.enabled || st.status !== 'my-turn') return;
+      // Con la manga pausada o cerrada no hay nada nuevo que contar.
+      if (st.estadoManga != null && st.estadoManga !== 'en-curso') return;
       const minute = Math.floor((Date.now() / 1000) / 60);
 
-      // InfoLap: media acumulada de la carrera, cada minuto.
-      if (isInfolapRef.current && lastRaceAvgMinuteRef.current !== minute) {
-        // El primer tick solo fija el minuto base; así el primer aviso
-        // llega tras un minuto completo, no nada más entrar.
-        if (lastRaceAvgMinuteRef.current === -1) {
-          lastRaceAvgMinuteRef.current = minute;
-        } else {
-          lastRaceAvgMinuteRef.current = minute;
-          const laps = raceLapsRef.current;
-          if (laps.length > 0) {
-            const avg = laps.reduce((a, b) => a + b, 0) / laps.length;
-            speak(`Media de carrera ${speakTime(avg)}`);
-          }
+      // Medias: cada N minutos en punto, y solo con al menos dos vueltas
+      // válidas en la manga (con una, la media es esa vuelta repetida).
+      if (s.sayAveragesEveryMin > 0 && minute % s.sayAveragesEveryMin === 0) {
+        if (lastAvgMinuteRef.current !== minute && st.avgLapMs != null
+            && mediaAnunciable(vueltasValidasRef.current)) {
+          lastAvgMinuteRef.current = minute;
+          speak(`Media de carril ${speakTime(st.avgLapMs)}`);
         }
       }
 
-      // Medias: cada N minutos en punto.
-      if (s.sayAveragesEveryMin > 0 && minute % s.sayAveragesEveryMin === 0) {
-        if (lastAvgMinuteRef.current !== minute && st.avgLapMs != null) {
-          lastAvgMinuteRef.current = minute;
-          speak(`Media de carril ${speakTime(st.avgLapMs)}`);
+      // Media de carrera (todas las mangas): cada N minutos en punto. Misma
+      // espera de dos vueltas válidas en la manga, para no repetir de entrada
+      // una media que aún no incluye nada de esta manga.
+      if (s.sayRaceAvgEveryMin > 0 && minute % s.sayRaceAvgEveryMin === 0) {
+        if (lastRaceAvgMinuteRef.current !== minute && st.raceAvgLapMs != null
+            && mediaAnunciable(vueltasValidasRef.current)) {
+          lastRaceAvgMinuteRef.current = minute;
+          speak(`Media de carrera ${speakTime(st.raceAvgLapMs)}`);
         }
       }
 
@@ -194,8 +203,8 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   const lastCatchMinuteRef   = useRef<number>(-1);
   const lastRaceAvgMinuteRef = useRef<number>(-1);
   const bestLapRef           = useRef<number | null>(null);
-  // Tiempos de todas las vueltas del piloto en la manga/carrera actual.
-  const raceLapsRef          = useRef<number[]>([]);
+  // Vueltas válidas (sin salidas ni primer paso) de la manga en curso.
+  const vueltasValidasRef    = useRef(0);
 
   // El keep-alive en background lo hace el módulo nativo `BackgroundTts`
   // vía AVAudioEngine (loop infinito de ruido inaudible). Aquí solo
@@ -211,7 +220,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
     lastCatchMinuteRef.current = -1;
     lastRaceAvgMinuteRef.current = -1;
     bestLapRef.current = null;
-    raceLapsRef.current = [];
+    vueltasValidasRef.current = 0;
   }, [raceInfo?.source]);
 
   return { settings, toggle, update, ready };

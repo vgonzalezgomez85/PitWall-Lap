@@ -2,8 +2,10 @@
 // safe-area (status bar de iOS) y con un área de tap generosa.
 
 import { useNavigation } from '@react-navigation/native';
-import { StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { colors } from './theme';
 
 interface Props {
   label?: string;
@@ -14,14 +16,13 @@ export default function BackButton({ label = 'Volver' }: Props) {
   const insets = useSafeAreaInsets();
   if (!navigation.canGoBack()) return null;
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={() => navigation.goBack()}
-      style={[styles.btn, { marginTop: insets.top + 4 }]}
+      style={({ pressed }) => [styles.btn, { marginTop: insets.top + 4 }, pressed && styles.pressed]}
       hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-      activeOpacity={0.6}
     >
       <Text style={styles.text}>{'‹ ' + label}</Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -33,8 +34,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: -8,        // alinear texto con el resto del contenido
   },
+  pressed: { opacity: 0.6 },
   text: {
-    color: '#f6c90e',
+    color: colors.accent,
     fontSize: 17,
     fontWeight: '600',
   },

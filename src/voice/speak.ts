@@ -63,7 +63,9 @@ export function speakTime(ms: number | null): string {
   const totalCs = Math.floor(ms / 10);
   const s = Math.floor(totalCs / 100);
   const cs = totalCs % 100;
-  if (cs === 0) return `${s} segundos`;
-  // Solo "12 45" — sin "con", se hace pesado al oírlo a cada vuelta.
+  // Solo "12 45" — sin "con", se hace pesado al oírlo a cada vuelta. Las
+  // centésimas exactas se dicen igual que el resto: 10000ms → "10 cero cero"
+  // (en cifra, "00", el TTS lo lee como "cero" a secas).
+  if (cs === 0) return `${s} cero cero`;
   return `${s} ${String(cs).padStart(2, '0')}`;
 }

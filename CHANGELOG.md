@@ -18,6 +18,23 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.3.0] — 2026-10-05
+
+### Añadido
+- **Voz: aviso de media de carrera.** Nuevo chip **Media carrera** en *Voz y ajustes* (cada 1, 2, 3 o 5 min, como los demás periódicos): tu media con todas las vueltas de todas tus mangas. Con PitWall la calcula el servidor (`raceAvgLapMs`); con TicTac, el móvil, desde que se conectó. El chip **Media** pasa a llamarse **Media manga** (tu carril en la manga en curso). Sustituye al aviso fijo de media de carrera del TicTac antiguo, que desde la v1.1.0 ya no sonaba.
+
+### Mejorado
+- **Mi turno, rediseñada para mirarla de reojo en pista.** Tarjeta principal con el carril, el tiempo restante y la **última vuelta en grande, coloreada frente a tu mejor**: morado si es tu mejor vuelta, verde si estás a menos de un 2 % y ámbar si vas más lento, con el **delta** debajo (`+0.23 vs mejor`). Las cifras tienen ancho fijo y ya no bailan al cambiar.
+- **Carrera agrupada:** posición (`P3 / 8`), gaps delante y detrás **con el nombre del rival** y media para subir en una sola tarjeta.
+- **Voz:** el interruptor general queda siempre a mano en la cabecera; el resto de avisos y la duración de manga del TicTac pasan a **Voz y ajustes**, plegado durante tu manga (con un resumen, p. ej. *Voz ON · 5 avisos*) y abierto mientras esperas.
+- **Estrategia** y **Seguimiento** pasan a filas de acceso, con el número de cambios de goma pendientes como insignia.
+- Base de diseño común (`src/ui/theme.ts` y componentes `Button`, `Card`, `Stat`, `Chip`, `NavRow`, `Section`) y respuesta visual al pulsar los botones.
+
+### Corregido
+- **PitWall: la app no se enteraba de que la manga se pausaba o se paraba.** Ahora escucha `manga:paused`, `manga:resumed` y `manga:cancelled` (el **STOP** de PitWall Manager, que anula la manga y la repite desde cero). *Mi turno* muestra un aviso (**Manga en pausa** / **Manga detenida** / **Manga terminada**) y la voz lo locuta; con la manga parada no suenan los avisos periódicos. Al terminar una manga, la pantalla conserva los datos finales y te dice tu próxima manga y carril, en vez de saltar a la siguiente antes de que arranque (`cicloManga.ts`).
+- **Voz: una vuelta de centésimas exactas se locutaba en segundos.** Una vuelta de 10,00 se decía «diez segundos»; ahora se dice «diez cero cero», como el resto de tiempos (también en las medias y en «para subir»).
+- **Voz: la «Media de carril» se anunciaba justo tras la primera vuelta buena**, con el mismo tiempo que esa vuelta. Ahora no se locuta hasta tener al menos **dos vueltas válidas** en la manga, sin contar salidas ni el primer paso por meta (`avisos.ts`). El valor no cambia: sigue siendo la media que da el cronometrador.
+
 ## [1.2.0] — 2026-10-02
 
 ### Añadido

@@ -19,7 +19,8 @@ export interface VoiceSettings {
   sayLast30s: boolean;          // aviso 30s antes del fin
 
   // Avanzado
-  sayAveragesEveryMin: number;  // 0 = off; entero ≥1 = cada N minutos
+  sayAveragesEveryMin: number;  // media de carril (manga): 0 = off; ≥1 = cada N min
+  sayRaceAvgEveryMin: number;   // media de carrera (todas las mangas): 0 = off; ≥1 = cada N min
   sayGapsEveryMin: number;      // 0 = off; entero ≥1 = cada N minutos
   sayCatchUpEveryMin: number;   // "media para subir": 0 = off; ≥1 = cada N min
 }
@@ -32,6 +33,7 @@ export const DEFAULT_SETTINGS: VoiceSettings = {
   sayLastMinute: true,
   sayLast30s: true,
   sayAveragesEveryMin: 0,
+  sayRaceAvgEveryMin: 0,
   sayGapsEveryMin: 0,
   sayCatchUpEveryMin: 0,
 };

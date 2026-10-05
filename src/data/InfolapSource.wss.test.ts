@@ -191,6 +191,23 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     src.disconnect();
   });
 
+  it('media de carrera: todas las vueltas del piloto, de todas las mangas', async () => {
+    const { src, conn } = await connectNew();
+    let state!: LiveState;
+    src.onStateChange(s => { state = s; });
+    src.selectParticipant('#001');
+    conn.h.onMessage('{"type":"CONFIG","mangaPilots":[{"laneId":1,"name":"Piloto 1"},{"laneId":2,"name":"Piloto 2"}]}');
+    conn.h.onMessage(lap(10, 1, 'Piloto 1', 3.0));
+    conn.h.onMessage(lap(11, 1, 'Piloto 1', 3.2));
+    expect(state.raceAvgLapMs).toBe(3100);
+
+    conn.h.onMessage('{"type":"CONFIG","mangaPilots":[{"laneId":1,"name":"Piloto 2"},{"laneId":2,"name":"Piloto 1"}]}');
+    conn.h.onMessage(lap(12, 2, 'Piloto 1', 3.4));
+    expect(state.avgLapMs).toBe(3400);        // media de carril: solo esta manga
+    expect(state.raceAvgLapMs).toBe(3200);    // media de carrera: las tres
+    src.disconnect();
+  });
+
   it('secuencia real: tanda libre, CONFIG duplicado y carrera reiniciada', async () => {
     const { src, conn } = await connectNew();
     let state!: LiveState;

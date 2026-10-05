@@ -107,6 +107,12 @@ export interface TireControlState {
   teams: TireTeamState[];
 }
 
+/** Ciclo de vida de la manga, según los eventos de PitWall Manager:
+ *  `manga:started` / `manga:resumed` → en curso, `manga:paused` → pausada,
+ *  `manga:stopped` (fin normal) → terminada, `manga:cancelled` (STOP manual:
+ *  vueltas borradas, la manga vuelve a pendiente) → cancelada. */
+export type EstadoManga = 'en-curso' | 'pausada' | 'terminada' | 'cancelada';
+
 /** Estado actual del piloto seleccionado. */
 export interface LiveState {
   status:
@@ -120,7 +126,11 @@ export interface LiveState {
   lapCount: number;
   lastLapMs: number | null;
   bestLapMs: number | null;
-  avgLapMs: number | null;        // sólo PitWall — media del carril
+  avgLapMs: number | null;        // media de mi carril en la manga en curso
+  /** Media de carrera del piloto/equipo: todas sus vueltas de todas las
+   *  mangas. PitWall la calcula en el servidor; TicTac, en el móvil (desde
+   *  que se conectó). */
+  raceAvgLapMs: number | null;
   exitCount: number;              // sólo PitWall — salidas del carril
   pitStopCount: number;           // sólo PitWall — pit stops del carril
   position: number | null;        // PitWall y TicTac nuevo
@@ -146,6 +156,9 @@ export interface LiveState {
    *  servidor en vez de la configuración manual. null = sin control / sin datos. */
   tireControl: TireControlState | null;
   currentMangaNum: number | null;
+  /** Sólo PitWall. null = desconocido (p. ej. la app se conectó con la manga
+   *  ya corriendo): se trata como en curso. */
+  estadoManga?: EstadoManga | null;
   /** Si estoy en descanso, info de mi próxima manga. */
   nextMangaInfo?: { mangaNum: number; lane: number };
   /** true si el piloto ya corrió TODAS sus mangas (no le quedan más) → FINAL,
@@ -178,6 +191,10 @@ export type SourceEvent =
   | { type: 'last-minute' }
   | { type: 'last-30s' }
   | { type: 'race-finished' }
+  | { type: 'manga-paused' }
+  | { type: 'manga-resumed' }
+  // STOP manual en PitWall: la manga se anula y se repetirá desde cero.
+  | { type: 'manga-cancelled' }
   | { type: 'manga-changed';     newMangaNum: number; newLane: number | null }
   // Sólo PitWall: vuelta cuyo tiempo era < Pt (mínimo). El servidor
   // intenta reasignar automáticamente al carril "overdue" más probable.
@@ -368,6 +385,7 @@ export function emptyLiveState(): LiveState {
     lastLapMs: null,
     bestLapMs: null,
     avgLapMs: null,
+    raceAvgLapMs: null,
     exitCount: 0,
     pitStopCount: 0,
     position: null,

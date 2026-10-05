@@ -1,7 +1,14 @@
 // Pantalla "mi turno": cronometraje personal en vivo + voz.
 //
-// La voz se activa con `useVoice()` y se controla en vivo con los botones
-// inferiores. Los toggles son persistentes (AsyncStorage).
+// Jerarquía pensada para mirarse de reojo en pista:
+//   1. Tarjeta principal: carril, tiempo restante y la última vuelta en
+//      grande, coloreada frente a la mejor (morado / verde / ámbar) + delta.
+//   2. Carrera: posición, gaps (con el nombre del rival) y media para subir.
+//   3. Accesos (estrategia, seguimiento) y, plegados, los ajustes de voz.
+//
+// La voz se activa con `useVoice()` y se controla en vivo: el interruptor
+// general está siempre a mano en la cabecera; el resto, en "Voz y ajustes".
+// Los toggles son persistentes (AsyncStorage).
 
 import { useEffect, useState } from 'react';
 import {
@@ -17,10 +24,20 @@ import { saveStint, type StintSetup } from '../data/trainingStore';
 import { useVoice } from '../voice/useVoice';
 import { useTireStrategy } from '../strategy/useTireStrategy';
 import type { VoiceSettings } from '../voice/settings';
+import type { LiveState } from '../data/types';
 import BackButton from '../ui/BackButton';
+import Button from '../ui/Button';
+import Card from '../ui/Card';
+import Chip from '../ui/Chip';
+import NavRow from '../ui/NavRow';
+import Section from '../ui/Section';
+import Stat from '../ui/Stat';
+import { lapDeltaLabel, lapTone, type LapTone } from '../ui/lapTone';
+import { colors, radius, spacing, type } from '../ui/theme';
 import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MyTurn'>;
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function fmt(ms: number | null): string {
   if (ms == null) return '—';
@@ -59,12 +76,19 @@ function fmtRemaining(ms: number | null): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+const TONE_COLOR: Record<LapTone, string> = {
+  best: colors.best,
+  good: colors.good,
+  slow: colors.slow,
+  neutral: colors.text,
+};
+
 export default function MyTurnScreen(_props: Props) {
   void _props;
   const { state, raceInfo, source } = useDataSource();
   const { pendingCount, available: strategyAvailable } = useTireStrategy();
   const { settings, toggle, update } = useVoice();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<Nav>();
 
   const isPitWall = raceInfo?.source === 'pitwall';
   // TicTac nuevo (WSS): mismos datos que PitWall salvo salidas/pits/plan.
@@ -109,78 +133,88 @@ export default function MyTurnScreen(_props: Props) {
     ]);
   }
 
-  // ── Vista de descanso ──────────────────────────────────────────────────
-  // Cuando el piloto seleccionado NO corre en la manga actual (status
-  // 'resting'), renderizamos una pantalla distinta: info de su próxima
-  // manga + cuándo le toca. Sin voz (la app silencia eventos cuando no
-  // es turno; cuando llegue su manga, se pasa solo a 'my-turn').
+  const header = (
+    <Header
+      source={sourceLabel(raceInfo?.source)}
+      name={state.selfName ?? null}
+      voiceOn={settings.enabled}
+      onToggleVoice={() => toggle('enabled')}
+    />
+  );
+
   // ── Vista de espera: PRE-CARRERA (aún no empieza) o DESCANSO (no corres la
   // manga en curso). En ambos casos mostramos el horario y, sobre todo, dejamos
-  // configurar la app (voz + estrategia) mientras esperas tu turno.
+  // configurar la app (voz + estrategia) mientras esperas tu turno. Sin voz
+  // (la app silencia eventos cuando no es turno; cuando llegue su manga, se
+  // pasa solo a 'my-turn').
   if (state.status === 'resting' || state.status === 'pre-race') {
     const isPre = state.status === 'pre-race';
     return (
-      <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView style={styles.root} contentContainerStyle={styles.content}>
         <BackButton />
-        <Text style={styles.kind}>{sourceLabel(raceInfo?.source)}</Text>
-        {state.selfName && <Text style={styles.selfName}>{state.selfName}</Text>}
+        {header}
+        <AvisoManga state={state} conSiguiente={false} />
 
         {state.isFinal ? (
-          <>
-            <Text style={[styles.restTitle, styles.finalTitle]}>FINAL</Text>
-            <Text style={styles.restSub}>
+          <Card style={styles.hero}>
+            <Text style={styles.finalTitle}>FINAL</Text>
+            <Text style={[type.body, styles.centerText]}>
               Ya has corrido todas tus mangas. Carrera completada para ti.
             </Text>
-          </>
-        ) : isPre ? (
-          <>
-            <Text style={styles.restTitle}>La carrera aún no ha empezado</Text>
-            {state.nextMangaInfo ? (
-              <View style={styles.block}>
-                <Text style={styles.label}>Tu primera manga</Text>
-                <Text style={styles.bigTime}>{state.nextMangaInfo.mangaNum}</Text>
-                <Text style={[styles.label, { marginTop: 12 }]}>Carril</Text>
-                <Text style={styles.medTime}>{state.nextMangaInfo.lane}</Text>
-              </View>
-            ) : (
-              <View style={styles.block}>
-                <Text style={styles.label}>Descansas toda la carrera (sin mangas asignadas)</Text>
-              </View>
-            )}
-          </>
+          </Card>
         ) : (
-          <>
-            <Text style={styles.restTitle}>Descansas esta manga</Text>
-            {state.currentMangaNum != null && (
-              <Text style={styles.restSub}>
+          <Card style={styles.hero}>
+            <Text style={styles.waitTitle}>
+              {isPre ? 'La carrera aún no ha empezado' : 'Descansas esta manga'}
+            </Text>
+            {!isPre && state.currentMangaNum != null && !mangaCerrada(state) && (
+              <Text style={[type.body, styles.waitSub]}>
                 Ahora se corre la manga {state.currentMangaNum}
-                {state.remainingMs != null && ` · ${fmtRemaining(state.remainingMs)} restante`}
+                {state.remainingMs != null && ` · quedan ${fmtRemaining(state.remainingMs)}`}
               </Text>
             )}
             {state.nextMangaInfo ? (
-              <View style={styles.block}>
-                <Text style={styles.label}>Tu próxima manga</Text>
-                <Text style={styles.bigTime}>{state.nextMangaInfo.mangaNum}</Text>
-                <Text style={[styles.label, { marginTop: 12 }]}>Carril</Text>
-                <Text style={styles.medTime}>{state.nextMangaInfo.lane}</Text>
+              <View style={styles.waitStats}>
+                <Stat
+                  label={isPre ? 'Tu primera manga' : 'Tu próxima manga'}
+                  value={String(state.nextMangaInfo.mangaNum)}
+                  align="center"
+                  style={styles.waitStat}
+                />
+                <View style={styles.vDivider} />
+                <Stat
+                  label="Carril"
+                  value={String(state.nextMangaInfo.lane)}
+                  color={colors.accent}
+                  align="center"
+                  style={styles.waitStat}
+                />
               </View>
             ) : (
-              <View style={styles.block}>
-                <Text style={styles.label}>
-                  {isPitWall ? 'Sin próxima manga programada' : 'El TicTac no envía el plan de mangas: te avisaré cuando empiece la tuya'}
-                </Text>
-              </View>
+              <Text style={[type.body, styles.waitSub]}>
+                {isPre
+                  ? 'Descansas toda la carrera (sin mangas asignadas).'
+                  : isPitWall
+                    ? 'Sin próxima manga programada.'
+                    : 'El TicTac no envía el plan de mangas: te avisaré cuando empiece la tuya.'}
+              </Text>
             )}
-          </>
+          </Card>
         )}
 
         {/* Config disponible mientras esperas (PitWall y TicTac nuevo). */}
         {fullData && !isTraining && (
           <>
-            {strategyAvailable && <StrategyButton navigation={navigation} pendingCount={pendingCount} />}
-            {trackingAvailable && <TrackingButton navigation={navigation} />}
-            {isTicTacLive && <MangaDurationControl />}
-            <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
+            <Accesos
+              navigation={navigation}
+              strategy={strategyAvailable}
+              tracking={trackingAvailable}
+              pendingCount={pendingCount}
+            />
+            <Section title="Voz y ajustes">
+              {isTicTacLive && <MangaDurationControl />}
+              <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
+            </Section>
           </>
         )}
       </ScrollView>
@@ -188,120 +222,141 @@ export default function MyTurnScreen(_props: Props) {
   }
 
   // ── Vista "mi turno" ───────────────────────────────────────────────────
+  const tone = lapTone(state.lastLapMs, state.bestLapMs);
+  const delta = lapDeltaLabel(state.lastLapMs, state.bestLapMs);
+
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
+    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <BackButton />
-      <Text style={styles.kind}>{sourceLabel(raceInfo?.source)}</Text>
-      {state.selfName && <Text style={styles.selfName}>{state.selfName}</Text>}
-      <View style={styles.headerRow}>
-        <Text style={styles.lane}>Carril {state.myLane ?? '—'}</Text>
-        {state.remainingMs != null && (
-          <Text style={styles.remaining}>{fmtRemaining(state.remainingMs)}</Text>
-        )}
-      </View>
+      {header}
+      <AvisoManga state={state} conSiguiente />
 
-      <View style={styles.block}>
-        <Text style={styles.label}>Última vuelta</Text>
-        <Text style={styles.bigTime}>{fmt(state.lastLapMs)}</Text>
-      </View>
+      {/* ── Tarjeta principal ─────────────────────────────────────────── */}
+      <Card style={styles.hero}>
+        <View style={styles.heroTop}>
+          <View style={styles.lanePill}>
+            <Text style={styles.lanePillText}>Carril {state.myLane ?? '—'}</Text>
+          </View>
+          {state.remainingMs != null && (
+            <View style={styles.remaining}>
+              <Text style={type.label}>Restante</Text>
+              <Text style={styles.remainingValue}>{fmtRemaining(state.remainingMs)}</Text>
+            </View>
+          )}
+        </View>
 
-      <View style={styles.row}>
-        <View style={styles.col}>
-          <Text style={styles.label}>Vuelta rápida</Text>
-          <Text style={styles.medTime}>{fmt(state.bestLapMs)}</Text>
+        <Text style={[type.label, styles.heroLabel]}>Última vuelta</Text>
+        <Text
+          style={[type.hero, styles.heroValue, { color: TONE_COLOR[tone] }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
+          {fmt(state.lastLapMs)}
+        </Text>
+        <Text style={[styles.delta, { color: TONE_COLOR[tone] }]}>{delta ?? ' '}</Text>
+
+        <View style={styles.divider} />
+        <View style={styles.statsRow}>
+          <Stat label="Rápida" value={fmt(state.bestLapMs)} color={state.bestLapMs != null ? colors.best : undefined} />
+          <Stat label="Media carril" value={fmt(state.avgLapMs)} />
+          <Stat label="Vueltas" value={String(state.lapCount)} />
         </View>
-        <View style={styles.col}>
-          <Text style={styles.label}>Media carril</Text>
-          <Text style={styles.medTime}>{fmt(state.avgLapMs)}</Text>
-        </View>
-        <View style={styles.col}>
-          <Text style={styles.label}>Vueltas</Text>
-          <Text style={styles.medTime}>{state.lapCount}</Text>
-        </View>
-      </View>
+      </Card>
+
+      {/* ── Carrera ───────────────────────────────────────────────────── */}
+      {state.position != null && (
+        <Card style={styles.card}>
+          <View style={styles.statsRow}>
+            <View style={styles.positionBox}>
+              <Text style={type.label}>Posición</Text>
+              <Text style={styles.positionValue} numberOfLines={1} adjustsFontSizeToFit>
+                P{state.position}
+                <Text style={styles.positionTotal}> / {state.totalParticipants ?? '?'}</Text>
+              </Text>
+            </View>
+            <Stat
+              label="Delante"
+              value={fmtGap(state.gapAheadLaps, state.gapAheadMs)}
+              sub={state.aheadName}
+              small
+            />
+            <Stat
+              label="Detrás"
+              value={fmtGap(state.gapBehindLaps, state.gapBehindMs)}
+              sub={state.behindName}
+              small
+            />
+          </View>
+          {fullData && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.inlineStat}>
+                <Text style={type.label}>Media para subir</Text>
+                <Text style={styles.inlineValue}>{fmt(state.avgToCatchMs)}</Text>
+              </View>
+            </>
+          )}
+        </Card>
+      )}
 
       {isPitWall && (
-        <View style={styles.row}>
-          <View style={styles.col}>
-            <Text style={styles.label}>Salidas</Text>
-            <Text style={styles.medTime}>{state.exitCount}</Text>
+        <Card style={styles.card}>
+          <View style={styles.statsRow}>
+            <Stat label="Salidas" value={String(state.exitCount)} small />
+            <Stat label="Pit stops" value={String(state.pitStopCount)} small />
           </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Pit stops</Text>
-            <Text style={styles.medTime}>{state.pitStopCount}</Text>
-          </View>
-        </View>
+        </Card>
       )}
 
-      {state.position != null && (
-        <View style={styles.row}>
-          <View style={styles.col}>
-            <Text style={styles.label}>Posición</Text>
-            <Text style={styles.medTime}>
-              {state.position} / {state.totalParticipants ?? '?'}
-            </Text>
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Gap delante</Text>
-            <Text style={styles.medTime}>{fmtGap(state.gapAheadLaps, state.gapAheadMs)}</Text>
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Gap detrás</Text>
-            <Text style={styles.medTime}>{fmtGap(state.gapBehindLaps, state.gapBehindMs)}</Text>
-          </View>
-        </View>
+      {!isTraining && (
+        <Accesos
+          navigation={navigation}
+          strategy={strategyAvailable}
+          tracking={trackingAvailable}
+          pendingCount={pendingCount}
+        />
       )}
-
-      {fullData && state.position != null && (
-        <View style={styles.block}>
-          <Text style={styles.label}>Media para subir</Text>
-          <Text style={styles.medTime}>{fmt(state.avgToCatchMs)}</Text>
-        </View>
-      )}
-
-      {strategyAvailable && !isTraining && (
-        <StrategyButton navigation={navigation} pendingCount={pendingCount} />
-      )}
-      {trackingAvailable && <TrackingButton navigation={navigation} />}
-
-      {isTicTacLive && <MangaDurationControl />}
 
       {/* ── Entreno GO (solo modo entrenamiento) ───────────────────────── */}
       {isTraining && (
-        <>
-          <Text style={styles.section}>Registro de entrenamiento</Text>
+        <Section title="Registro de entrenamiento">
           <Pressable
             onPress={() => (recorder.recording ? onStop() : recorder.start())}
-            style={[styles.goBtn, recorder.recording ? styles.goBtnStop : styles.goBtnStart]}
+            style={({ pressed }) => [
+              styles.goBtn,
+              recorder.recording ? styles.goBtnStop : styles.goBtnStart,
+              pressed && styles.pressed,
+            ]}
           >
             <Text style={styles.goBtnText}>
               {recorder.recording ? '■  Detener y guardar' : '▶  Entreno GO'}
             </Text>
           </Pressable>
           {recorder.recording && (
-            <View style={styles.row}>
-              <View style={styles.col}>
-                <Text style={styles.label}>Vueltas</Text>
-                <Text style={styles.medTime}>{recLaps.length}</Text>
+            <Card style={styles.card}>
+              <View style={styles.statsRow}>
+                <Stat label="Vueltas" value={String(recLaps.length)} />
+                <Stat label="Mejor" value={fmt(recBest)} />
+                <Stat label="Media" value={fmt(recAvg)} />
               </View>
-              <View style={styles.col}>
-                <Text style={styles.label}>Mejor</Text>
-                <Text style={styles.medTime}>{fmt(recBest)}</Text>
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.label}>Media</Text>
-                <Text style={styles.medTime}>{fmt(recAvg)}</Text>
-              </View>
-            </View>
+            </Card>
           )}
-          <Pressable style={styles.linkBtn} onPress={() => navigation.push('Training')}>
-            <Text style={styles.linkBtnText}>Ver mis entrenamientos</Text>
-          </Pressable>
-        </>
+          <View style={styles.card}>
+            <NavRow title="Mis entrenamientos" onPress={() => navigation.push('Training')} />
+          </View>
+        </Section>
       )}
 
-      {/* ── Voice toggles ──────────────────────────────────────────────── */}
-      <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
+      {/* ── Ajustes (plegados: en carrera lo importante son los datos) ─── */}
+      <Section
+        title="Voz y ajustes"
+        collapsible
+        initiallyOpen={false}
+        summary={voiceSummary(settings, fullData)}
+      >
+        {isTicTacLive && <MangaDurationControl />}
+        <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
+      </Section>
 
       {/* ── Modal: datos del stint al detener ──────────────────────────── */}
       <Modal
@@ -347,18 +402,8 @@ export default function MyTurnScreen(_props: Props) {
               onChange={v => setSetup(s => ({ ...s, pinion: v }))}
             />
             <View style={styles.modalBtns}>
-              <Pressable
-                style={[styles.modalBtn, styles.modalBtnGhost]}
-                onPress={() => setPending(null)}
-              >
-                <Text style={styles.modalBtnGhostText}>Descartar</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={confirmSave}
-              >
-                <Text style={styles.modalBtnPrimaryText}>Guardar</Text>
-              </Pressable>
+              <Button label="Descartar" variant="ghost" onPress={() => setPending(null)} style={styles.flex} />
+              <Button label="Guardar" onPress={confirmSave} style={styles.flex} />
             </View>
           </View>
         </View>
@@ -368,12 +413,98 @@ export default function MyTurnScreen(_props: Props) {
   );
 }
 
+// Cabecera: fuente + nombre a la izquierda; interruptor general de voz a la
+// derecha, siempre visible (es lo que más se toca en pista).
+function Header({ source, name, voiceOn, onToggleVoice }: {
+  source: string;
+  name: string | null;
+  voiceOn: boolean;
+  onToggleVoice: () => void;
+}) {
+  return (
+    <View style={styles.header}>
+      <View style={styles.flex}>
+        <Text style={type.label}>{source}</Text>
+        {!!name && <Text style={[type.heading, styles.headerName]} numberOfLines={1}>{name}</Text>}
+      </View>
+      <Chip label={voiceOn ? 'Voz ON' : 'Voz OFF'} active={voiceOn} onPress={onToggleVoice} />
+    </View>
+  );
+}
+
+function mangaCerrada(s: LiveState): boolean {
+  return s.estadoManga === 'terminada' || s.estadoManga === 'cancelada';
+}
+
+// Aviso del estado de la manga (PitWall): pausada, terminada o detenida con
+// STOP. En curso no se muestra nada. `conSiguiente`: añadir la próxima manga
+// del piloto (en la vista de espera ya sale en su tarjeta).
+function AvisoManga({ state, conSiguiente }: { state: LiveState; conSiguiente: boolean }) {
+  const e = state.estadoManga;
+  if (e == null || e === 'en-curso') return null;
+  let titulo: string;
+  let texto: string | null;
+  let color: string;
+  if (e === 'pausada') {
+    titulo = 'Manga en pausa';
+    texto = 'El reloj está parado hasta que se reanude.';
+    color = colors.slow;
+  } else if (e === 'cancelada') {
+    titulo = 'Manga detenida';
+    texto = 'Se ha anulado y se repetirá desde cero con el próximo GO.';
+    color = colors.danger;
+  } else {
+    titulo = 'Manga terminada';
+    const sig = state.nextMangaInfo;
+    texto = !conSiguiente ? null
+      : sig ? `Tu próxima manga: ${sig.mangaNum} · carril ${sig.lane}`
+      : 'No tienes más mangas programadas.';
+    color = colors.accent;
+  }
+  return (
+    <View style={[styles.aviso, { borderColor: color }]}>
+      <Text style={[styles.avisoTitulo, { color }]}>{titulo}</Text>
+      {!!texto && <Text style={styles.avisoTexto}>{texto}</Text>}
+    </View>
+  );
+}
+
+// Accesos a Estrategia y Seguimiento. Reutilizado en "mi turno" y en la vista
+// de espera (pre-carrera / descanso) para poder configurar antes.
+function Accesos({ navigation, strategy, tracking, pendingCount }: {
+  navigation: Nav;
+  strategy: boolean;
+  tracking: boolean;
+  pendingCount: number;
+}) {
+  if (!strategy && !tracking) return null;
+  return (
+    <View style={styles.accesos}>
+      {strategy && (
+        <NavRow
+          title="Estrategia de neumáticos"
+          subtitle={pendingCount > 0 ? 'Tienes cambios pendientes' : 'Plan y avisos de cambio de goma'}
+          badge={pendingCount}
+          onPress={() => navigation.push('Strategy')}
+        />
+      )}
+      {tracking && (
+        <NavRow
+          title="Seguimiento de rivales"
+          subtitle="Vueltas y medias por carril"
+          onPress={() => navigation.push('Tracking')}
+        />
+      )}
+    </View>
+  );
+}
+
 function SetupField({
   label, value, onChange,
 }: { label: string; value?: string; onChange: (v: string) => void }) {
   return (
-    <View style={{ marginTop: 12 }}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={{ marginTop: spacing.md }}>
+      <Text style={type.label}>{label}</Text>
       <TextInput
         style={styles.input}
         value={value ?? ''}
@@ -392,48 +523,16 @@ function cycleMinutes(current: number): number {
   return MINUTE_CYCLE[(i + 1) % MINUTE_CYCLE.length] ?? 0;
 }
 
-function ToggleChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.chip, active ? styles.chipOn : styles.chipOff]}
-    >
-      <Text style={[styles.chipText, active ? styles.chipTextOn : styles.chipTextOff]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-// Helper exportado por si en el futuro queremos chips de modo avanzado:
-export function isAdvancedKey(k: keyof VoiceSettings): boolean {
-  return k === 'sayAveragesEveryMin' || k === 'sayGapsEveryMin';
-}
-
-// Botón de acceso a la pantalla de estrategia. Reutilizado en "mi turno" y en
-// la vista de espera (pre-carrera / descanso) para poder configurar antes.
-function StrategyButton({ navigation, pendingCount }: {
-  navigation: NativeStackNavigationProp<RootStackParamList>;
-  pendingCount: number;
-}) {
-  return (
-    <Pressable style={styles.strategyBtn} onPress={() => navigation.push('Strategy')}>
-      <Text style={styles.strategyBtnText}>
-        Estrategia de neumáticos{pendingCount > 0 ? ` · ${pendingCount} ●` : ''} →
-      </Text>
-    </Pressable>
-  );
-}
-
-// Acceso al seguimiento de rivales por carril (junto al de estrategia).
-function TrackingButton({ navigation }: {
-  navigation: NativeStackNavigationProp<RootStackParamList>;
-}) {
-  return (
-    <Pressable style={styles.strategyBtn} onPress={() => navigation.push('Tracking')}>
-      <Text style={styles.strategyBtnText}>Seguimiento de rivales →</Text>
-    </Pressable>
-  );
+// Resumen de la sección plegada: "Voz ON · 5 avisos".
+function voiceSummary(s: VoiceSettings, full: boolean): string {
+  if (!s.enabled) return 'Voz OFF';
+  const avisos = full
+    ? [s.sayLaps, s.sayPositionChange, s.sayHalfManga, s.sayLastMinute, s.sayLast30s,
+       s.sayAveragesEveryMin > 0, s.sayRaceAvgEveryMin > 0, s.sayGapsEveryMin > 0,
+       s.sayCatchUpEveryMin > 0]
+    : [s.sayLaps];
+  const n = avisos.filter(Boolean).length;
+  return `Voz ON · ${n} ${n === 1 ? 'aviso' : 'avisos'}`;
 }
 
 // Duración de manga para TicTac: el TicTac no la transmite y sin ella no hay
@@ -445,25 +544,32 @@ function MangaDurationControl() {
     source?.setMangaDurationMs?.(min > 0 ? min * 60_000 : null);
   }, [source, min]);
   return (
-    <>
-      <Text style={styles.section}>Duración de manga (TicTac)</Text>
+    <Card style={styles.settingsCard}>
+      <Text style={type.label}>Duración de manga (TicTac)</Text>
       <View style={styles.stepperRow}>
-        <Pressable style={styles.stepBtn} onPress={() => setMin(min - 1)}>
+        <Pressable
+          style={({ pressed }) => [styles.stepBtn, pressed && styles.pressed]}
+          onPress={() => setMin(min - 1)}
+        >
           <Text style={styles.stepBtnText}>−</Text>
         </Pressable>
         <Text style={styles.stepValue}>{min > 0 ? `${min} min` : 'Sin configurar'}</Text>
-        <Pressable style={styles.stepBtn} onPress={() => setMin(min + 1)}>
+        <Pressable
+          style={({ pressed }) => [styles.stepBtn, pressed && styles.pressed]}
+          onPress={() => setMin(min + 1)}
+        >
           <Text style={styles.stepBtnText}>+</Text>
         </Pressable>
       </View>
-      <Text style={styles.stepHint}>
+      <Text style={type.caption}>
         Cuenta desde que empieza la manga en el TicTac. Si te conectas con la manga ya empezada, el tiempo aparece en la siguiente.
       </Text>
-    </>
+    </Card>
   );
 }
 
-// Sección de ajustes de voz. Reutilizada en "mi turno" y en la vista de espera.
+// Avisos de voz. Reutilizado en "mi turno" y en la vista de espera. El
+// interruptor general vive en la cabecera.
 // `full`: PitWall o TicTac nuevo (todos los avisos); TicTac antiguo, solo vueltas.
 function VoiceControls({ settings, toggle, update, full }: {
   settings: VoiceSettings;
@@ -472,118 +578,143 @@ function VoiceControls({ settings, toggle, update, full }: {
   full: boolean;
 }) {
   return (
-    <>
-      <Text style={styles.section}>Voz</Text>
+    <Card style={[styles.settingsCard, !settings.enabled && styles.dimmed]}>
+      <Text style={type.label}>Avisos de voz</Text>
       <View style={styles.togglesRow}>
-        <ToggleChip
-          label={settings.enabled ? 'Voz ON' : 'Voz OFF'}
-          active={settings.enabled}
-          onPress={() => toggle('enabled')}
-        />
-        <ToggleChip label="Vueltas"   active={settings.sayLaps} onPress={() => toggle('sayLaps')} />
+        <Chip label="Vueltas" active={settings.sayLaps} onPress={() => toggle('sayLaps')} />
         {full && (
           <>
-            <ToggleChip label="Posición"  active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
-            <ToggleChip label="Media manga" active={settings.sayHalfManga}     onPress={() => toggle('sayHalfManga')} />
-            <ToggleChip label="Último min" active={settings.sayLastMinute}     onPress={() => toggle('sayLastMinute')} />
-            <ToggleChip label="30 s"      active={settings.sayLast30s}        onPress={() => toggle('sayLast30s')} />
-            <ToggleChip
-              label={settings.sayAveragesEveryMin > 0 ? `Media ${settings.sayAveragesEveryMin} min` : 'Media'}
-              active={settings.sayAveragesEveryMin > 0}
-              onPress={() => update({ sayAveragesEveryMin: cycleMinutes(settings.sayAveragesEveryMin) })}
-            />
-            <ToggleChip
-              label={settings.sayGapsEveryMin > 0 ? `Gaps ${settings.sayGapsEveryMin} min` : 'Gaps'}
-              active={settings.sayGapsEveryMin > 0}
-              onPress={() => update({ sayGapsEveryMin: cycleMinutes(settings.sayGapsEveryMin) })}
-            />
-            <ToggleChip
-              label={settings.sayCatchUpEveryMin > 0 ? `P/Subir ${settings.sayCatchUpEveryMin} min` : 'P/Subir'}
-              active={settings.sayCatchUpEveryMin > 0}
-              onPress={() => update({ sayCatchUpEveryMin: cycleMinutes(settings.sayCatchUpEveryMin) })}
-            />
+            <Chip label="Posición"    active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
+            <Chip label="Media manga" active={settings.sayHalfManga}      onPress={() => toggle('sayHalfManga')} />
+            <Chip label="Último min"  active={settings.sayLastMinute}     onPress={() => toggle('sayLastMinute')} />
+            <Chip label="30 s"        active={settings.sayLast30s}        onPress={() => toggle('sayLast30s')} />
           </>
         )}
       </View>
-    </>
+      {full && (
+        <>
+          <Text style={[type.label, styles.subLabel]}>Periódicos · toca para cambiar el intervalo</Text>
+          <View style={styles.togglesRow}>
+            <Chip
+              label={settings.sayAveragesEveryMin > 0 ? `Media manga · ${settings.sayAveragesEveryMin} min` : 'Media manga'}
+              active={settings.sayAveragesEveryMin > 0}
+              onPress={() => update({ sayAveragesEveryMin: cycleMinutes(settings.sayAveragesEveryMin) })}
+            />
+            <Chip
+              label={settings.sayRaceAvgEveryMin > 0 ? `Media carrera · ${settings.sayRaceAvgEveryMin} min` : 'Media carrera'}
+              active={settings.sayRaceAvgEveryMin > 0}
+              onPress={() => update({ sayRaceAvgEveryMin: cycleMinutes(settings.sayRaceAvgEveryMin) })}
+            />
+            <Chip
+              label={settings.sayGapsEveryMin > 0 ? `Gaps · ${settings.sayGapsEveryMin} min` : 'Gaps'}
+              active={settings.sayGapsEveryMin > 0}
+              onPress={() => update({ sayGapsEveryMin: cycleMinutes(settings.sayGapsEveryMin) })}
+            />
+            <Chip
+              label={settings.sayCatchUpEveryMin > 0 ? `P/Subir · ${settings.sayCatchUpEveryMin} min` : 'P/Subir'}
+              active={settings.sayCatchUpEveryMin > 0}
+              onPress={() => update({ sayCatchUpEveryMin: cycleMinutes(settings.sayCatchUpEveryMin) })}
+            />
+          </View>
+        </>
+      )}
+      {!settings.enabled && (
+        <Text style={[type.caption, styles.subLabel]}>La voz está apagada: actívala arriba.</Text>
+      )}
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
-  kind: { color: '#9aa3ad', fontSize: 12, marginTop: 12, textTransform: 'uppercase' },
-  selfName: { color: '#fff', fontSize: 22, fontWeight: '700', marginTop: 4 },
-  headerRow: {
-    flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between',
-    marginTop: 4,
+  root: { flex: 1, backgroundColor: colors.bg },
+  content: { padding: spacing.xl, paddingBottom: 40 },
+  flex: { flex: 1 },
+  pressed: { opacity: 0.65 },
+
+  // Cabecera
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },
+  headerName: { marginTop: 2 },
+
+  // Aviso de estado de la manga
+  aviso: {
+    marginTop: spacing.lg, padding: spacing.lg, borderRadius: radius.md,
+    borderWidth: 1, backgroundColor: colors.surface,
   },
-  lane: { color: '#f6c90e', fontSize: 28, fontWeight: '700' },
-  remaining: { color: '#cfd5dc', fontSize: 20, fontWeight: '600' },
-  block: { marginTop: 24, padding: 16, backgroundColor: '#141923', borderRadius: 8 },
-  label: { color: '#9aa3ad', fontSize: 12, textTransform: 'uppercase' },
-  bigTime: { color: '#fff', fontSize: 64, fontWeight: '800', marginTop: 4 },
-  medTime: { color: '#fff', fontSize: 28, fontWeight: '700', marginTop: 4 },
-  row: { flexDirection: 'row', marginTop: 12, gap: 12 },
-  col: { flex: 1, padding: 16, backgroundColor: '#141923', borderRadius: 8 },
-  section: {
-    color: '#9aa3ad', fontSize: 12, marginTop: 28, marginBottom: 8,
-    textTransform: 'uppercase',
+  avisoTitulo: { fontSize: 18, fontWeight: '800' },
+  avisoTexto: { ...type.body, marginTop: spacing.xs },
+
+  // Tarjeta principal
+  hero: { marginTop: spacing.lg, paddingVertical: spacing.xl },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  lanePill: {
+    backgroundColor: colors.accent, borderRadius: radius.sm,
+    paddingHorizontal: 12, paddingVertical: 6,
   },
-  togglesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  lanePillText: { color: colors.onAccent, fontSize: 18, fontWeight: '800' },
+  remaining: { alignItems: 'flex-end' },
+  remainingValue: { ...type.statSmall, fontSize: 24, color: colors.textSoft, marginTop: 2 },
+  heroLabel: { marginTop: spacing.xl, textAlign: 'center' },
+  heroValue: { textAlign: 'center', marginTop: spacing.xs },
+  delta: { textAlign: 'center', fontSize: 16, fontWeight: '700', ...type.tabular },
+  divider: { height: 1, backgroundColor: colors.borderSoft, marginVertical: spacing.lg },
+  statsRow: { flexDirection: 'row', gap: spacing.md },
+
+  // Carrera
+  card: { marginTop: spacing.md },
+  positionBox: { flex: 1, minWidth: 0 },
+  positionValue: { ...type.stat, fontSize: 34, color: colors.accent, marginTop: spacing.xs },
+  positionTotal: { fontSize: 18, color: colors.textMuted, fontWeight: '600' },
+  inlineStat: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  inlineValue: { ...type.statSmall },
+
+  accesos: { marginTop: spacing.lg, gap: spacing.sm },
+
+  // Vista de espera
+  finalTitle: {
+    color: colors.accent, fontSize: 48, fontWeight: '800', letterSpacing: 4,
+    textAlign: 'center', marginBottom: spacing.sm,
+  },
+  centerText: { textAlign: 'center' },
+  waitTitle: { ...type.title, fontSize: 24, textAlign: 'center' },
+  waitSub: { textAlign: 'center', marginTop: spacing.sm, color: colors.textMuted },
+  waitStats: { flexDirection: 'row', alignItems: 'stretch', marginTop: spacing.xl },
+  waitStat: { paddingVertical: spacing.xs },
+  vDivider: { width: 1, backgroundColor: colors.borderSoft },
+
+  // Ajustes
+  settingsCard: { marginBottom: spacing.md },
+  dimmed: { opacity: 0.5 },
+  subLabel: { marginTop: spacing.lg },
+  togglesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  stepperRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.lg, marginVertical: spacing.md,
+  },
   stepBtn: {
-    width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#3a4350',
+    width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  stepBtnText: { color: '#f6c90e', fontSize: 24, fontWeight: '700' },
-  stepValue: { color: '#fff', fontSize: 20, fontWeight: '700', minWidth: 130, textAlign: 'center' },
-  stepHint: { color: '#6b7480', fontSize: 12, marginTop: 8 },
-  chip: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
-  },
-  chipOn:  { backgroundColor: '#f6c90e', borderColor: '#f6c90e' },
-  chipOff: { backgroundColor: 'transparent', borderColor: '#3a4350' },
-  chipText: { fontSize: 13, fontWeight: '600' },
-  chipTextOn:  { color: '#0a0d13' },
-  chipTextOff: { color: '#cfd5dc' },
-
-  // Acceso a Estrategia
-  strategyBtn: {
-    marginTop: 18, paddingVertical: 14, borderRadius: 10, alignItems: 'center',
-    borderWidth: 1, borderColor: '#f6c90e',
-  },
-  strategyBtnText: { color: '#f6c90e', fontSize: 15, fontWeight: '700' },
-
-  // Vista de descanso
-  restTitle: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 4 },
-  finalTitle: { fontSize: 44, fontWeight: '800', marginTop: 8, letterSpacing: 2 },
-  restSub:   { color: '#9aa3ad', fontSize: 14, marginTop: 8 },
+  stepBtnText: { color: colors.accent, fontSize: 24, fontWeight: '700' },
+  stepValue: { ...type.statSmall, minWidth: 130, textAlign: 'center' },
 
   // Entreno GO
-  goBtn: { paddingVertical: 18, borderRadius: 10, alignItems: 'center' },
-  goBtnStart: { backgroundColor: '#1f5f2a' },
-  goBtnStop:  { backgroundColor: '#7a2230' },
-  goBtnText:  { color: '#fff', fontSize: 18, fontWeight: '800' },
-  linkBtn: { marginTop: 14, paddingVertical: 8, alignItems: 'center' },
-  linkBtnText: { color: '#f6c90e', fontSize: 14, fontWeight: '600' },
+  goBtn: { paddingVertical: 18, borderRadius: radius.md, alignItems: 'center' },
+  goBtnStart: { backgroundColor: colors.success },
+  goBtnStop:  { backgroundColor: colors.dangerSoft },
+  goBtnText:  { color: colors.text, fontSize: 18, fontWeight: '800' },
 
   // Modal de guardado
   modalBackdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center', padding: 24,
   },
-  modalCard: { backgroundColor: '#141923', borderRadius: 12, padding: 20 },
-  modalTitle: { color: '#f6c90e', fontSize: 20, fontWeight: '800' },
-  modalSub: { color: '#9aa3ad', fontSize: 13, marginTop: 4 },
+  modalCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.xl },
+  modalTitle: { color: colors.accent, fontSize: 20, fontWeight: '800' },
+  modalSub: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
   input: {
-    marginTop: 4, backgroundColor: '#0a0d13', borderRadius: 8,
-    borderWidth: 1, borderColor: '#3a4350',
-    color: '#fff', fontSize: 16, paddingHorizontal: 12, paddingVertical: 10,
+    marginTop: 4, backgroundColor: colors.bg, borderRadius: radius.sm,
+    borderWidth: 1, borderColor: colors.border,
+    color: colors.text, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10,
   },
-  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-  modalBtnGhost: { borderWidth: 1, borderColor: '#3a4350' },
-  modalBtnGhostText: { color: '#cfd5dc', fontSize: 15, fontWeight: '600' },
-  modalBtnPrimary: { backgroundColor: '#f6c90e' },
-  modalBtnPrimaryText: { color: '#0a0d13', fontSize: 15, fontWeight: '700' },
+  modalBtns: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
 });

@@ -5,7 +5,7 @@
 //   • Bootstrap REST:
 //       GET /api/mobile/races/current   → carrera activa + participantes
 //   • Streaming socket.io:
-//       manga:started/stopped/paused/resumed/cancelled
+//       manga:started/stopped/paused/resumed/cancelled  (ver cicloManga.ts)
 //       lap                  { lane, lapNumber, lapTimeMs, bestLapMs, name, color }
 //       standings            (recálculo de gaps en cliente)
 //       tick                 { elapsedMs }  → derivar remainingMs + avisos fin
@@ -30,6 +30,7 @@ import type {
   TrackingData,
 } from './types';
 import { SLOTTIME_CAPABILITIES, emptyLiveState } from './types';
+import { marcarCancelada, marcarPausa, marcarTerminada } from './cicloManga';
 
 // 30s antes de fin de manga: aviso "último minuto". 60s antes: ya pasó.
 // Disparamos exactamente una vez por manga.
@@ -51,6 +52,8 @@ interface StandingsRow {
   lastLapMs: number | null;
   bestLapMs: number | null;
   avgLapMs: number | null;
+  /** Media de carrera de la entidad (todas las mangas). Puede faltar (servidor antiguo). */
+  raceAvgLapMs?: number | null;
   position: number;
   gap: number;
   exitCount?: number;
@@ -185,6 +188,9 @@ export class PitWallSource implements DataSource {
   private polePrevCurrentEntryId: number | null = null;
   /** Último `status` visto para detectar 'done'. */
   private polePrevStatus: PoleSnapshot['status'] = null;
+  /** La última manga terminó con otra detrás: si al arrancar la siguiente no
+   *  podemos leer su número del servidor, se avanza uno a mano. */
+  private avanzarMangaAlArrancar = false;
 
   constructor(
     server: PitWallServerLocation,
@@ -576,13 +582,51 @@ export class PitWallSource implements DataSource {
       // El servidor empezó una nueva manga. Si la app se conectó antes
       // (con currentMangaNum = null), necesitamos refrescar el número de
       // manga actual y re-evaluar el carril del piloto seleccionado.
-      await this.refreshCurrentManga();
+      const avanzar = this.avanzarMangaAlArrancar;
+      this.avanzarMangaAlArrancar = false;
+      const refrescado = await this.refreshCurrentManga();
+      // Sin respuesta del servidor: si la anterior terminó con siguiente
+      // manga, es esa la que arranca (una cancelada se repite con su número).
+      if (!refrescado && avanzar && this.currentMangaNum != null) this.currentMangaNum += 1;
       if (this.selectedId) this.selectParticipant(this.selectedId);
+      this.currentState = { ...this.currentState, estadoManga: 'en-curso' };
+      this.emitState();
       socket.emit('standings:request');
       this.emitEvent({ type: 'race-started' });
     });
 
+    // Pausa/reanudación de la manga entera (el servidor solo los emite cuando
+    // se pausan TODOS los circuitos). Durante la pausa no llega `tick`.
+    socket.on('manga:paused', () => {
+      console.log('[PitWall] manga:paused');
+      this.currentState = marcarPausa(this.currentState, true);
+      this.emitState();
+      this.emitEvent({ type: 'manga-paused' });
+    });
+    socket.on('manga:resumed', () => {
+      console.log('[PitWall] manga:resumed');
+      this.currentState = marcarPausa(this.currentState, false);
+      this.emitState();
+      this.emitEvent({ type: 'manga-resumed' });
+    });
+
+    // STOP manual: el servidor borra las vueltas de la manga y la deja en
+    // pendiente; se repetirá desde cero con el próximo GO (manga:started).
+    socket.on('manga:cancelled', (payload: { raceId?: number }) => {
+      if (payload?.raceId != null && this.resolvedRaceId != null && payload.raceId !== this.resolvedRaceId) return;
+      console.log('[PitWall] manga:cancelled');
+      // El evento va antes que el estado: la voz solo habla en 'my-turn'.
+      this.emitEvent({ type: 'manga-cancelled' });
+      this.firedHalfManga = false;
+      this.firedLastMinute = false;
+      this.firedLast30s = false;
+      this.prevPosition = null;
+      this.currentState = marcarCancelada(this.currentState);
+      this.emitState();
+    });
+
     socket.on('manga:stopped', (payload: { nextMangaId: number | null; nextLanes?: unknown }) => {
+      console.log('[PitWall] manga:stopped');
       this.emitEvent({ type: 'race-finished' });
       // La manga terminada entra ya en el seguimiento. Con retardo aleatorio
       // para que no lleguen todos los móviles a la vez.
@@ -591,12 +635,7 @@ export class PitWallSource implements DataSource {
         this.trackingTimer = null;
         this.notifyTracking();
       }, 1500 + Math.random() * 3000);
-      // Si hay próxima manga, recalculamos cuál es mi carril ahora.
-      if (this.selectedId && payload?.nextMangaId != null) {
-        // El servidor expone el nuevo manga via subsiguiente standings; aquí
-        // sólo reseteamos el turno-aware.
-        this.reevaluateMangaForSelected();
-      }
+      this.cerrarManga(payload?.nextMangaId != null);
     });
 
     socket.on('standings', (payload: StandingsPayload) => this.onStandings(payload));
@@ -739,6 +778,7 @@ export class PitWallSource implements DataSource {
       lastLapMs: me.lastLapMs,
       bestLapMs: me.bestLapMs,
       avgLapMs: me.avgLapMs,
+      raceAvgLapMs: me.raceAvgLapMs ?? myProj?.avgLapMs ?? null,
       exitCount: me.exitCount ?? 0,
       pitStopCount: me.pitStopCount ?? 0,
       position: shownPosition,
@@ -861,7 +901,8 @@ export class PitWallSource implements DataSource {
     });
   }
 
-  private async refreshCurrentManga(): Promise<void> {
+  /** true si se pudo leer la manga actual del servidor. */
+  private async refreshCurrentManga(): Promise<boolean> {
     try {
       const baseUrl = `http://${this.server.host}:${this.server.port}`;
       // Mismo principio que connect(): si seguimos una carrera concreta,
@@ -870,7 +911,7 @@ export class PitWallSource implements DataSource {
         ? `/api/mobile/races/${this.raceId}`
         : `/api/mobile/races/current`;
       const res = await fetch(`${baseUrl}${path}`);
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const data: RaceCurrentResponse = await res.json();
       this.currentMangaNum = data.activeManga?.number ?? null;
       this.currentTandaNum = data.activeManga?.tandaNum ?? null;
@@ -885,8 +926,10 @@ export class PitWallSource implements DataSource {
         }));
       }
       console.log('[PitWall] refreshCurrentManga → currentMangaNum =', this.currentMangaNum);
+      return true;
     } catch (e) {
       console.log('[PitWall] refreshCurrentManga failed:', e);
+      return false;
     }
   }
 
@@ -930,29 +973,22 @@ export class PitWallSource implements DataSource {
     return first ? { mangaNum: first.mangaNum, lane: first.lane } : undefined;
   }
 
-  private reevaluateMangaForSelected(): void {
-    if (!this.selectedId) return;
-    this.currentMangaNum = (this.currentMangaNum ?? 0) + 1;
-    this.firedHalfManga = false;
-    this.firedLastMinute = false;
-    this.firedLast30s = false;
-    this.prevPosition = null;
-    const myLane = this.findMyLaneForCurrentManga(this.selectedId);
-    const next = myLane == null ? this.findMyNextManga(this.selectedId) : undefined;
-    this.currentState = {
-      ...emptyLiveState(),
-      status: myLane != null ? 'my-turn' : 'resting',
-      myLane,
-      // Preservar el nombre seguido: sin esto desaparecía entre mangas.
-      selfName: this.currentState.selfName,
-      currentMangaNum: this.currentMangaNum,
-      nextMangaInfo: next,
-      isFinal: myLane == null && this.currentMangaNum != null && next == null,
-    };
-    if (myLane != null) {
-      this.emitEvent({ type: 'manga-changed', newMangaNum: this.currentMangaNum, newLane: myLane });
-    }
+  /** Fin normal de la manga (`manga:stopped`). No saltamos aún a la
+   *  siguiente: la pantalla se queda con los datos finales y la marca de
+   *  terminada, y apunta la próxima manga del piloto. Al llegar
+   *  `manga:started` se entra en la nueva con `selectParticipant`. */
+  private cerrarManga(haySiguiente: boolean): void {
+    this.avanzarMangaAlArrancar = haySiguiente;
+    const id = this.selectedId;
+    const siguiente = id ? this.findMyNextManga(id) : undefined;
+    this.currentState = marcarTerminada(this.currentState, siguiente);
     this.emitState();
+    // Si corro la manga que viene justo después, se avisa ya del carril
+    // ("Tu turno, carril X"), como antes.
+    if (haySiguiente && siguiente && this.currentMangaNum != null
+        && siguiente.mangaNum === this.currentMangaNum + 1) {
+      this.emitEvent({ type: 'manga-changed', newMangaNum: siguiente.mangaNum, newLane: siguiente.lane });
+    }
   }
 
   private emitState(): void {
