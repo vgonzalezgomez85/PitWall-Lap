@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
 
@@ -30,6 +31,7 @@ export default function RacePickerScreen({ route, navigation }: Props) {
   const [races, setRaces] = useState<RaceBrief[] | null>(null);
   const [trainingActive, setTrainingActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useIdioma();
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +73,7 @@ export default function RacePickerScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>Error</Text>
+          <Text style={styles.errorTitle}>{t.comun.error}</Text>
           <Text style={styles.errorBody}>{error}</Text>
         </View>
       </View>
@@ -84,7 +86,7 @@ export default function RacePickerScreen({ route, navigation }: Props) {
         <BackButton />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#f6c90e" />
-          <Text style={styles.loading}>Cargando carreras…</Text>
+          <Text style={styles.loading}>{t.carreras.cargando}</Text>
         </View>
       </View>
     );
@@ -95,10 +97,8 @@ export default function RacePickerScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>Sin actividad</Text>
-          <Text style={styles.errorBody}>
-            El servidor PitWall no tiene carreras preparadas ni una sesión de entrenamiento activa.
-          </Text>
+          <Text style={styles.errorTitle}>{t.carreras.sinActividad}</Text>
+          <Text style={styles.errorBody}>{t.carreras.sinActividadTexto}</Text>
         </View>
       </View>
     );
@@ -107,7 +107,7 @@ export default function RacePickerScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       <BackButton />
-      <Text style={styles.title}>Elige actividad</Text>
+      <Text style={styles.title}>{t.carreras.eligeActividad}</Text>
       <FlatList
         data={races}
         keyExtractor={r => String(r.id)}
@@ -118,11 +118,11 @@ export default function RacePickerScreen({ route, navigation }: Props) {
             onPress={() => navigation.push('TrainingLanePicker', { host, port })}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowName}>Entrenamiento</Text>
-              <Text style={styles.rowMeta}>Sesión libre · elige tu carril</Text>
+              <Text style={styles.rowName}>{t.comun.entrenamiento}</Text>
+              <Text style={styles.rowMeta}>{t.carreras.sesionLibre}</Text>
             </View>
             <View style={[styles.badge, styles.badgeActive]}>
-              <Text style={[styles.badgeText, styles.badgeTextActive]}>Activo</Text>
+              <Text style={[styles.badgeText, styles.badgeTextActive]}>{t.carreras.activo}</Text>
             </View>
           </TouchableOpacity>
         ) : null}
@@ -140,9 +140,9 @@ export default function RacePickerScreen({ route, navigation }: Props) {
             <View style={{ flex: 1 }}>
               <Text style={styles.rowName}>{item.name}</Text>
               <Text style={styles.rowMeta}>
-                {item.format === 'team' ? 'Equipos' : 'Pilotos'} · {item.participantsCount} ·{' '}
-                {item.tandasCount} {item.tandasCount === 1 ? 'tanda' : 'tandas'} ·{' '}
-                {item.mangaDurationMin} min/manga
+                {item.format === 'team' ? t.comun.equipos : t.comun.pilotos} · {item.participantsCount} ·{' '}
+                {t.carreras.tandas(item.tandasCount)} ·{' '}
+                {t.carreras.minPorManga(item.mangaDurationMin)}
               </Text>
             </View>
             {item.hasPole && (
@@ -152,7 +152,7 @@ export default function RacePickerScreen({ route, navigation }: Props) {
             )}
             <View style={[styles.badge, item.status === 'active' ? styles.badgeActive : styles.badgePending, { marginLeft: 6 }]}>
               <Text style={[styles.badgeText, item.status === 'active' ? styles.badgeTextActive : styles.badgeTextPending]}>
-                {item.status === 'active' ? 'En curso' : 'Pendiente'}
+                {item.status === 'active' ? t.carreras.enCurso : t.carreras.pendiente}
               </Text>
             </View>
           </TouchableOpacity>

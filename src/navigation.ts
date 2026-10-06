@@ -16,6 +16,7 @@ export type RootStackParamList = {
   History: undefined;
   HistoryDetail: { raceId: number | string };
   Changelog: undefined;
+  Idioma: undefined;
   Training: undefined;
   StintDetail: { id: string; compareIds?: string[] };
 };

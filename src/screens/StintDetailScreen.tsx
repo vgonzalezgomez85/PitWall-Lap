@@ -15,7 +15,9 @@ import {
   type Stint, type StintSetup,
 } from '../data/trainingStore';
 import LapChart, { type ChartSeries } from '../ui/LapChart';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
+import type { Textos } from '../i18n';
 import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'StintDetail'>;
@@ -29,10 +31,10 @@ function fmt(ms: number | null): string {
   return `${Math.floor(cs / 100)}.${String(cs % 100).padStart(2, '0')}`;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('es-ES', {
+  return d.toLocaleString(locale, {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
@@ -46,8 +48,8 @@ function stdDev(laps: number[]): number | null {
   return Math.sqrt(variance);
 }
 
-function seriesLabel(s: Stint): string {
-  return stintSetupLabel(s.setup) || `Stint ${formatDate(s.savedAt)}`;
+function seriesLabel(s: Stint, t: Textos, locale: string): string {
+  return stintSetupLabel(s.setup) || t.entrenos.stintDe(formatDate(s.savedAt, locale));
 }
 
 export default function StintDetailScreen({ route, navigation }: Props) {
@@ -56,6 +58,7 @@ export default function StintDetailScreen({ route, navigation }: Props) {
   const [others, setOthers] = useState<Stint[]>([]);
   const [editing, setEditing] = useState(false);
   const [setup, setSetup] = useState<StintSetup>({});
+  const { t, locale } = useIdioma();
 
   useFocusEffect(
     useCallback(() => {
@@ -80,10 +83,10 @@ export default function StintDetailScreen({ route, navigation }: Props) {
 
   function confirmDelete() {
     if (!main) return;
-    Alert.alert('Borrar stint', '¿Eliminar este entrenamiento? No se puede deshacer.', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t.stint.borrarStint, t.stint.borrarTexto, [
+      { text: t.comun.cancelar, style: 'cancel' },
       {
-        text: 'Borrar', style: 'destructive',
+        text: t.stint.borrar, style: 'destructive',
         onPress: async () => { await deleteStint(main.id); navigation.goBack(); },
       },
     ]);
@@ -92,21 +95,21 @@ export default function StintDetailScreen({ route, navigation }: Props) {
   if (main === undefined) {
     return (
       <View style={styles.root}><BackButton />
-        <Text style={styles.empty}>Cargando…</Text>
+        <Text style={styles.empty}>{t.comun.cargando}</Text>
       </View>
     );
   }
   if (main === null) {
     return (
       <View style={styles.root}><BackButton />
-        <Text style={styles.empty}>No se encontró este stint.</Text>
+        <Text style={styles.empty}>{t.stint.noEncontrado}</Text>
       </View>
     );
   }
 
   const allStints = [main, ...others];
   const series: ChartSeries[] = allStints.map((s, i) => ({
-    label: seriesLabel(s),
+    label: seriesLabel(s, t, locale),
     color: (PALETTE[i % PALETTE.length] ?? '#f6c90e'),
     laps: s.lapTimes,
   }));
@@ -116,12 +119,12 @@ export default function StintDetailScreen({ route, navigation }: Props) {
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 32 }}>
       <BackButton />
       <Text style={styles.title}>
-        {comparing ? 'Comparativa' : (stintSetupLabel(main.setup) || 'Stint')}
+        {comparing ? t.stint.comparativa : (stintSetupLabel(main.setup) || t.stint.stint)}
       </Text>
       <Text style={styles.subtitle}>
         {comparing
-          ? `${allStints.length} stints superpuestos`
-          : `${formatDate(main.savedAt)}${main.lane != null ? ` · carril ${main.lane}` : ''}`}
+          ? t.stint.superpuestos(allStints.length)
+          : `${formatDate(main.savedAt, locale)}${main.lane != null ? ` · ${t.comun.carrilMin(main.lane)}` : ''}`}
       </Text>
 
       <LapChart series={series} />
@@ -134,9 +137,9 @@ export default function StintDetailScreen({ route, navigation }: Props) {
             <View key={s.id} style={styles.statsRow}>
               <View style={[styles.dot, { backgroundColor: (PALETTE[i % PALETTE.length] ?? '#f6c90e') }]} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.statsName} numberOfLines={1}>{seriesLabel(s)}</Text>
+                <Text style={styles.statsName} numberOfLines={1}>{seriesLabel(s, t, locale)}</Text>
                 <Text style={styles.statsLine}>
-                  {s.lapCount} vueltas · mejor {fmt(s.bestMs)} · media {fmt(s.avgMs)}
+                  {t.comun.vueltas(s.lapCount)} · {t.comun.mejor(fmt(s.bestMs))} · {t.comun.media(fmt(s.avgMs))}
                   {sd != null && ` · ±${fmt(sd)}`}
                 </Text>
               </View>
@@ -144,27 +147,27 @@ export default function StintDetailScreen({ route, navigation }: Props) {
           );
         })}
       </View>
-      <Text style={styles.note}>±  = consistencia (desviación de los tiempos; menor es mejor)</Text>
+      <Text style={styles.note}>{t.stint.consistencia}</Text>
 
       {!comparing && (
         <>
           {/* Datos del coche */}
-          <Text style={styles.section}>Datos del coche</Text>
-          <SetupRow label="Modelo" value={main.setup.carModel} />
-          <SetupRow label="Motor" value={main.setup.motor} />
-          <SetupRow label="Neumático" value={main.setup.tire} />
-          <SetupRow label="Llanta" value={main.setup.rim} />
-          <SetupRow label="Corona" value={main.setup.crown} />
-          <SetupRow label="Piñón" value={main.setup.pinion} />
+          <Text style={styles.section}>{t.stint.datosCoche}</Text>
+          <SetupRow label={t.coche.modelo} value={main.setup.carModel} />
+          <SetupRow label={t.coche.motor} value={main.setup.motor} />
+          <SetupRow label={t.coche.neumatico} value={main.setup.tire} />
+          <SetupRow label={t.coche.llanta} value={main.setup.rim} />
+          <SetupRow label={t.coche.corona} value={main.setup.crown} />
+          <SetupRow label={t.coche.pinon} value={main.setup.pinion} />
 
           <TouchableOpacity
             style={styles.editBtn}
             onPress={() => { setSetup(main.setup); setEditing(true); }}
           >
-            <Text style={styles.editBtnText}>Editar datos del coche</Text>
+            <Text style={styles.editBtnText}>{t.stint.editarDatos}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete}>
-            <Text style={styles.deleteBtnText}>Borrar stint</Text>
+            <Text style={styles.deleteBtnText}>{t.stint.borrarStint}</Text>
           </TouchableOpacity>
         </>
       )}
@@ -173,27 +176,27 @@ export default function StintDetailScreen({ route, navigation }: Props) {
         onRequestClose={() => setEditing(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Datos del coche</Text>
-            <SetupField label="Modelo de coche" value={setup.carModel}
+            <Text style={styles.modalTitle}>{t.stint.datosCoche}</Text>
+            <SetupField label={t.coche.modeloCoche} value={setup.carModel}
               onChange={v => setSetup(s => ({ ...s, carModel: v }))} />
-            <SetupField label="Motor" value={setup.motor}
+            <SetupField label={t.coche.motor} value={setup.motor}
               onChange={v => setSetup(s => ({ ...s, motor: v }))} />
-            <SetupField label="Neumático" value={setup.tire}
+            <SetupField label={t.coche.neumatico} value={setup.tire}
               onChange={v => setSetup(s => ({ ...s, tire: v }))} />
-            <SetupField label="Medida de llanta" value={setup.rim}
+            <SetupField label={t.coche.medidaLlanta} value={setup.rim}
               onChange={v => setSetup(s => ({ ...s, rim: v }))} />
-            <SetupField label="Corona" value={setup.crown}
+            <SetupField label={t.coche.corona} value={setup.crown}
               onChange={v => setSetup(s => ({ ...s, crown: v }))} />
-            <SetupField label="Piñón" value={setup.pinion}
+            <SetupField label={t.coche.pinon} value={setup.pinion}
               onChange={v => setSetup(s => ({ ...s, pinion: v }))} />
             <View style={styles.modalBtns}>
               <Pressable style={[styles.modalBtn, styles.modalBtnGhost]}
                 onPress={() => setEditing(false)}>
-                <Text style={styles.modalBtnGhostText}>Cancelar</Text>
+                <Text style={styles.modalBtnGhostText}>{t.comun.cancelar}</Text>
               </Pressable>
               <Pressable style={[styles.modalBtn, styles.modalBtnPrimary]}
                 onPress={saveSetup}>
-                <Text style={styles.modalBtnPrimaryText}>Guardar</Text>
+                <Text style={styles.modalBtnPrimaryText}>{t.comun.guardar}</Text>
               </Pressable>
             </View>
           </View>

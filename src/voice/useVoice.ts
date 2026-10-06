@@ -17,21 +17,27 @@ import { useDataSource, useSourceEvent } from '../data/sourceContext';
 import { speak, speakTime, shutUp } from './speak';
 import { useVoiceSettings, type VoiceSettings } from './settings';
 import { cuentaParaMedia, mediaAnunciable } from './avisos';
+import { useIdioma } from '../i18n/IdiomaContext';
+import { ordinalHablado } from '../i18n';
 
 export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSettings) => void; update: (p: Partial<VoiceSettings>) => void; ready: boolean } {
   const { state, raceInfo } = useDataSource();
   const { settings, toggle, update, ready } = useVoiceSettings();
+  const { t } = useIdioma();
 
   // Refs para los datos más recientes (los lee el ticker sin causar
   // re-renders del callback).
   const settingsRef = useRef(settings);
   const stateRef    = useRef(state);
+  const vozRef      = useRef(t.voz);
   settingsRef.current = settings;
   stateRef.current    = state;
+  vozRef.current      = t.voz;
 
   // ── Eventos discretos ──────────────────────────────────────────────────
   useSourceEvent(e => {
     const s = settingsRef.current;
+    const v = vozRef.current;
     if (!s.enabled) return;
 
     // Si estoy descansando, sólo dejamos pasar 'manga-changed'.
@@ -41,7 +47,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       case 'lap-completed': {
         if (cuentaParaMedia(e)) vueltasValidasRef.current += 1;
         if (!s.sayLaps) return;
-        const t = speakTime(e.lapTimeMs);
+        const tiempo = speakTime(e.lapTimeMs, v);
         const ms = e.lapTimeMs;
         const prevBest = bestLapRef.current;
         // Si la fuente ya manda `isFastest` (p.ej. Pole, calculado en el
@@ -62,23 +68,23 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         const isPoleLeader =
           pole != null && isFastest && ms != null &&
           (poleLeaderMs == null || ms < poleLeaderMs);
-        console.log('[Voice] speak lap:', e.lapCount, t, isFastest ? '(rápida)' : '', isPoleLeader ? '(líder pole)' : '');
-        speak(isPoleLeader ? `Vuelta rápida, primero, ${t}` : isFastest ? `Vuelta rápida, ${t}` : t);
+        console.log('[Voice] speak lap:', e.lapCount, tiempo, isFastest ? '(rápida)' : '', isPoleLeader ? '(líder pole)' : '');
+        speak(isPoleLeader ? v.vueltaRapidaPrimero(tiempo) : isFastest ? v.vueltaRapida(tiempo) : tiempo);
         break;
       }
       case 'position-changed': {
         if (!s.sayPositionChange) return;
-        if (e.to !== e.from) speak(ordinal(e.to));
+        if (e.to !== e.from) speak(ordinalHablado(e.to, v));
         break;
       }
       case 'half-manga':
-        if (s.sayHalfManga) speak('Media manga');
+        if (s.sayHalfManga) speak(v.mitadManga);
         break;
       case 'last-minute':
-        if (s.sayLastMinute) speak('Último minuto');
+        if (s.sayLastMinute) speak(v.ultimoMinuto);
         break;
       case 'last-30s':
-        if (s.sayLast30s) speak('Últimos treinta segundos');
+        if (s.sayLast30s) speak(v.ultimos30s);
         break;
       case 'race-started':
         vueltasValidasRef.current = 0;
@@ -87,33 +93,29 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         bestLapRef.current = null;
         vueltasValidasRef.current = 0;
         if (e.newLane != null) {
-          if (stateRef.current.pole) {
-            speak(`Pole, tu turno, carril ${e.newLane}`);
-          } else {
-            speak(`Tu turno, carril ${e.newLane}`);
-          }
+          speak(stateRef.current.pole ? v.poleTuTurno(e.newLane) : v.tuTurno(e.newLane));
         }
         break;
       case 'race-finished':
-        speak(stateRef.current.pole ? 'Fin de la pole' : 'Fin de la manga');
+        speak(stateRef.current.pole ? v.finPole : v.finManga);
         break;
       case 'manga-paused':
-        speak('Manga en pausa');
+        speak(v.mangaPausa);
         break;
       case 'manga-resumed':
-        speak('Manga reanudada');
+        speak(v.mangaReanudada);
         break;
       // STOP manual: la manga se repite desde cero, así que su mejor vuelta y
       // su media ya no cuentan como referencia.
       case 'manga-cancelled':
         bestLapRef.current = null;
         vueltasValidasRef.current = 0;
-        speak('Manga detenida');
+        speak(v.mangaDetenida);
         break;
       // Vuelta fantasma en MI carril (cruce demasiado rápido, no cuenta): no
       // es vuelta rápida — se avisa como ignorada.
       case 'lap-ghost':
-        if (s.sayLaps && e.lane === stateRef.current.myLane) speak('Vuelta ignorada');
+        if (s.sayLaps && e.lane === stateRef.current.myLane) speak(v.vueltaIgnorada);
         break;
       // Vuelta fantasma reasignada. Si era mía (la "pierdo"): "ignorada,
       // asignada a X". Si me la asignan a mí (la gano): "vuelta asignada"
@@ -122,9 +124,9 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         if (!s.sayLaps) break;
         const my = stateRef.current.myLane;
         if (e.fromLane === my) {
-          speak(e.toName ? `Vuelta ignorada, asignada a ${e.toName}` : 'Vuelta ignorada');
+          speak(e.toName ? v.vueltaIgnoradaAsignada(e.toName) : v.vueltaIgnorada);
         } else if (e.toLane === my) {
-          speak('Vuelta asignada');
+          speak(v.vueltaAsignada);
         }
         break;
       }
@@ -140,6 +142,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
     const interval = setInterval(() => {
       const s = settingsRef.current;
       const st = stateRef.current;
+      const v = vozRef.current;
       if (!s.enabled || st.status !== 'my-turn') return;
       // Con la manga pausada o cerrada no hay nada nuevo que contar.
       if (st.estadoManga != null && st.estadoManga !== 'en-curso') return;
@@ -151,7 +154,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         if (lastAvgMinuteRef.current !== minute && st.avgLapMs != null
             && mediaAnunciable(vueltasValidasRef.current)) {
           lastAvgMinuteRef.current = minute;
-          speak(`Media de carril ${speakTime(st.avgLapMs)}`);
+          speak(v.mediaCarril(speakTime(st.avgLapMs, v)));
         }
       }
 
@@ -162,7 +165,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         if (lastRaceAvgMinuteRef.current !== minute && st.raceAvgLapMs != null
             && mediaAnunciable(vueltasValidasRef.current)) {
           lastRaceAvgMinuteRef.current = minute;
-          speak(`Media de carrera ${speakTime(st.raceAvgLapMs)}`);
+          speak(v.mediaCarrera(speakTime(st.raceAvgLapMs, v)));
         }
       }
 
@@ -173,13 +176,13 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
           lastGapMinuteRef.current = minute;
           if (st.gapAheadLaps != null && st.gapAheadLaps <= GAP_LAPS_THRESHOLD && st.aheadName) {
             speak(st.gapAheadLaps === 0
-              ? `Delante, a la par con ${st.aheadName}`
-              : `A ${lapsPhrase(st.gapAheadLaps)} de ${st.aheadName}`);
+              ? v.delanteALaPar(st.aheadName)
+              : v.delanteA(st.gapAheadLaps, st.aheadName));
           }
           if (st.gapBehindLaps != null && st.gapBehindLaps <= GAP_LAPS_THRESHOLD && st.behindName) {
             speak(st.gapBehindLaps === 0
-              ? `Detrás, a la par con ${st.behindName}`
-              : `Detrás, ${st.behindName} a ${lapsPhrase(st.gapBehindLaps)}`);
+              ? v.detrasALaPar(st.behindName)
+              : v.detrasA(st.gapBehindLaps, st.behindName));
           }
         }
       }
@@ -189,7 +192,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       if (s.sayCatchUpEveryMin > 0 && minute % s.sayCatchUpEveryMin === 0) {
         if (lastCatchMinuteRef.current !== minute && st.avgToCatchMs != null) {
           lastCatchMinuteRef.current = minute;
-          speak(`Para subir, ${speakTime(st.avgToCatchMs)}`);
+          speak(v.paraSubir(speakTime(st.avgToCatchMs, v)));
         }
       }
     }, 5000); // chequear cada 5s, la guarda por minuto evita repetición
@@ -228,23 +231,3 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
 
 // Solo avisamos del rival si está a esta diferencia de vueltas o menos.
 const GAP_LAPS_THRESHOLD = 2;
-
-function lapsPhrase(n: number): string {
-  return n === 1 ? 'una vuelta' : `${n} vueltas`;
-}
-
-function ordinal(n: number): string {
-  switch (n) {
-    case 1: return 'primero';
-    case 2: return 'segundo';
-    case 3: return 'tercero';
-    case 4: return 'cuarto';
-    case 5: return 'quinto';
-    case 6: return 'sexto';
-    case 7: return 'séptimo';
-    case 8: return 'octavo';
-    case 9: return 'noveno';
-    case 10: return 'décimo';
-    default: return `puesto ${n}`;
-  }
-}

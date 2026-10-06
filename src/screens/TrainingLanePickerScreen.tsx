@@ -10,6 +10,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { PitWallSource } from '../data/PitWallSource';
 import { useDataSource } from '../data/sourceContext';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
 
@@ -43,6 +44,7 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
   const [status, setStatus] = useState<TrainingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const { t } = useIdioma();
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +74,7 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>Error</Text>
+          <Text style={styles.errorTitle}>{t.comun.error}</Text>
           <Text style={styles.errorBody}>{error}</Text>
         </View>
       </View>
@@ -85,7 +87,7 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
         <BackButton />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#f6c90e" />
-          <Text style={styles.loading}>{connecting ? 'Conectando…' : 'Cargando carriles…'}</Text>
+          <Text style={styles.loading}>{connecting ? t.comun.conectando : t.entrenoCarril.cargando}</Text>
         </View>
       </View>
     );
@@ -96,10 +98,8 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>Entrenamiento no activo</Text>
-          <Text style={styles.errorBody}>
-            El servidor PitWall no tiene una sesión de entrenamiento activa ahora mismo.
-          </Text>
+          <Text style={styles.errorTitle}>{t.entrenoCarril.noActivo}</Text>
+          <Text style={styles.errorBody}>{t.entrenoCarril.noActivoTexto}</Text>
         </View>
       </View>
     );
@@ -108,8 +108,8 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       <BackButton />
-      <Text style={styles.title}>Entrenamiento</Text>
-      <Text style={styles.subtitle}>Elige tu carril</Text>
+      <Text style={styles.title}>{t.comun.entrenamiento}</Text>
+      <Text style={styles.subtitle}>{t.entrenoCarril.eligeCarril}</Text>
       <FlatList
         data={status.lanes}
         keyExtractor={l => String(l.lane)}
@@ -119,9 +119,9 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
             style={[styles.row, { borderLeftColor: item.color }]}
             onPress={() => pickLane(item.lane)}
           >
-            <Text style={styles.rowName}>Carril {item.lane}</Text>
+            <Text style={styles.rowName}>{t.comun.carril(item.lane)}</Text>
             <Text style={styles.rowMeta}>
-              {item.count} vueltas · mejor {fmt(item.bestMs)} · media {fmt(item.avgMs)}
+              {[t.comun.vueltas(item.count), t.comun.mejor(fmt(item.bestMs)), t.comun.media(fmt(item.avgMs))].join(' · ')}
             </Text>
           </TouchableOpacity>
         )}

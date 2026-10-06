@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { listStints, stintSetupLabel, type StintMeta } from '../data/trainingStore';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
 
@@ -20,10 +21,10 @@ function fmt(ms: number | null): string {
   return `${Math.floor(cs / 100)}.${String(cs % 100).padStart(2, '0')}`;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('es-ES', {
+  return d.toLocaleString(locale, {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
   });
 }
@@ -32,6 +33,7 @@ export default function TrainingScreen({ navigation }: Props) {
   const [stints, setStints] = useState<StintMeta[] | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const { t, locale } = useIdioma();
 
   useFocusEffect(
     useCallback(() => {
@@ -64,31 +66,26 @@ export default function TrainingScreen({ navigation }: Props) {
     <View style={styles.root}>
       <BackButton />
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Entrenamientos</Text>
+        <Text style={styles.title}>{t.entrenos.titulo}</Text>
         {stints != null && stints.length >= 2 && (
           <TouchableOpacity
             onPress={() => { setCompareMode(m => !m); setSelected([]); }}
           >
             <Text style={styles.compareToggle}>
-              {compareMode ? 'Cancelar' : 'Comparar'}
+              {compareMode ? t.comun.cancelar : t.entrenos.comparar}
             </Text>
           </TouchableOpacity>
         )}
       </View>
 
       {stints === null ? (
-        <Text style={styles.empty}>Cargando…</Text>
+        <Text style={styles.empty}>{t.comun.cargando}</Text>
       ) : stints.length === 0 ? (
-        <Text style={styles.empty}>
-          Aún no tienes stints guardados.{'\n'}
-          Activa "Entreno GO" durante un entrenamiento para registrar tus vueltas.
-        </Text>
+        <Text style={styles.empty}>{t.entrenos.vacio}</Text>
       ) : (
         <>
           {compareMode && (
-            <Text style={styles.hint}>
-              Selecciona 2-4 stints para comparar ({selected.length} elegidos)
-            </Text>
+            <Text style={styles.hint}>{t.entrenos.selecciona(selected.length)}</Text>
           )}
           <FlatList
             data={stints}
@@ -104,15 +101,15 @@ export default function TrainingScreen({ navigation }: Props) {
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowName}>
-                      {label || `Stint ${formatDate(item.savedAt)}`}
+                      {label || t.entrenos.stintDe(formatDate(item.savedAt, locale))}
                     </Text>
                     <Text style={styles.rowMeta}>
-                      {formatDate(item.savedAt)}
-                      {item.lane != null && ` · carril ${item.lane}`}
-                      {' · '}{item.lapCount} vueltas
+                      {formatDate(item.savedAt, locale)}
+                      {item.lane != null && ` · ${t.comun.carrilMin(item.lane)}`}
+                      {' · '}{t.comun.vueltas(item.lapCount)}
                     </Text>
                     <Text style={styles.rowStats}>
-                      mejor {fmt(item.bestMs)} · media {fmt(item.avgMs)}
+                      {t.comun.mejor(fmt(item.bestMs))} · {t.comun.media(fmt(item.avgMs))}
                     </Text>
                   </View>
                   {compareMode && (
@@ -130,9 +127,7 @@ export default function TrainingScreen({ navigation }: Props) {
               disabled={selected.length < 2}
               onPress={openComparison}
             >
-              <Text style={styles.compareBtnText}>
-                Comparar {selected.length} stints
-              </Text>
+              <Text style={styles.compareBtnText}>{t.entrenos.compararN(selected.length)}</Text>
             </TouchableOpacity>
           )}
         </>

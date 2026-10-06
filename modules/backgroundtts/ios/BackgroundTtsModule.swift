@@ -53,7 +53,7 @@ public class BackgroundTtsModule: Module {
         self.startKeepAlive()
       }
       let utterance = AVSpeechUtterance(string: text)
-      utterance.voice = AVSpeechSynthesisVoice(language: language)
+      utterance.voice = self.vozPara(language)
       utterance.rate = Float(rate)
       self.synth.speak(utterance)
       return ok ? "ok" : "session-failed"
@@ -73,6 +73,18 @@ public class BackgroundTtsModule: Module {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
+
+  // Voz del idioma pedido; si el sistema no la tiene, otra del mismo idioma
+  // (p. ej. pt-BR por pt-PT) y, en último caso, castellano. iOS no trae voz
+  // en euskera: sin esta reserva hablaría con la voz del idioma del sistema.
+  private func vozPara(_ language: String) -> AVSpeechSynthesisVoice? {
+    if let v = AVSpeechSynthesisVoice(language: language) { return v }
+    let base = language.split(separator: "-").first.map(String.init) ?? language
+    if let v = AVSpeechSynthesisVoice.speechVoices().first(where: { $0.language.hasPrefix(base + "-") }) {
+      return v
+    }
+    return AVSpeechSynthesisVoice(language: "es-ES")
+  }
 
   private func configureAudioSession() -> Bool {
     let session = AVAudioSession.sharedInstance()

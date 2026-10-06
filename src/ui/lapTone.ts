@@ -2,6 +2,8 @@
 // de los cronos de F1: morado = mejor vuelta, verde = cerca de la mejor,
 // ámbar = claramente más lenta. Lógica pura (sin React) para poder testearla.
 
+import { textosDe, type Textos } from '../i18n';
+
 export type LapTone = 'best' | 'good' | 'slow' | 'neutral';
 
 /** Margen sobre la mejor (en fracción) que todavía cuenta como "buena". */
@@ -23,9 +25,13 @@ export function fmtDelta(ms: number): string {
 }
 
 /** Texto bajo la última vuelta: "Mejor vuelta" o el delta frente a la mejor. */
-export function lapDeltaLabel(lastMs: number | null, bestMs: number | null): string | null {
+export function lapDeltaLabel(
+  lastMs: number | null,
+  bestMs: number | null,
+  ui: Textos['ui'] = textosDe('es').ui,
+): string | null {
   const tone = lapTone(lastMs, bestMs);
   if (tone === 'neutral' || lastMs == null || bestMs == null) return null;
-  if (tone === 'best') return 'Mejor vuelta';
-  return `${fmtDelta(lastMs - bestMs)} vs mejor`;
+  if (tone === 'best') return ui.mejorVuelta;
+  return ui.vsMejor(fmtDelta(lastMs - bestMs));
 }

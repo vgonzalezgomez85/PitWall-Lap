@@ -7,6 +7,7 @@ import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useDataSource } from '../data/sourceContext';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
 
@@ -15,6 +16,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Select'>;
 export default function SelectScreen({ route, navigation }: Props) {
   const { source, raceInfo } = useDataSource();
   const tandaNum = route.params?.tandaNum;
+  const { t } = useIdioma();
 
   // Filtrar participantes por tanda si la ruta lo indica. Para PitWall
   // tenemos `participantsPlan` con info de mangas → comprobamos si el
@@ -46,8 +48,8 @@ export default function SelectScreen({ route, navigation }: Props) {
       <BackButton />
       <Text style={styles.title}>{raceInfo.name}</Text>
       <Text style={styles.subtitle}>
-        {tandaNum != null && `Tanda ${tandaNum} · `}
-        Elige tu {raceInfo.format === 'team' ? 'equipo' : 'piloto'}
+        {tandaNum != null && `${t.tandas.tanda(tandaNum)} · `}
+        {raceInfo.format === 'team' ? t.seleccion.eligeEquipo : t.seleccion.eligePiloto}
       </Text>
       <FlatList
         data={participants}
@@ -62,9 +64,7 @@ export default function SelectScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <Text style={styles.empty}>
-            No hay participantes en esta tanda.
-          </Text>
+          <Text style={styles.empty}>{t.seleccion.sinParticipantes}</Text>
         }
       />
     </View>

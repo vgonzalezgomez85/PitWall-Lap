@@ -58,9 +58,14 @@ export type Recommendation =
   | { kind: 'window-open'; basis: RecommendationBasis }
   | { kind: 'change-in'; laps: number; basis: RecommendationBasis };
 
+/** Consejo por posición. El texto lo compone la pantalla en su idioma. */
 export interface PositionAdvice {
   action: 'change' | 'hold' | 'neutral';
-  text: string;
+  /** adelantas: cambiar te pone delante del rival de delante; te-adelanta:
+   *  si paras te pasa el de detrás; defiendes: cambiar te mantiene delante
+   *  del de detrás. */
+  kind: 'adelantas' | 'te-adelanta' | 'defiendes' | 'neutral';
+  rival: string | null;
 }
 
 export interface StrategyResult {
@@ -252,13 +257,13 @@ export function computeTireStrategy(input: StrategyInputs): StrategyResult {
     const behindProj = input.behindProjected ?? behind?.projectedTotal ?? null;
 
     if (aheadProj != null && projStop > aheadProj && projNoStop <= aheadProj) {
-      position = { action: 'change', text: `Cambia → adelantas a ${ahead!.name}` };
+      position = { action: 'change', kind: 'adelantas', rival: ahead!.name };
     } else if (behindProj != null && projNoStop > behindProj && projStop <= behindProj) {
-      position = { action: 'hold', text: `Aguanta → si paras te adelanta ${behind!.name}` };
+      position = { action: 'hold', kind: 'te-adelanta', rival: behind!.name };
     } else if (behindProj != null && projStop > behindProj && projNoStop <= behindProj) {
-      position = { action: 'change', text: `Cambia → defiendes de ${behind!.name}` };
+      position = { action: 'change', kind: 'defiendes', rival: behind!.name };
     } else {
-      position = { action: 'neutral', text: 'Sin cambio de posición previsto' };
+      position = { action: 'neutral', kind: 'neutral', rival: null };
     }
   }
 

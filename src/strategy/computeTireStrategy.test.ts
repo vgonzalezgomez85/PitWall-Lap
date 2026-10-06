@@ -111,7 +111,8 @@ describe('capa de posición', () => {
       ahead: mkRow({ name: 'RIVAL-A', total: 200, projectedTotal: 276, avgLapMs: 10030 }),
     });
     expect(r.position?.action).toBe('change');
-    expect(r.position?.text).toContain('RIVAL-A');
+    expect(r.position?.kind).toBe('adelantas');
+    expect(r.position?.rival).toBe('RIVAL-A');
   });
 
   it('hold → si paras te adelanta el de detrás', () => {
@@ -123,7 +124,8 @@ describe('capa de posición', () => {
       behind: mkRow({ name: 'RIVAL-B', total: 200, projectedTotal: 289.5, avgLapMs: 9810 }),
     });
     expect(r.position?.action).toBe('hold');
-    expect(r.position?.text).toContain('RIVAL-B');
+    expect(r.position?.kind).toBe('te-adelanta');
+    expect(r.position?.rival).toBe('RIVAL-B');
   });
 
   it('neutral → sin cambio de posición previsto', () => {

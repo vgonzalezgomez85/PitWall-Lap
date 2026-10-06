@@ -18,6 +18,17 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.4.0] — 2026-10-06
+
+### Añadido
+- **La app es multidioma:** castellano, catalán, euskera, inglés, italiano, francés, portugués y neerlandés. Al abrirla **detecta el idioma del móvil**; si no es ninguno de estos, se pone en **inglés**. Se puede cambiar a mano desde el enlace del idioma en la pantalla inicial (`IdiomaScreen`), con la opción **Automático** para volver a seguir al móvil.
+- **La voz también se locuta en el idioma elegido**, con frases y ordinales propios de cada idioma (`src/i18n/textos/`) y la voz del sistema correspondiente. El euskera no tiene voz de sistema en iOS: se usa la de castellano como reserva (`vozPara` en `BackgroundTtsModule.swift`).
+- Las fechas del histórico y de los entrenamientos se formatean con el idioma elegido.
+
+### Mejorado
+- El consejo de posición de *Estrategia* deja de ser un texto fijo y pasa a ser un dato (`kind` + `rival`), que la pantalla compone en cada idioma.
+- *Novedades* sigue en castellano en todos los idiomas, con un aviso.
+
 ## [1.3.0] — 2026-10-05
 
 ### Añadido

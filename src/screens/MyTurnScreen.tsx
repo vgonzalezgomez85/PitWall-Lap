@@ -25,6 +25,8 @@ import { useVoice } from '../voice/useVoice';
 import { useTireStrategy } from '../strategy/useTireStrategy';
 import type { VoiceSettings } from '../voice/settings';
 import type { LiveState } from '../data/types';
+import type { Textos } from '../i18n';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
@@ -48,16 +50,16 @@ function fmt(ms: number | null): string {
 }
 
 // Gap en vueltas para mostrar en pantalla. 0 = mismo número de vueltas.
-function fmtGapLaps(laps: number | null): string {
+function fmtGapLaps(laps: number | null, t: Textos): string {
   if (laps == null) return '—';
-  if (laps === 0) return 'A la par';
-  return `${laps} ${laps === 1 ? 'vuelta' : 'vueltas'}`;
+  if (laps === 0) return t.turno.aLaPar;
+  return t.comun.vueltas(laps);
 }
 
 // Gap en vueltas (PitWall) o, si la fuente solo lo da en tiempo (TicTac
 // nuevo), en segundos.
-function fmtGap(laps: number | null, ms: number | null): string {
-  if (laps != null || ms == null) return fmtGapLaps(laps);
+function fmtGap(laps: number | null, ms: number | null, t: Textos): string {
+  if (laps != null || ms == null) return fmtGapLaps(laps, t);
   return `${fmt(ms)} s`;
 }
 
@@ -89,6 +91,7 @@ export default function MyTurnScreen(_props: Props) {
   const { pendingCount, available: strategyAvailable } = useTireStrategy();
   const { settings, toggle, update } = useVoice();
   const navigation = useNavigation<Nav>();
+  const { t } = useIdioma();
 
   const isPitWall = raceInfo?.source === 'pitwall';
   // TicTac nuevo (WSS): mismos datos que PitWall salvo salidas/pits/plan.
@@ -115,7 +118,7 @@ export default function MyTurnScreen(_props: Props) {
   function onStop() {
     const laps = recorder.stop();
     if (laps.length === 0) {
-      Alert.alert('Stint vacío', 'No se registró ninguna vuelta. Nada que guardar.');
+      Alert.alert(t.turno.stintVacio, t.turno.stintVacioTexto);
       return;
     }
     setSetup({});
@@ -127,8 +130,8 @@ export default function MyTurnScreen(_props: Props) {
     const n = pending.length;
     await saveStint(pending, state.myLane ?? null, setup);
     setPending(null);
-    Alert.alert('Stint guardado', `${n} ${n === 1 ? 'vuelta' : 'vueltas'} guardadas.`, [
-      { text: 'Ver entrenamientos', onPress: () => navigation.push('Training') },
+    Alert.alert(t.turno.stintGuardado, t.turno.stintGuardadoTexto(n), [
+      { text: t.turno.verEntrenamientos, onPress: () => navigation.push('Training') },
       { text: 'OK', style: 'cancel' },
     ]);
   }
@@ -158,32 +161,30 @@ export default function MyTurnScreen(_props: Props) {
         {state.isFinal ? (
           <Card style={styles.hero}>
             <Text style={styles.finalTitle}>FINAL</Text>
-            <Text style={[type.body, styles.centerText]}>
-              Ya has corrido todas tus mangas. Carrera completada para ti.
-            </Text>
+            <Text style={[type.body, styles.centerText]}>{t.turno.finalTexto}</Text>
           </Card>
         ) : (
           <Card style={styles.hero}>
             <Text style={styles.waitTitle}>
-              {isPre ? 'La carrera aún no ha empezado' : 'Descansas esta manga'}
+              {isPre ? t.turno.noEmpezada : t.turno.descansas}
             </Text>
             {!isPre && state.currentMangaNum != null && !mangaCerrada(state) && (
               <Text style={[type.body, styles.waitSub]}>
-                Ahora se corre la manga {state.currentMangaNum}
-                {state.remainingMs != null && ` · quedan ${fmtRemaining(state.remainingMs)}`}
+                {t.turno.ahoraManga(state.currentMangaNum)}
+                {state.remainingMs != null && t.turno.quedan(fmtRemaining(state.remainingMs))}
               </Text>
             )}
             {state.nextMangaInfo ? (
               <View style={styles.waitStats}>
                 <Stat
-                  label={isPre ? 'Tu primera manga' : 'Tu próxima manga'}
+                  label={isPre ? t.turno.primeraManga : t.turno.proximaManga}
                   value={String(state.nextMangaInfo.mangaNum)}
                   align="center"
                   style={styles.waitStat}
                 />
                 <View style={styles.vDivider} />
                 <Stat
-                  label="Carril"
+                  label={t.comun.tituloCarril}
                   value={String(state.nextMangaInfo.lane)}
                   color={colors.accent}
                   align="center"
@@ -193,10 +194,10 @@ export default function MyTurnScreen(_props: Props) {
             ) : (
               <Text style={[type.body, styles.waitSub]}>
                 {isPre
-                  ? 'Descansas toda la carrera (sin mangas asignadas).'
+                  ? t.turno.descansasToda
                   : isPitWall
-                    ? 'Sin próxima manga programada.'
-                    : 'El TicTac no envía el plan de mangas: te avisaré cuando empiece la tuya.'}
+                    ? t.turno.sinProxima
+                    : t.turno.tictacSinPlan}
               </Text>
             )}
           </Card>
@@ -211,7 +212,7 @@ export default function MyTurnScreen(_props: Props) {
               tracking={trackingAvailable}
               pendingCount={pendingCount}
             />
-            <Section title="Voz y ajustes">
+            <Section title={t.turno.vozYAjustes}>
               {isTicTacLive && <MangaDurationControl />}
               <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
             </Section>
@@ -223,7 +224,7 @@ export default function MyTurnScreen(_props: Props) {
 
   // ── Vista "mi turno" ───────────────────────────────────────────────────
   const tone = lapTone(state.lastLapMs, state.bestLapMs);
-  const delta = lapDeltaLabel(state.lastLapMs, state.bestLapMs);
+  const delta = lapDeltaLabel(state.lastLapMs, state.bestLapMs, t.ui);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -235,17 +236,17 @@ export default function MyTurnScreen(_props: Props) {
       <Card style={styles.hero}>
         <View style={styles.heroTop}>
           <View style={styles.lanePill}>
-            <Text style={styles.lanePillText}>Carril {state.myLane ?? '—'}</Text>
+            <Text style={styles.lanePillText}>{t.comun.carril(state.myLane ?? '—')}</Text>
           </View>
           {state.remainingMs != null && (
             <View style={styles.remaining}>
-              <Text style={type.label}>Restante</Text>
+              <Text style={type.label}>{t.turno.restante}</Text>
               <Text style={styles.remainingValue}>{fmtRemaining(state.remainingMs)}</Text>
             </View>
           )}
         </View>
 
-        <Text style={[type.label, styles.heroLabel]}>Última vuelta</Text>
+        <Text style={[type.label, styles.heroLabel]}>{t.turno.ultimaVuelta}</Text>
         <Text
           style={[type.hero, styles.heroValue, { color: TONE_COLOR[tone] }]}
           numberOfLines={1}
@@ -257,9 +258,9 @@ export default function MyTurnScreen(_props: Props) {
 
         <View style={styles.divider} />
         <View style={styles.statsRow}>
-          <Stat label="Rápida" value={fmt(state.bestLapMs)} color={state.bestLapMs != null ? colors.best : undefined} />
-          <Stat label="Media carril" value={fmt(state.avgLapMs)} />
-          <Stat label="Vueltas" value={String(state.lapCount)} />
+          <Stat label={t.turno.rapida} value={fmt(state.bestLapMs)} color={state.bestLapMs != null ? colors.best : undefined} />
+          <Stat label={t.turno.mediaCarril} value={fmt(state.avgLapMs)} />
+          <Stat label={t.comun.tituloVueltas} value={String(state.lapCount)} />
         </View>
       </Card>
 
@@ -268,21 +269,21 @@ export default function MyTurnScreen(_props: Props) {
         <Card style={styles.card}>
           <View style={styles.statsRow}>
             <View style={styles.positionBox}>
-              <Text style={type.label}>Posición</Text>
+              <Text style={type.label}>{t.comun.tituloPosicion}</Text>
               <Text style={styles.positionValue} numberOfLines={1} adjustsFontSizeToFit>
                 P{state.position}
                 <Text style={styles.positionTotal}> / {state.totalParticipants ?? '?'}</Text>
               </Text>
             </View>
             <Stat
-              label="Delante"
-              value={fmtGap(state.gapAheadLaps, state.gapAheadMs)}
+              label={t.comun.delante}
+              value={fmtGap(state.gapAheadLaps, state.gapAheadMs, t)}
               sub={state.aheadName}
               small
             />
             <Stat
-              label="Detrás"
-              value={fmtGap(state.gapBehindLaps, state.gapBehindMs)}
+              label={t.comun.detras}
+              value={fmtGap(state.gapBehindLaps, state.gapBehindMs, t)}
               sub={state.behindName}
               small
             />
@@ -291,7 +292,7 @@ export default function MyTurnScreen(_props: Props) {
             <>
               <View style={styles.divider} />
               <View style={styles.inlineStat}>
-                <Text style={type.label}>Media para subir</Text>
+                <Text style={type.label}>{t.turno.mediaParaSubir}</Text>
                 <Text style={styles.inlineValue}>{fmt(state.avgToCatchMs)}</Text>
               </View>
             </>
@@ -302,8 +303,8 @@ export default function MyTurnScreen(_props: Props) {
       {isPitWall && (
         <Card style={styles.card}>
           <View style={styles.statsRow}>
-            <Stat label="Salidas" value={String(state.exitCount)} small />
-            <Stat label="Pit stops" value={String(state.pitStopCount)} small />
+            <Stat label={t.turno.salidas} value={String(state.exitCount)} small />
+            <Stat label={t.turno.pitStops} value={String(state.pitStopCount)} small />
           </View>
         </Card>
       )}
@@ -319,7 +320,7 @@ export default function MyTurnScreen(_props: Props) {
 
       {/* ── Entreno GO (solo modo entrenamiento) ───────────────────────── */}
       {isTraining && (
-        <Section title="Registro de entrenamiento">
+        <Section title={t.turno.registroEntreno}>
           <Pressable
             onPress={() => (recorder.recording ? onStop() : recorder.start())}
             style={({ pressed }) => [
@@ -329,30 +330,30 @@ export default function MyTurnScreen(_props: Props) {
             ]}
           >
             <Text style={styles.goBtnText}>
-              {recorder.recording ? '■  Detener y guardar' : '▶  Entreno GO'}
+              {recorder.recording ? t.turno.detenerGuardar : t.turno.entrenoGo}
             </Text>
           </Pressable>
           {recorder.recording && (
             <Card style={styles.card}>
               <View style={styles.statsRow}>
-                <Stat label="Vueltas" value={String(recLaps.length)} />
-                <Stat label="Mejor" value={fmt(recBest)} />
-                <Stat label="Media" value={fmt(recAvg)} />
+                <Stat label={t.comun.tituloVueltas} value={String(recLaps.length)} />
+                <Stat label={t.comun.tituloMejor} value={fmt(recBest)} />
+                <Stat label={t.comun.tituloMedia} value={fmt(recAvg)} />
               </View>
             </Card>
           )}
           <View style={styles.card}>
-            <NavRow title="Mis entrenamientos" onPress={() => navigation.push('Training')} />
+            <NavRow title={t.inicio.misEntrenamientos} onPress={() => navigation.push('Training')} />
           </View>
         </Section>
       )}
 
       {/* ── Ajustes (plegados: en carrera lo importante son los datos) ─── */}
       <Section
-        title="Voz y ajustes"
+        title={t.turno.vozYAjustes}
         collapsible
         initiallyOpen={false}
-        summary={voiceSummary(settings, fullData)}
+        summary={voiceSummary(settings, fullData, t)}
       >
         {isTicTacLive && <MangaDurationControl />}
         <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
@@ -367,43 +368,41 @@ export default function MyTurnScreen(_props: Props) {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Guardar stint</Text>
-            <Text style={styles.modalSub}>
-              {pending?.length ?? 0} vueltas · datos del coche (opcionales)
-            </Text>
+            <Text style={styles.modalTitle}>{t.turno.guardarStint}</Text>
+            <Text style={styles.modalSub}>{t.turno.guardarStintSub(pending?.length ?? 0)}</Text>
             <SetupField
-              label="Modelo de coche"
+              label={t.coche.modeloCoche}
               value={setup.carModel}
               onChange={v => setSetup(s => ({ ...s, carModel: v }))}
             />
             <SetupField
-              label="Motor"
+              label={t.coche.motor}
               value={setup.motor}
               onChange={v => setSetup(s => ({ ...s, motor: v }))}
             />
             <SetupField
-              label="Neumático"
+              label={t.coche.neumatico}
               value={setup.tire}
               onChange={v => setSetup(s => ({ ...s, tire: v }))}
             />
             <SetupField
-              label="Medida de llanta"
+              label={t.coche.medidaLlanta}
               value={setup.rim}
               onChange={v => setSetup(s => ({ ...s, rim: v }))}
             />
             <SetupField
-              label="Corona"
+              label={t.coche.corona}
               value={setup.crown}
               onChange={v => setSetup(s => ({ ...s, crown: v }))}
             />
             <SetupField
-              label="Piñón"
+              label={t.coche.pinon}
               value={setup.pinion}
               onChange={v => setSetup(s => ({ ...s, pinion: v }))}
             />
             <View style={styles.modalBtns}>
-              <Button label="Descartar" variant="ghost" onPress={() => setPending(null)} style={styles.flex} />
-              <Button label="Guardar" onPress={confirmSave} style={styles.flex} />
+              <Button label={t.turno.descartar} variant="ghost" onPress={() => setPending(null)} style={styles.flex} />
+              <Button label={t.comun.guardar} onPress={confirmSave} style={styles.flex} />
             </View>
           </View>
         </View>
@@ -421,13 +420,14 @@ function Header({ source, name, voiceOn, onToggleVoice }: {
   voiceOn: boolean;
   onToggleVoice: () => void;
 }) {
+  const { t } = useIdioma();
   return (
     <View style={styles.header}>
       <View style={styles.flex}>
         <Text style={type.label}>{source}</Text>
         {!!name && <Text style={[type.heading, styles.headerName]} numberOfLines={1}>{name}</Text>}
       </View>
-      <Chip label={voiceOn ? 'Voz ON' : 'Voz OFF'} active={voiceOn} onPress={onToggleVoice} />
+      <Chip label={voiceOn ? t.turno.vozOn : t.turno.vozOff} active={voiceOn} onPress={onToggleVoice} />
     </View>
   );
 }
@@ -440,25 +440,26 @@ function mangaCerrada(s: LiveState): boolean {
 // STOP. En curso no se muestra nada. `conSiguiente`: añadir la próxima manga
 // del piloto (en la vista de espera ya sale en su tarjeta).
 function AvisoManga({ state, conSiguiente }: { state: LiveState; conSiguiente: boolean }) {
+  const { t } = useIdioma();
   const e = state.estadoManga;
   if (e == null || e === 'en-curso') return null;
   let titulo: string;
   let texto: string | null;
   let color: string;
   if (e === 'pausada') {
-    titulo = 'Manga en pausa';
-    texto = 'El reloj está parado hasta que se reanude.';
+    titulo = t.turno.mangaPausa;
+    texto = t.turno.mangaPausaTexto;
     color = colors.slow;
   } else if (e === 'cancelada') {
-    titulo = 'Manga detenida';
-    texto = 'Se ha anulado y se repetirá desde cero con el próximo GO.';
+    titulo = t.turno.mangaDetenida;
+    texto = t.turno.mangaDetenidaTexto;
     color = colors.danger;
   } else {
-    titulo = 'Manga terminada';
+    titulo = t.turno.mangaTerminada;
     const sig = state.nextMangaInfo;
     texto = !conSiguiente ? null
-      : sig ? `Tu próxima manga: ${sig.mangaNum} · carril ${sig.lane}`
-      : 'No tienes más mangas programadas.';
+      : sig ? t.turno.proximaMangaCarril(sig.mangaNum, sig.lane)
+      : t.turno.sinMasMangas;
     color = colors.accent;
   }
   return (
@@ -477,21 +478,22 @@ function Accesos({ navigation, strategy, tracking, pendingCount }: {
   tracking: boolean;
   pendingCount: number;
 }) {
+  const { t } = useIdioma();
   if (!strategy && !tracking) return null;
   return (
     <View style={styles.accesos}>
       {strategy && (
         <NavRow
-          title="Estrategia de neumáticos"
-          subtitle={pendingCount > 0 ? 'Tienes cambios pendientes' : 'Plan y avisos de cambio de goma'}
+          title={t.turno.estrategia}
+          subtitle={pendingCount > 0 ? t.turno.cambiosPendientes : t.turno.planAvisos}
           badge={pendingCount}
           onPress={() => navigation.push('Strategy')}
         />
       )}
       {tracking && (
         <NavRow
-          title="Seguimiento de rivales"
-          subtitle="Vueltas y medias por carril"
+          title={t.turno.seguimiento}
+          subtitle={t.turno.seguimientoSub}
           onPress={() => navigation.push('Tracking')}
         />
       )}
@@ -524,15 +526,15 @@ function cycleMinutes(current: number): number {
 }
 
 // Resumen de la sección plegada: "Voz ON · 5 avisos".
-function voiceSummary(s: VoiceSettings, full: boolean): string {
-  if (!s.enabled) return 'Voz OFF';
+function voiceSummary(s: VoiceSettings, full: boolean, t: Textos): string {
+  if (!s.enabled) return t.turno.vozOff;
   const avisos = full
     ? [s.sayLaps, s.sayPositionChange, s.sayHalfManga, s.sayLastMinute, s.sayLast30s,
        s.sayAveragesEveryMin > 0, s.sayRaceAvgEveryMin > 0, s.sayGapsEveryMin > 0,
        s.sayCatchUpEveryMin > 0]
     : [s.sayLaps];
   const n = avisos.filter(Boolean).length;
-  return `Voz ON · ${n} ${n === 1 ? 'aviso' : 'avisos'}`;
+  return t.turno.vozResumen(n);
 }
 
 // Duración de manga para TicTac: el TicTac no la transmite y sin ella no hay
@@ -540,12 +542,13 @@ function voiceSummary(s: VoiceSettings, full: boolean): string {
 function MangaDurationControl() {
   const { source } = useDataSource();
   const [min, setMin] = useMangaDurationMin();
+  const { t } = useIdioma();
   useEffect(() => {
     source?.setMangaDurationMs?.(min > 0 ? min * 60_000 : null);
   }, [source, min]);
   return (
     <Card style={styles.settingsCard}>
-      <Text style={type.label}>Duración de manga (TicTac)</Text>
+      <Text style={type.label}>{t.turno.duracionManga}</Text>
       <View style={styles.stepperRow}>
         <Pressable
           style={({ pressed }) => [styles.stepBtn, pressed && styles.pressed]}
@@ -553,7 +556,7 @@ function MangaDurationControl() {
         >
           <Text style={styles.stepBtnText}>−</Text>
         </Pressable>
-        <Text style={styles.stepValue}>{min > 0 ? `${min} min` : 'Sin configurar'}</Text>
+        <Text style={styles.stepValue}>{min > 0 ? t.turno.minutos(min) : t.turno.sinConfigurar}</Text>
         <Pressable
           style={({ pressed }) => [styles.stepBtn, pressed && styles.pressed]}
           onPress={() => setMin(min + 1)}
@@ -561,9 +564,7 @@ function MangaDurationControl() {
           <Text style={styles.stepBtnText}>+</Text>
         </Pressable>
       </View>
-      <Text style={type.caption}>
-        Cuenta desde que empieza la manga en el TicTac. Si te conectas con la manga ya empezada, el tiempo aparece en la siguiente.
-      </Text>
+      <Text style={type.caption}>{t.turno.duracionTexto}</Text>
     </Card>
   );
 }
@@ -577,41 +578,43 @@ function VoiceControls({ settings, toggle, update, full }: {
   update: (p: Partial<VoiceSettings>) => void;
   full: boolean;
 }) {
+  const { t } = useIdioma();
+  const c = t.turno;
   return (
     <Card style={[styles.settingsCard, !settings.enabled && styles.dimmed]}>
-      <Text style={type.label}>Avisos de voz</Text>
+      <Text style={type.label}>{c.avisosVoz}</Text>
       <View style={styles.togglesRow}>
-        <Chip label="Vueltas" active={settings.sayLaps} onPress={() => toggle('sayLaps')} />
+        <Chip label={c.chipVueltas} active={settings.sayLaps} onPress={() => toggle('sayLaps')} />
         {full && (
           <>
-            <Chip label="Posición"    active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
-            <Chip label="Media manga" active={settings.sayHalfManga}      onPress={() => toggle('sayHalfManga')} />
-            <Chip label="Último min"  active={settings.sayLastMinute}     onPress={() => toggle('sayLastMinute')} />
-            <Chip label="30 s"        active={settings.sayLast30s}        onPress={() => toggle('sayLast30s')} />
+            <Chip label={c.chipPosicion}   active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
+            <Chip label={c.chipMitadManga} active={settings.sayHalfManga}      onPress={() => toggle('sayHalfManga')} />
+            <Chip label={c.chipUltimoMin}  active={settings.sayLastMinute}     onPress={() => toggle('sayLastMinute')} />
+            <Chip label={c.chip30s}        active={settings.sayLast30s}        onPress={() => toggle('sayLast30s')} />
           </>
         )}
       </View>
       {full && (
         <>
-          <Text style={[type.label, styles.subLabel]}>Periódicos · toca para cambiar el intervalo</Text>
+          <Text style={[type.label, styles.subLabel]}>{c.periodicos}</Text>
           <View style={styles.togglesRow}>
             <Chip
-              label={settings.sayAveragesEveryMin > 0 ? `Media manga · ${settings.sayAveragesEveryMin} min` : 'Media manga'}
+              label={settings.sayAveragesEveryMin > 0 ? c.cadaMin(c.chipMediaCarril, settings.sayAveragesEveryMin) : c.chipMediaCarril}
               active={settings.sayAveragesEveryMin > 0}
               onPress={() => update({ sayAveragesEveryMin: cycleMinutes(settings.sayAveragesEveryMin) })}
             />
             <Chip
-              label={settings.sayRaceAvgEveryMin > 0 ? `Media carrera · ${settings.sayRaceAvgEveryMin} min` : 'Media carrera'}
+              label={settings.sayRaceAvgEveryMin > 0 ? c.cadaMin(c.chipMediaCarrera, settings.sayRaceAvgEveryMin) : c.chipMediaCarrera}
               active={settings.sayRaceAvgEveryMin > 0}
               onPress={() => update({ sayRaceAvgEveryMin: cycleMinutes(settings.sayRaceAvgEveryMin) })}
             />
             <Chip
-              label={settings.sayGapsEveryMin > 0 ? `Gaps · ${settings.sayGapsEveryMin} min` : 'Gaps'}
+              label={settings.sayGapsEveryMin > 0 ? c.cadaMin(c.chipGaps, settings.sayGapsEveryMin) : c.chipGaps}
               active={settings.sayGapsEveryMin > 0}
               onPress={() => update({ sayGapsEveryMin: cycleMinutes(settings.sayGapsEveryMin) })}
             />
             <Chip
-              label={settings.sayCatchUpEveryMin > 0 ? `P/Subir · ${settings.sayCatchUpEveryMin} min` : 'P/Subir'}
+              label={settings.sayCatchUpEveryMin > 0 ? c.cadaMin(c.chipParaSubir, settings.sayCatchUpEveryMin) : c.chipParaSubir}
               active={settings.sayCatchUpEveryMin > 0}
               onPress={() => update({ sayCatchUpEveryMin: cycleMinutes(settings.sayCatchUpEveryMin) })}
             />
@@ -619,7 +622,7 @@ function VoiceControls({ settings, toggle, update, full }: {
         </>
       )}
       {!settings.enabled && (
-        <Text style={[type.caption, styles.subLabel]}>La voz está apagada: actívala arriba.</Text>
+        <Text style={[type.caption, styles.subLabel]}>{c.vozApagada}</Text>
       )}
     </Card>
   );

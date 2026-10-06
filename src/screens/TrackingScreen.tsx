@@ -15,6 +15,7 @@ import {
 import { useDataSource } from '../data/sourceContext';
 import { loadTeamPin, saveTeamPin } from '../data/trackingStore';
 import type { TrackingData, TrackingLane, TrackingTeam } from '../data/types';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 
 const REFRESH_MS = 60_000;
@@ -38,6 +39,8 @@ export default function TrackingScreen() {
   const [saving, setSaving] = useState(false);
   const [askPin, setAskPin] = useState<{ names: string[]; wrong: boolean } | null>(null);
   const [pinText, setPinText] = useState('');
+  const { t } = useIdioma();
+  const g = t.seguimiento;
 
   const refresh = useCallback(async () => {
     if (!source?.getTracking) { setStatus('unavailable'); return; }
@@ -90,19 +93,17 @@ export default function TrackingScreen() {
     } else if (res.error === 'pin') {
       setAskPin({ names, wrong: storedPin != null });
     } else {
-      Alert.alert('No se pudo guardar', res.error === 'network'
-        ? 'Sin conexión con el servidor. Inténtalo de nuevo.'
-        : 'El seguimiento no está disponible en esta carrera.');
+      Alert.alert(g.noGuardar, res.error === 'network' ? g.sinConexion : g.noDisponibleCarrera);
     }
   }
 
   function confirmReset() {
     Alert.alert(
-      'Reiniciar datos',
-      'Borra el acumulado por carril guardado en este móvil. La lista de seguidos se mantiene.',
+      g.reiniciarDatos,
+      g.reiniciarTexto,
       [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Reiniciar', style: 'destructive', onPress: () => { source?.resetTracking?.(); } },
+        { text: t.comun.cancelar, style: 'cancel' },
+        { text: g.reiniciar, style: 'destructive', onPress: () => { source?.resetTracking?.(); } },
       ],
     );
   }
@@ -111,13 +112,11 @@ export default function TrackingScreen() {
     return (
       <View style={styles.root}>
         <BackButton />
-        <Text style={styles.title}>Seguimiento</Text>
+        <Text style={styles.title}>{g.titulo}</Text>
         <View style={styles.center}>
           {status === 'loading' ? <ActivityIndicator color="#f6c90e" /> : (
             <Text style={styles.muted}>
-              {status === 'error'
-                ? 'No se pudo cargar el seguimiento. Se reintentará en un minuto.'
-                : 'El seguimiento de rivales está disponible con TicTac y en carreras por equipos de PitWall, con un participante seleccionado.'}
+              {status === 'error' ? g.errorCarga : g.noDisponible}
             </Text>
           )}
         </View>
@@ -128,10 +127,10 @@ export default function TrackingScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 32 }}>
       <BackButton />
-      <Text style={styles.title}>Seguimiento</Text>
+      <Text style={styles.title}>{g.titulo}</Text>
       <Text style={styles.note}>
-        Solo mangas terminadas: la manga en curso entra al cerrarse.
-        {data.local ? ' Datos de este móvil, desde que se conectó.' : ''}
+        {g.nota}
+        {data.local ? g.notaLocal : ''}
       </Text>
 
       {data.teams.map(t => <TeamCard key={`${t.isMe ? 'me' : 't'}-${t.name}`} team={t} hasClean={data.hasClean} />)}
@@ -139,14 +138,14 @@ export default function TrackingScreen() {
       {!editing ? (
         <Pressable style={styles.outlineBtn} onPress={startEditing}>
           <Text style={styles.outlineBtnText}>
-            {data.tracked.length > 0 ? 'Cambiar rivales' : 'Elegir rivales'} ({data.tracked.length}/{data.max})
+            {data.tracked.length > 0 ? g.cambiarRivales : g.elegirRivales} ({data.tracked.length}/{data.max})
           </Text>
         </Pressable>
       ) : (
         <View style={styles.block}>
-          <Text style={styles.label}>Rivales a seguir · máx. {data.max}</Text>
+          <Text style={styles.label}>{g.rivalesMax(data.max)}</Text>
           {data.candidates.length === 0 && (
-            <Text style={styles.mutedLeft}>Todavía no hay a quién seguir.</Text>
+            <Text style={styles.mutedLeft}>{g.nadie}</Text>
           )}
           {data.candidates.map(c => {
             const on = selected.includes(c.name);
@@ -161,10 +160,10 @@ export default function TrackingScreen() {
           })}
           <View style={styles.btnRow}>
             <Pressable style={[styles.btn, styles.btnGhost]} onPress={() => setEditing(false)}>
-              <Text style={styles.btnGhostText}>Cancelar</Text>
+              <Text style={styles.btnGhostText}>{t.comun.cancelar}</Text>
             </Pressable>
             <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => void save(selected)} disabled={saving}>
-              <Text style={styles.btnPrimaryText}>{saving ? 'Guardando…' : 'Guardar'}</Text>
+              <Text style={styles.btnPrimaryText}>{saving ? t.comun.guardando : t.comun.guardar}</Text>
             </Pressable>
           </View>
         </View>
@@ -172,17 +171,16 @@ export default function TrackingScreen() {
 
       {data.local && (
         <Pressable style={styles.resetBtn} onPress={confirmReset}>
-          <Text style={styles.resetBtnText}>Reiniciar datos</Text>
+          <Text style={styles.resetBtnText}>{g.reiniciarDatos}</Text>
         </Pressable>
       )}
 
       <Modal visible={askPin != null} transparent animationType="fade" onRequestClose={() => setAskPin(null)}>
         <View style={styles.modalBg}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>PIN del equipo</Text>
+            <Text style={styles.modalTitle}>{g.pinTitulo}</Text>
             <Text style={styles.modalText}>
-              {askPin?.wrong ? 'PIN incorrecto. ' : ''}Para cambiar la lista hace falta el PIN de 4 cifras
-              de tu equipo (el de la hoja de PINs de la carrera).
+              {askPin?.wrong ? g.pinIncorrecto : ''}{g.pinTexto}
             </Text>
             <TextInput
               style={styles.pinInput}
@@ -195,14 +193,14 @@ export default function TrackingScreen() {
             />
             <View style={styles.btnRow}>
               <Pressable style={[styles.btn, styles.btnGhost]} onPress={() => { setAskPin(null); setPinText(''); }}>
-                <Text style={styles.btnGhostText}>Cancelar</Text>
+                <Text style={styles.btnGhostText}>{t.comun.cancelar}</Text>
               </Pressable>
               <Pressable
                 style={[styles.btn, styles.btnPrimary]}
                 disabled={pinText.length !== 4 || saving}
                 onPress={() => askPin && void save(askPin.names, pinText)}
               >
-                <Text style={styles.btnPrimaryText}>Guardar</Text>
+                <Text style={styles.btnPrimaryText}>{t.comun.guardar}</Text>
               </Pressable>
             </View>
           </View>
@@ -213,21 +211,23 @@ export default function TrackingScreen() {
 }
 
 function TeamCard({ team, hasClean }: { team: TrackingTeam; hasClean: boolean }) {
+  const { t } = useIdioma();
+  const g = t.seguimiento;
   return (
     <View style={[styles.card, team.isMe && styles.cardMe]}>
       <View style={styles.cardHead}>
         {team.color && <View style={[styles.dot, { backgroundColor: team.color }]} />}
         <Text style={styles.cardName} numberOfLines={1}>{team.name}</Text>
-        {team.isMe && <Text style={styles.meBadge}>Tú</Text>}
+        {team.isMe && <Text style={styles.meBadge}>{g.tu}</Text>}
       </View>
       {team.lanes.length === 0 ? (
-        <Text style={styles.mutedLeft}>Sin mangas terminadas todavía.</Text>
+        <Text style={styles.mutedLeft}>{g.sinMangas}</Text>
       ) : (
         <>
-          <Row cells={['Carril', 'Vueltas', 'Rápida', 'Media', ...(hasClean ? ['Limpia'] : [])]} head />
+          <Row cells={[t.comun.tituloCarril, t.comun.tituloVueltas, g.colRapida, t.comun.tituloMedia, ...(hasClean ? [g.colLimpia] : [])]} head />
           {team.lanes.map(l => <LaneRow key={l.lane} lane={l} hasClean={hasClean} />)}
           <Row
-            cells={['Total', String(team.laps), fmt(team.bestMs), fmt(team.avgMs), ...(hasClean ? [fmt(team.avgCleanMs)] : [])]}
+            cells={[g.total, String(team.laps), fmt(team.bestMs), fmt(team.avgMs), ...(hasClean ? [fmt(team.avgCleanMs)] : [])]}
             total
           />
         </>

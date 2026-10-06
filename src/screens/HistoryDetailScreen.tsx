@@ -12,6 +12,7 @@ import { getSnapshot, saveSnapshot } from '../data/historyStore';
 import { ensureExcelLocal } from '../data/excelCache';
 import { getCachedHost } from '../data/discovery';
 import type { RaceStatsSnapshot } from '../data/types';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
 
@@ -25,11 +26,11 @@ function fmtMs(ms: number | null): string {
   return `${s}.${String(cs).padStart(2, '0')}`;
 }
 
-function formatDate(iso: string | null | undefined): string {
+function formatDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('es-ES', {
+  return d.toLocaleString(locale, {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
@@ -39,6 +40,7 @@ export default function HistoryDetailScreen({ route }: Props) {
   const { raceId } = route.params;
   const [snap, setSnap] = useState<RaceStatsSnapshot | null | undefined>(undefined);
   const [downloading, setDownloading] = useState(false);
+  const { t, locale } = useIdioma();
 
   useEffect(() => {
     let cancelled = false;
@@ -80,13 +82,13 @@ export default function HistoryDetailScreen({ route }: Props) {
     try {
       const local = await ensureExcelLocal(snap);
       if (!local) {
-        Alert.alert('Excel no disponible', 'Conéctate a PitWall para descargarlo.');
+        Alert.alert(t.historial.excelNoDisp, t.historial.excelNoDispTexto);
         return;
       }
       setSnap(s => (s ? { ...s, excelLocalPath: local } : s));
       const can = await Sharing.isAvailableAsync();
       if (!can) {
-        Alert.alert('Compartir no disponible', 'Tu dispositivo no soporta compartir archivos.');
+        Alert.alert(t.historial.compartirNoDisp, t.historial.compartirNoDispTexto);
         return;
       }
       await Sharing.shareAsync(local, {
@@ -95,7 +97,7 @@ export default function HistoryDetailScreen({ route }: Props) {
         UTI: 'org.openxmlformats.spreadsheetml.sheet',
       });
     } catch (e) {
-      Alert.alert('Error', (e as Error)?.message ?? String(e));
+      Alert.alert(t.comun.error, (e as Error)?.message ?? String(e));
     } finally {
       setDownloading(false);
     }
@@ -113,9 +115,7 @@ export default function HistoryDetailScreen({ route }: Props) {
     return (
       <View style={styles.center}>
         <BackButton />
-        <Text style={styles.error}>
-          No se pudo cargar esta carrera. Conéctate a PitWall para rescatarla del servidor.
-        </Text>
+        <Text style={styles.error}>{t.historial.noCargada}</Text>
       </View>
     );
   }
@@ -125,7 +125,7 @@ export default function HistoryDetailScreen({ route }: Props) {
       <BackButton />
       <Text style={styles.title}>{snap.name}</Text>
       <Text style={styles.subtitle}>
-        {snap.format === 'team' ? 'Por equipos' : 'Individual'} · {formatDate(snap.finishedAt)}
+        {snap.format === 'team' ? t.historial.porEquipos : t.historial.individual} · {formatDate(snap.finishedAt, locale)}
       </Text>
 
       {(snap.excelLocalPath || (snap.excelPath && snap.serverBaseUrl)) && (
@@ -135,9 +135,9 @@ export default function HistoryDetailScreen({ route }: Props) {
           disabled={downloading}
         >
           <Text style={styles.excelBtnText}>
-            {downloading ? 'Abriendo…'
-              : snap.excelLocalPath ? 'Abrir Excel comparativa'
-              : 'Descargar Excel comparativa'}
+            {downloading ? t.historial.abriendo
+              : snap.excelLocalPath ? t.historial.abrirExcel
+              : t.historial.descargarExcel}
           </Text>
         </TouchableOpacity>
       )}
@@ -154,8 +154,8 @@ export default function HistoryDetailScreen({ route }: Props) {
             <View style={{ flex: 1 }}>
               <Text style={styles.rowName}>{item.name}</Text>
               <Text style={styles.rowMeta}>
-                {item.totalLaps} vueltas · mejor {fmtMs(item.bestLapMs)}
-                {item.avgLapMs != null && ` · media ${fmtMs(item.avgLapMs)}`}
+                {t.comun.vueltas(item.totalLaps)} · {t.comun.mejor(fmtMs(item.bestLapMs))}
+                {item.avgLapMs != null && ` · ${t.comun.media(fmtMs(item.avgLapMs))}`}
               </Text>
             </View>
           </View>

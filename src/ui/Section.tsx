@@ -5,6 +5,7 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useIdioma } from '../i18n/IdiomaContext';
 import { colors, spacing, type } from './theme';
 
 interface Props {
@@ -19,6 +20,7 @@ export default function Section({
   title, children, collapsible, initiallyOpen = true, summary,
 }: Props) {
   const [open, setOpen] = useState(!collapsible || initiallyOpen);
+  const { t } = useIdioma();
 
   const header = (
     <View style={styles.header}>
@@ -26,7 +28,7 @@ export default function Section({
       {collapsible && (
         <View style={styles.headerRight}>
           {!open && !!summary && <Text style={styles.summary} numberOfLines={1}>{summary}</Text>}
-          <Text style={styles.toggle}>{open ? 'Ocultar' : 'Mostrar'}</Text>
+          <Text style={styles.toggle}>{open ? t.ui.ocultar : t.ui.mostrar}</Text>
         </View>
       )}
     </View>

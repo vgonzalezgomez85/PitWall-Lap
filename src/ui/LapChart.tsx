@@ -10,6 +10,8 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Line, Polyline, Text as SvgText } from 'react-native-svg';
 
+import { useIdioma } from '../i18n/IdiomaContext';
+
 export interface ChartSeries {
   label: string;
   color: string;
@@ -35,13 +37,14 @@ function fmt(ms: number): string {
 
 export default function LapChart({ series }: { series: ChartSeries[] }) {
   const [w, setW] = useState(0);
+  const { t } = useIdioma();
 
   const all = series.flatMap(s => s.laps);
   const maxLaps = Math.max(1, ...series.map(s => s.laps.length));
   if (all.length === 0 || w === 0) {
     return (
       <View style={styles.box} onLayout={e => setW(e.nativeEvent.layout.width)}>
-        {w > 0 && <Text style={styles.empty}>Sin vueltas que mostrar</Text>}
+        {w > 0 && <Text style={styles.empty}>{t.ui.sinVueltasGrafica}</Text>}
       </View>
     );
   }
@@ -125,7 +128,7 @@ export default function LapChart({ series }: { series: ChartSeries[] }) {
           </View>
         ))}
       </View>
-      <Text style={styles.note}>Línea sólida: vuelta · punteada: media móvil (3)</Text>
+      <Text style={styles.note}>{t.ui.leyendaGrafica}</Text>
     </View>
   );
 }

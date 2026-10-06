@@ -13,6 +13,7 @@ import {
   type ChangeSpan,
   type ChangeVersion,
 } from '../data/changelog';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 
 /** Color de la sección según su título (Añadido / Mejorado / Corregido). */
@@ -55,6 +56,7 @@ function SectionBlock({ section }: { section: ChangeSection }) {
 }
 
 function VersionCard({ v, current }: { v: ChangeVersion; current: boolean }) {
+  const { t } = useIdioma();
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -62,7 +64,7 @@ function VersionCard({ v, current }: { v: ChangeVersion; current: boolean }) {
           <Text style={[styles.pillText, current && styles.pillTextCurrent]}>v{v.version}</Text>
         </View>
         {v.date !== '' && <Text style={styles.date}>{v.date}</Text>}
-        {current && <Text style={styles.currentBadge}>actual</Text>}
+        {current && <Text style={styles.currentBadge}>{t.novedades.actual}</Text>}
       </View>
       {v.notes.map((spans, i) => (
         <InlineText key={i} spans={spans} style={styles.noteText} />
@@ -75,16 +77,18 @@ function VersionCard({ v, current }: { v: ChangeVersion; current: boolean }) {
 }
 
 export default function ChangelogScreen() {
+  const { t } = useIdioma();
   return (
     <View style={styles.root}>
       <BackButton />
-      <Text style={styles.title}>Novedades</Text>
-      <Text style={styles.subtitle}>Versión actual: v{getCurrentVersion()}</Text>
+      <Text style={styles.title}>{t.novedades.titulo}</Text>
+      <Text style={styles.subtitle}>{t.novedades.versionActual(getCurrentVersion())}</Text>
+      {!!t.novedades.notaIdioma && <Text style={styles.subtitle}>{t.novedades.notaIdioma}</Text>}
       <FlatList
         data={CHANGELOG_VERSIONS}
         keyExtractor={v => v.version}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={<Text style={styles.empty}>Aún no hay historial.</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>{t.novedades.vacio}</Text>}
         renderItem={({ item, index }) => <VersionCard v={item} current={index === 0} />}
       />
     </View>

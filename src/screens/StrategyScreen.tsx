@@ -11,6 +11,8 @@ import {
 
 import { useTireStrategy, type RivalView } from '../strategy/useTireStrategy';
 import { MIN_CONFIDENCE_LAPS, type StrategyResult } from '../strategy/computeTireStrategy';
+import type { Textos } from '../i18n';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 
 export default function StrategyScreen() {
@@ -19,14 +21,16 @@ export default function StrategyScreen() {
     serverDriven, ownTire,
     pending, confirmRivalChange, dismissRivalChange, markRivalChange, rivals,
   } = useTireStrategy();
+  const { t } = useIdioma();
+  const e = t.estrategia;
 
   function confirmChange() {
     Alert.alert(
-      'Cambié gomas',
-      'Consume un juego y reinicia el stint del piloto seguido. ¿Confirmar?',
+      e.cambieGomas,
+      e.confirmarCambio,
       [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Sí, cambié', style: 'destructive', onPress: changeTires },
+        { text: t.comun.cancelar, style: 'cancel' },
+        { text: e.siCambie, style: 'destructive', onPress: changeTires },
       ],
     );
   }
@@ -35,12 +39,9 @@ export default function StrategyScreen() {
     return (
       <View style={styles.root}>
         <BackButton />
-        <Text style={styles.title}>Estrategia</Text>
+        <Text style={styles.title}>{e.titulo}</Text>
         <View style={styles.center}>
-          <Text style={styles.muted}>
-            La estrategia de neumáticos solo está disponible en carreras PitWall
-            con un piloto seleccionado.
-          </Text>
+          <Text style={styles.muted}>{e.noDisponible}</Text>
         </View>
       </View>
     );
@@ -49,35 +50,29 @@ export default function StrategyScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 32 }}>
       <BackButton />
-      <Text style={styles.title}>Estrategia</Text>
+      <Text style={styles.title}>{e.titulo}</Text>
       {followedName && <Text style={styles.self}>{followedName}</Text>}
 
       {/* ── Neumáticos según el servidor (PitWall Manager) ──────────────── */}
       {serverDriven && ownTire && (
         <View style={styles.serverBlock}>
-          <Text style={styles.label}>Neumáticos · servidor</Text>
-          <Text style={styles.serverMain}>
-            {ownTire.available} de {ownTire.allowance} juegos restantes
-          </Text>
-          <Text style={styles.serverSub}>{lastChangeText(ownTire.lastChange)}</Text>
-          <Text style={styles.serverHint}>
-            Dotación y cambios los controla PitWall Manager.
-          </Text>
+          <Text style={styles.label}>{e.neumServidor}</Text>
+          <Text style={styles.serverMain}>{e.juegosRestantesDe(ownTire.available, ownTire.allowance)}</Text>
+          <Text style={styles.serverSub}>{lastChangeText(ownTire.lastChange, t)}</Text>
+          <Text style={styles.serverHint}>{e.controlaManager}</Text>
         </View>
       )}
 
       {/* ── Confirmaciones de cambio de rival (auto-detectado) ──────────── */}
       {pending.map(p => (
         <View key={p.name} style={styles.confirmBanner}>
-          <Text style={styles.confirmText}>
-            ¿{p.name} ({p.side === 'ahead' ? 'delante' : 'detrás'}) ha cambiado gomas?
-          </Text>
+          <Text style={styles.confirmText}>{e.rivalCambio(p.name, p.side === 'ahead')}</Text>
           <View style={styles.confirmBtns}>
             <Pressable style={[styles.confirmBtn, styles.confirmNo]} onPress={() => dismissRivalChange(p.name)}>
-              <Text style={styles.confirmNoText}>No</Text>
+              <Text style={styles.confirmNoText}>{e.no}</Text>
             </Pressable>
             <Pressable style={[styles.confirmBtn, styles.confirmYes]} onPress={() => confirmRivalChange(p.name)}>
-              <Text style={styles.confirmYesText}>Sí, cambió</Text>
+              <Text style={styles.confirmYesText}>{e.siCambio}</Text>
             </Pressable>
           </View>
         </View>
@@ -89,8 +84,8 @@ export default function StrategyScreen() {
       {/* ── Consejo por posición ────────────────────────────────────────── */}
       {result?.position && (
         <View style={[styles.block, posStyle(result.position.action)]}>
-          <Text style={styles.label}>Posición</Text>
-          <Text style={styles.posText}>{result.position.text}</Text>
+          <Text style={styles.label}>{t.comun.tituloPosicion}</Text>
+          <Text style={styles.posText}>{textoPosicion(result.position, t)}</Text>
         </View>
       )}
 
@@ -98,15 +93,15 @@ export default function StrategyScreen() {
       {result && (
         <View style={styles.row}>
           <View style={styles.col}>
-            <Text style={styles.label}>Degradación</Text>
+            <Text style={styles.label}>{e.degradacion}</Text>
             <Text style={styles.metric}>{fmtDeg(result.degradationMsPerLap)}</Text>
           </View>
           <View style={styles.col}>
-            <Text style={styles.label}>Vuelta del stint</Text>
+            <Text style={styles.label}>{e.vueltaStint}</Text>
             <Text style={styles.metric}>{result.stintLap}</Text>
           </View>
           <View style={styles.col}>
-            <Text style={styles.label}>Juegos restantes</Text>
+            <Text style={styles.label}>{e.juegosRestantes}</Text>
             <Text style={styles.metric}>{result.setsAvailable}</Text>
           </View>
         </View>
@@ -115,14 +110,14 @@ export default function StrategyScreen() {
       {/* ── Cambié gomas (sólo manual; con servidor lo marca el Manager) ── */}
       {!serverDriven && (
         <Pressable style={styles.changeBtn} onPress={confirmChange} disabled={!ready}>
-          <Text style={styles.changeBtnText}>Cambié gomas</Text>
+          <Text style={styles.changeBtnText}>{e.cambieGomas}</Text>
         </Pressable>
       )}
 
       {/* ── Goma de los rivales (Fase 2) ────────────────────────────────── */}
       {(rivals.ahead || rivals.behind) && (
         <>
-          <Text style={styles.section}>Goma de los rivales</Text>
+          <Text style={styles.section}>{e.gomaRivales}</Text>
           {rivals.ahead && (
             <RivalCard rival={rivals.ahead} onMark={() => markRivalChange('ahead')} hideMark={serverDriven} />
           )}
@@ -133,9 +128,9 @@ export default function StrategyScreen() {
       )}
 
       {/* ── Configuración ───────────────────────────────────────────────── */}
-      <Text style={styles.section}>Configuración</Text>
+      <Text style={styles.section}>{e.configuracion}</Text>
       <Stepper
-        label="Coste de parada (s)"
+        label={e.costeParada}
         value={config.pitCostSec}
         onChange={v => setConfig({ pitCostSec: clamp(v, 5, 120) })}
         step={1}
@@ -143,14 +138,14 @@ export default function StrategyScreen() {
       {/* Con control del servidor, la dotación viene del Manager (no editable). */}
       {!serverDriven && (
         <Stepper
-          label="Juegos de neumáticos"
+          label={e.juegosNeum}
           value={config.setsTotal}
           onChange={v => setConfig({ setsTotal: clamp(v, 1, 20) })}
           step={1}
         />
       )}
       <Stepper
-        label="Cambios obligatorios (reglamento)"
+        label={e.cambiosOblig}
         value={config.mandatoryChanges}
         onChange={v => setConfig({ mandatoryChanges: clamp(v, 0, (serverDriven && ownTire ? ownTire.allowance : config.setsTotal - 1)) })}
         step={1}
@@ -160,69 +155,73 @@ export default function StrategyScreen() {
 }
 
 function RecommendationCard({ result }: { result: StrategyResult }) {
+  const { t } = useIdioma();
+  const e = t.estrategia;
   let headline: string;
   let sub: string | null = null;
   switch (result.recommendation.kind) {
     case 'change-in':
       if (result.recommendation.basis === 'scheduled') {
-        headline = `Cambio pautado en ~${result.recommendation.laps} vueltas`;
-        sub = 'Sin degradación de ritmo — reparto de juegos por vueltas restantes.';
+        headline = e.cambioPautado(result.recommendation.laps);
+        sub = e.sinDegrReparto;
       } else {
-        headline = `Cambio óptimo en ~${result.recommendation.laps} vueltas`;
+        headline = e.cambioOptimo(result.recommendation.laps);
       }
       break;
     case 'window-open':
-      headline = 'Ventana abierta · cambia cuanto antes';
+      headline = e.ventanaAbierta;
       if (result.recommendation.basis === 'scheduled') {
-        sub = 'Reparto pautado: toca gastar un juego.';
+        sub = e.repartoPautado;
       }
       break;
     case 'hold-to-end':
       if (result.setsAvailable > 0) {
-        headline = 'Aguanta hasta meta';
-        sub = 'Sin degradación y sin cambios obligatorios: parar es tiempo regalado.';
+        headline = e.aguanta;
+        sub = e.aguantaSub;
       } else {
-        headline = 'Sin juegos · aguanta a meta';
+        headline = e.sinJuegos;
       }
       break;
     case 'no-degradation':
-      headline = 'Sin degradación medible';
-      sub = 'Las gomas no pierden ritmo — decide por posición o relevo.';
+      headline = e.sinDegrMedible;
+      sub = e.sinDegrSub;
       break;
     case 'insufficient-data':
     default:
-      headline = 'Recogiendo datos…';
-      sub = `${result.stintLap}/${MIN_CONFIDENCE_LAPS} vueltas para afinar`;
+      headline = e.recogiendo;
+      sub = e.vueltasAfinar(result.stintLap, MIN_CONFIDENCE_LAPS);
       break;
   }
   return (
     <View style={styles.heroBlock}>
-      <Text style={styles.heroLabel}>Recomendación</Text>
+      <Text style={styles.heroLabel}>{e.recomendacion}</Text>
       <Text style={styles.hero}>{headline}</Text>
       {sub && <Text style={styles.heroSub}>{sub}</Text>}
       {result.confidence === 'low' && (
-        <Text style={styles.lowConf}>Baja confianza (pocas vueltas)</Text>
+        <Text style={styles.lowConf}>{e.bajaConfianza}</Text>
       )}
     </View>
   );
 }
 
 function RivalCard({ rival, onMark, hideMark }: { rival: RivalView; onMark: () => void; hideMark?: boolean }) {
-  const sideLabel = rival.side === 'ahead' ? 'Delante' : 'Detrás';
+  const { t } = useIdioma();
+  const e = t.estrategia;
+  const sideLabel = rival.side === 'ahead' ? t.comun.delante : t.comun.detras;
   const age = rival.ageKnown
-    ? `${rival.tireAgeLaps} v${rival.confidence !== 'ok' ? ' · baja conf.' : ''}`
-    : 'edad desconocida';
+    ? `${e.edadVueltas(rival.tireAgeLaps)}${rival.confidence !== 'ok' ? ` · ${e.bajaConf}` : ''}`
+    : e.edadDesconocida;
   return (
     <View style={styles.rivalCard}>
       <View style={{ flex: 1 }}>
         <Text style={styles.label}>{sideLabel} · {rival.name}</Text>
         <Text style={styles.rivalInfo}>
-          Goma: {age}   ·   Degr. {fmtDeg(rival.degradationMsPerLap)}
+          {e.goma(age, fmtDeg(rival.degradationMsPerLap))}
         </Text>
       </View>
       {!hideMark && (
         <Pressable style={styles.markBtn} onPress={onMark}>
-          <Text style={styles.markBtnText}>Marcar cambio</Text>
+          <Text style={styles.markBtnText}>{e.marcarCambio}</Text>
         </Pressable>
       )}
     </View>
@@ -230,12 +229,27 @@ function RivalCard({ rival, onMark, hideMark }: { rival: RivalView; onMark: () =
 }
 
 /** Texto del último cambio de goma según el servidor. */
-function lastChangeText(lc: { setNumber: number; mangaNumber: number | null; raceElapsedMs: number | null } | null): string {
-  if (!lc) return 'Sin cambios registrados';
-  const parts = [`Último cambio: juego ${lc.setNumber}`];
-  if (lc.mangaNumber != null) parts.push(`manga ${lc.mangaNumber}`);
+function lastChangeText(
+  lc: { setNumber: number; mangaNumber: number | null; raceElapsedMs: number | null } | null,
+  t: Textos,
+): string {
+  if (!lc) return t.estrategia.sinCambios;
+  const parts = [t.estrategia.ultimoCambio(lc.setNumber)];
+  if (lc.mangaNumber != null) parts.push(t.estrategia.manga(lc.mangaNumber));
   if (lc.raceElapsedMs != null) parts.push(fmtElapsed(lc.raceElapsedMs));
   return parts.join(' · ');
+}
+
+/** Consejo por posición en el idioma de la app. */
+function textoPosicion(p: NonNullable<StrategyResult['position']>, t: Textos): string {
+  const e = t.estrategia;
+  const rival = p.rival ?? '';
+  switch (p.kind) {
+    case 'adelantas':   return e.posAdelantas(rival);
+    case 'te-adelanta': return e.posTeAdelanta(rival);
+    case 'defiendes':   return e.posDefiendes(rival);
+    default:            return e.posNeutral;
+  }
 }
 
 /** ms de carrera → "h:mm:ss" o "mm:ss". */

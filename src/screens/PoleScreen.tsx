@@ -19,6 +19,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { PitWallSource } from '../data/PitWallSource';
 import { useDataSource } from '../data/sourceContext';
 import { useVoice } from '../voice/useVoice';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { PoleEntry, PoleSnapshot } from '../data/types';
 import type { RootStackParamList } from '../navigation';
@@ -42,6 +43,7 @@ function fmtRemaining(ms: number | null): string {
 export default function PoleScreen({ route, navigation }: Props) {
   const { host, port, raceId } = route.params;
   const { source, state, setSource } = useDataSource();
+  const { t } = useIdioma();
   // Hook de voz: solo es importante que se monte para que se enganche
   // a los eventos lap-completed / manga-changed / race-finished.
   useVoice();
@@ -83,7 +85,7 @@ export default function PoleScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <Text style={styles.errTitle}>Error</Text>
+          <Text style={styles.errTitle}>{t.comun.error}</Text>
           <Text style={styles.errBody}>{error}</Text>
         </View>
       </View>
@@ -107,7 +109,7 @@ export default function PoleScreen({ route, navigation }: Props) {
         <BackButton />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#f6c90e" />
-          <Text style={styles.loading}>Cargando pole…</Text>
+          <Text style={styles.loading}>{t.pole.cargando}</Text>
         </View>
       </View>
     );
@@ -119,7 +121,7 @@ export default function PoleScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <Text style={styles.title}>Pole Position</Text>
-        <Text style={styles.subtitle}>Sesión terminada</Text>
+        <Text style={styles.subtitle}>{t.pole.terminada}</Text>
         <FlatList
           data={pole.standings}
           keyExtractor={s => String(s.entryId)}
@@ -142,9 +144,7 @@ export default function PoleScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <Text style={styles.title}>Pole Position</Text>
-        <Text style={styles.subtitle}>
-          Carril {pole.poleLane ?? '—'} · elige tu salida
-        </Text>
+        <Text style={styles.subtitle}>{t.pole.eligeSalida(String(pole.poleLane ?? '—'))}</Text>
         <FlatList
           data={pole.startingOrder}
           keyExtractor={e => String(e.entryId)}
@@ -165,27 +165,27 @@ export default function PoleScreen({ route, navigation }: Props) {
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 24 }}>
       <BackButton />
-      <Text style={styles.kind}>POLE · CARRIL {pole.poleLane ?? '—'}</Text>
+      <Text style={styles.kind}>{t.pole.cabecera(String(pole.poleLane ?? '—'))}</Text>
 
       {isMyTurn ? (
         <>
           <View style={styles.headerRow}>
-            <Text style={styles.lane}>Tu turno</Text>
+            <Text style={styles.lane}>{t.pole.tuTurno}</Text>
             <Text style={styles.remaining}>{fmtRemaining(pole.live?.remainingMs ?? null)}</Text>
           </View>
 
           <View style={styles.block}>
-            <Text style={styles.label}>Tiempo actual de vuelta</Text>
+            <Text style={styles.label}>{t.pole.tiempoActual}</Text>
             <Text style={styles.bigTime}>{fmtLap(pole.live?.currentLapMs ?? null)}</Text>
           </View>
 
           <View style={styles.row}>
             <View style={styles.col}>
-              <Text style={styles.label}>Mejor</Text>
+              <Text style={styles.label}>{t.comun.tituloMejor}</Text>
               <Text style={styles.medTime}>{fmtLap(pole.live?.bestLapMs ?? null)}</Text>
             </View>
             <View style={styles.col}>
-              <Text style={styles.label}>Vueltas</Text>
+              <Text style={styles.label}>{t.comun.tituloVueltas}</Text>
               <Text style={styles.medTime}>{pole.live?.lapCount ?? 0}</Text>
             </View>
           </View>
@@ -193,31 +193,31 @@ export default function PoleScreen({ route, navigation }: Props) {
       ) : (
         <>
           <View style={styles.block}>
-            <Text style={styles.label}>En pista ahora</Text>
+            <Text style={styles.label}>{t.pole.enPista}</Text>
             <Text style={styles.bigName}>
               {pole.currentEntry?.name ?? '—'}
             </Text>
             <Text style={styles.muted}>
               {pole.currentEntry
-                ? `Salida P${pole.currentEntry.startPos}`
-                : 'Esperando GO'}
+                ? t.pole.salida(pole.currentEntry.startPos)
+                : t.pole.esperandoGo}
             </Text>
             {pole.live && (
               <Text style={styles.muted}>
-                {fmtRemaining(pole.live.remainingMs)} restantes · mejor {fmtLap(pole.live.bestLapMs)}
+                {t.pole.restantesMejor(fmtRemaining(pole.live.remainingMs), fmtLap(pole.live.bestLapMs))}
               </Text>
             )}
           </View>
 
           <View style={styles.block}>
-            <Text style={styles.label}>Eres</Text>
+            <Text style={styles.label}>{t.pole.eres}</Text>
             <Text style={styles.bigName}>{myEntry?.name ?? '—'}</Text>
             <Text style={styles.muted}>
-              Salida P{myEntry?.pos ?? '—'}
+              {t.pole.salida(myEntry?.pos ?? '—')}
               {myEntry?.done && ` · ${fmtLap(myEntry.lapTimeMs)}`}
             </Text>
             {myStanding && (
-              <Text style={styles.muted}>Posición {myStanding.pos} / {pole.totalCount}</Text>
+              <Text style={styles.muted}>{t.pole.posicion(myStanding.pos, pole.totalCount)}</Text>
             )}
           </View>
         </>
@@ -226,7 +226,7 @@ export default function PoleScreen({ route, navigation }: Props) {
       {/* Clasificación parcial */}
       {pole.standings.length > 0 && (
         <>
-          <Text style={styles.section}>Clasificación</Text>
+          <Text style={styles.section}>{t.pole.clasificacion}</Text>
           {pole.standings.map(s => (
             <View
               key={s.entryId}
@@ -248,7 +248,7 @@ export default function PoleScreen({ route, navigation }: Props) {
         style={styles.changeBtn}
         onPress={() => setSelectedEntryId(null)}
       >
-        <Text style={styles.changeBtnText}>Cambiar de piloto</Text>
+        <Text style={styles.changeBtnText}>{t.pole.cambiarPiloto}</Text>
       </TouchableOpacity>
       {/* Suprime warning de variable */}
       <Text style={{ display: 'none' }}>{String(navigation.canGoBack())}</Text>

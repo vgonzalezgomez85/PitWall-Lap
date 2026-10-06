@@ -21,6 +21,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCurrentVersion } from '../data/appVersion';
 import { discover, type SourceKind } from '../data/discovery';
 import { useDataSource } from '../data/sourceContext';
+import { useIdioma } from '../i18n/IdiomaContext';
+import { nombreIdioma } from '../i18n/idiomas';
 import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Discovery'>;
@@ -36,6 +38,9 @@ type Mode =
 export default function DiscoveryScreen({ navigation }: Props) {
   const { setSource, clearSource } = useDataSource();
   const insets = useSafeAreaInsets();
+  const { t, idioma } = useIdioma();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [mode, setMode] = useState<Mode>({ phase: 'choose' });
   const [manualHost, setManualHost] = useState('');
 
@@ -112,7 +117,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
           void AsyncStorage.setItem(LAST_HOST_KEY(kind), host);
           routeToNext(result);
         } else {
-          setMode({ phase: 'manual', kind, error: `No se conectó a ${host}.` });
+          setMode({ phase: 'manual', kind, error: tRef.current.inicio.noConecto(host) });
         }
       })
       .catch(err => {
@@ -162,38 +167,44 @@ export default function DiscoveryScreen({ navigation }: Props) {
           style={styles.logo}
           resizeMode="contain"
         />
-        <Text style={styles.subtitle}>Elige a qué cronometrador conectar</Text>
+        <Text style={styles.subtitle}>{t.inicio.elige}</Text>
         <TouchableOpacity
           style={[styles.bigBtn, styles.btnPitWall]}
           onPress={() => setMode({ phase: 'searching', kind: 'pitwall' })}
         >
           <Text style={[styles.bigBtnTitle, { color: '#0a0d13' }]}>PitWall</Text>
-          <Text style={[styles.bigBtnSub, { color: '#0a0d13' }]}>Cronómetro DS-300 con PitWall Manager</Text>
+          <Text style={[styles.bigBtnSub, { color: '#0a0d13' }]}>{t.inicio.pitwallSub}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.bigBtn, styles.btnInfolap]}
           onPress={() => setMode({ phase: 'searching', kind: 'infolap' })}
         >
           <Text style={[styles.bigBtnTitle, { color: '#fff' }]}>TicTac</Text>
-          <Text style={[styles.bigBtnSub, { color: '#fff' }]}>Gestor de Carreras (InfoLap)</Text>
+          <Text style={[styles.bigBtnSub, { color: '#fff' }]}>{t.inicio.tictacSub}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.historyLink}
           onPress={() => navigation.push('History')}
         >
-          <Text style={styles.historyLinkText}>Ver carreras pasadas</Text>
+          <Text style={styles.historyLinkText}>{t.inicio.carrerasPasadas}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.historyLink}
           onPress={() => navigation.push('Training')}
         >
-          <Text style={styles.historyLinkText}>Mis entrenamientos</Text>
+          <Text style={styles.historyLinkText}>{t.inicio.misEntrenamientos}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.idiomaLink}
+          onPress={() => navigation.push('Idioma')}
+        >
+          <Text style={styles.idiomaLinkText}>🌐 {nombreIdioma(idioma)}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.versionLink}
           onPress={() => navigation.push('Changelog')}
         >
-          <Text style={styles.versionLinkText}>Novedades · v{getCurrentVersion()}</Text>
+          <Text style={styles.versionLinkText}>{t.inicio.novedades(getCurrentVersion())}</Text>
         </TouchableOpacity>
       </ScrollView>
     );
@@ -205,16 +216,16 @@ export default function DiscoveryScreen({ navigation }: Props) {
       <View style={styles.root}>
         <Text style={styles.title}>{label}</Text>
         <ActivityIndicator size="large" color="#f6c90e" style={{ marginTop: 32 }} />
-        <Text style={styles.phase}>Buscando {label}…</Text>
+        <Text style={styles.phase}>{t.inicio.buscando(label)}</Text>
         {/* Salida directa a IP manual, sin esperar al timeout de la búsqueda. */}
         <TouchableOpacity
           style={[styles.btn, styles.btnGhost, { marginTop: 28 }]}
           onPress={() => setMode({ phase: 'manual', kind: mode.kind })}
         >
-          <Text style={styles.btnGhostText}>Introducir IP manualmente</Text>
+          <Text style={styles.btnGhostText}>{t.inicio.ipManual}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.backBtn} onPress={() => setMode({ phase: 'choose' })}>
-          <Text style={styles.backText}>Cancelar</Text>
+          <Text style={styles.backText}>{t.comun.cancelar}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -226,7 +237,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
       <View style={styles.root}>
         <Text style={styles.title}>{label}</Text>
         <ActivityIndicator size="large" color="#f6c90e" style={{ marginTop: 32 }} />
-        <Text style={styles.phase}>Conectando a {mode.host}…</Text>
+        <Text style={styles.phase}>{t.inicio.conectandoA(mode.host)}</Text>
       </View>
     );
   }
@@ -243,13 +254,13 @@ export default function DiscoveryScreen({ navigation }: Props) {
     <View style={styles.root}>
       <Text style={styles.title}>{label}</Text>
       <Text style={styles.errorTitle}>
-        {mode.error ? 'No se encontró automáticamente' : 'Conexión manual'}
+        {mode.error ? t.inicio.noEncontrado : t.inicio.conexionManual}
       </Text>
       {mode.error && <Text style={styles.errorBody}>{mode.error}</Text>}
-      <Text style={styles.errorBody}>Introduce la IP del servidor manualmente.</Text>
+      <Text style={styles.errorBody}>{t.inicio.introduceIp}</Text>
 
       <View style={styles.manualBlock}>
-        <Text style={styles.manualLabel}>IP del servidor</Text>
+        <Text style={styles.manualLabel}>{t.inicio.ipServidor}</Text>
         <TextInput
           style={styles.input}
           value={manualHost}
@@ -267,16 +278,16 @@ export default function DiscoveryScreen({ navigation }: Props) {
           onPress={submit}
           disabled={!manualHost.trim()}
         >
-          <Text style={styles.btnPrimaryText}>Conectar a {label}</Text>
+          <Text style={styles.btnPrimaryText}>{t.inicio.conectarA(label)}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.btn, styles.btnGhost]}
           onPress={() => setMode({ phase: 'searching', kind: mode.kind })}
         >
-          <Text style={styles.btnGhostText}>Reintentar búsqueda automática</Text>
+          <Text style={styles.btnGhostText}>{t.inicio.reintentar}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.backBtn} onPress={() => setMode({ phase: 'choose' })}>
-          <Text style={styles.backText}>Volver al inicio</Text>
+          <Text style={styles.backText}>{t.inicio.volverInicio}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -329,7 +340,9 @@ const styles = StyleSheet.create({
 
   historyLink: { marginTop: 32, paddingVertical: 8 },
   historyLinkText: { color: '#9aa3ad', fontSize: 14, textDecorationLine: 'underline' },
-  versionLink: { marginTop: 20, paddingVertical: 8 },
+  idiomaLink: { marginTop: 20, paddingVertical: 8 },
+  idiomaLinkText: { color: '#9aa3ad', fontSize: 14 },
+  versionLink: { marginTop: 12, paddingVertical: 8 },
   versionLinkText: { color: '#5a6573', fontSize: 12 },
   chooseRoot: { flex: 1, backgroundColor: '#0a0d13' },
   chooseContent: {

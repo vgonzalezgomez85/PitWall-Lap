@@ -22,6 +22,8 @@ import TrackingScreen    from './src/screens/TrackingScreen';
 import HistoryScreen     from './src/screens/HistoryScreen';
 import HistoryDetailScreen from './src/screens/HistoryDetailScreen';
 import ChangelogScreen from './src/screens/ChangelogScreen';
+import IdiomaScreen from './src/screens/IdiomaScreen';
+import { IdiomaProvider } from './src/i18n/IdiomaContext';
 import TrainingScreen     from './src/screens/TrainingScreen';
 import StintDetailScreen  from './src/screens/StintDetailScreen';
 import type { RootStackParamList } from './src/navigation';
@@ -54,6 +56,7 @@ function AppInner() {
         <Stack.Screen name="History"       component={HistoryScreen} />
         <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
         <Stack.Screen name="Changelog"     component={ChangelogScreen} />
+        <Stack.Screen name="Idioma"        component={IdiomaScreen} />
         <Stack.Screen name="Training"      component={TrainingScreen} />
         <Stack.Screen name="StintDetail"   component={StintDetailScreen} />
       </Stack.Navigator>
@@ -94,11 +97,13 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SourceProvider>
-        <TireStrategyProvider>
-          <AppInner />
-        </TireStrategyProvider>
-      </SourceProvider>
+      <IdiomaProvider>
+        <SourceProvider>
+          <TireStrategyProvider>
+            <AppInner />
+          </TireStrategyProvider>
+        </SourceProvider>
+      </IdiomaProvider>
     </SafeAreaProvider>
   );
 }

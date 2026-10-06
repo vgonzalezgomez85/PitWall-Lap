@@ -5,14 +5,16 @@ import { useNavigation } from '@react-navigation/native';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useIdioma } from '../i18n/IdiomaContext';
 import { colors } from './theme';
 
 interface Props {
   label?: string;
 }
 
-export default function BackButton({ label = 'Volver' }: Props) {
+export default function BackButton({ label }: Props) {
   const navigation = useNavigation();
+  const { t } = useIdioma();
   const insets = useSafeAreaInsets();
   if (!navigation.canGoBack()) return null;
   return (
@@ -21,7 +23,7 @@ export default function BackButton({ label = 'Volver' }: Props) {
       style={({ pressed }) => [styles.btn, { marginTop: insets.top + 4 }, pressed && styles.pressed]}
       hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
     >
-      <Text style={styles.text}>{'‹ ' + label}</Text>
+      <Text style={styles.text}>{'‹ ' + (label ?? t.comun.volver)}</Text>
     </Pressable>
   );
 }

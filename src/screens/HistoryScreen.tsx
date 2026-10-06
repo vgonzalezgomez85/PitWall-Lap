@@ -9,6 +9,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { listHistory } from '../data/historyStore';
 import { getCachedHost } from '../data/discovery';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
 
@@ -22,11 +23,11 @@ interface Row {
   local: boolean;   // true = dossier guardado en el móvil (offline)
 }
 
-function formatDate(iso: string | null | undefined): string {
+function formatDate(iso: string | null | undefined, locale: string): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('es-ES', {
+  return d.toLocaleString(locale, {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
@@ -61,6 +62,7 @@ async function loadRows(): Promise<Row[]> {
 
 export default function HistoryScreen({ navigation }: Props) {
   const [entries, setEntries] = useState<Row[] | null>(null);
+  const { t, locale } = useIdioma();
 
   useFocusEffect(
     useCallback(() => {
@@ -73,14 +75,11 @@ export default function HistoryScreen({ navigation }: Props) {
   return (
     <View style={styles.root}>
       <BackButton />
-      <Text style={styles.title}>Histórico</Text>
+      <Text style={styles.title}>{t.historial.titulo}</Text>
       {entries === null ? (
-        <Text style={styles.empty}>Cargando…</Text>
+        <Text style={styles.empty}>{t.comun.cargando}</Text>
       ) : entries.length === 0 ? (
-        <Text style={styles.empty}>
-          Aún no hay carreras.{'\n'}
-          Las carreras terminadas en PitWall aparecen aquí (conéctate para verlas todas).
-        </Text>
+        <Text style={styles.empty}>{t.historial.vacio}</Text>
       ) : (
         <FlatList
           data={entries}
@@ -93,8 +92,8 @@ export default function HistoryScreen({ navigation }: Props) {
             >
               <Text style={styles.rowName}>{item.name}</Text>
               <Text style={styles.rowMeta}>
-                {item.format === 'team' ? 'Equipos' : 'Pilotos'} · {formatDate(item.finishedAt)}
-                {!item.local && '  ·  ☁ en servidor'}
+                {item.format === 'team' ? t.comun.equipos : t.comun.pilotos} · {formatDate(item.finishedAt, locale)}
+                {!item.local && `  ·  ${t.historial.enServidor}`}
               </Text>
             </TouchableOpacity>
           )}

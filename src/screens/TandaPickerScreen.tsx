@@ -14,6 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { PitWallSource } from '../data/PitWallSource';
 import { useDataSource } from '../data/sourceContext';
+import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
 
@@ -25,6 +26,7 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
   const [tandas, setTandas] = useState<number[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const { t } = useIdioma();
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +94,7 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>Error</Text>
+          <Text style={styles.errorTitle}>{t.comun.error}</Text>
           <Text style={styles.errorBody}>{error}</Text>
         </View>
       </View>
@@ -105,7 +107,7 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
         <BackButton />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#f6c90e" />
-          <Text style={styles.loading}>{connecting ? 'Conectando…' : 'Cargando tandas…'}</Text>
+          <Text style={styles.loading}>{connecting ? t.comun.conectando : t.tandas.cargando}</Text>
         </View>
       </View>
     );
@@ -116,8 +118,8 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>Sin tandas</Text>
-          <Text style={styles.errorBody}>Esta carrera no tiene tandas configuradas.</Text>
+          <Text style={styles.errorTitle}>{t.tandas.sinTandas}</Text>
+          <Text style={styles.errorBody}>{t.tandas.sinTandasTexto}</Text>
         </View>
       </View>
     );
@@ -126,14 +128,14 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       <BackButton />
-      <Text style={styles.title}>Elige tanda</Text>
+      <Text style={styles.title}>{t.tandas.eligeTanda}</Text>
       <FlatList
         data={tandas}
         keyExtractor={t => String(t)}
         contentContainerStyle={{ paddingVertical: 12 }}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.row} onPress={() => connectAndGo(item)}>
-            <Text style={styles.rowName}>Tanda {item}</Text>
+            <Text style={styles.rowName}>{t.tandas.tanda(item)}</Text>
           </TouchableOpacity>
         )}
       />
