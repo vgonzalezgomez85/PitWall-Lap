@@ -15,6 +15,7 @@ import {
 } from '../data/changelog';
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
+import { colors } from '../ui/theme';
 
 /** Color de la sección según su título (Añadido / Mejorado / Corregido). */
 function sectionColor(title: string): string {
@@ -97,7 +98,7 @@ export default function ChangelogScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 4 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 4 },
   subtitle: { color: '#9aa3ad', fontSize: 13, marginTop: 4, marginBottom: 4 },
   listContent: { paddingVertical: 12, paddingBottom: 32 },
   empty: {
@@ -114,12 +115,12 @@ const styles = StyleSheet.create({
     borderColor: '#3a4350', borderWidth: 1, borderRadius: 999,
     paddingHorizontal: 10, paddingVertical: 3,
   },
-  pillCurrent: { backgroundColor: '#f6c90e', borderColor: '#f6c90e' },
+  pillCurrent: { backgroundColor: colors.accentFill, borderColor: colors.accent },
   pillText: { color: '#cfd5dc', fontSize: 13, fontWeight: '700' },
-  pillTextCurrent: { color: '#0a0d13' },
+  pillTextCurrent: { color: colors.onAccent },
   date: { color: '#9aa3ad', fontSize: 12, marginLeft: 10 },
   currentBadge: {
-    color: '#f6c90e', fontSize: 11, fontWeight: '700',
+    color: colors.accent, fontSize: 11, fontWeight: '700',
     marginLeft: 'auto', textTransform: 'uppercase',
   },
 

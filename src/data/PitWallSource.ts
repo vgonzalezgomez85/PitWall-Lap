@@ -155,6 +155,11 @@ export class PitWallSource implements DataSource {
   private raceId: number | null;
   private socket: Socket | null = null;
   private selectedId: string | null = null;
+  /** Entreno de competición: se sigue al participante por nombre (rota de carril
+   *  en cada heat), no por carril. En el entreno libre es false y el id es el carril. */
+  private trainingCompetition = false;
+  /** Carril actual de cada participante del entreno de competición (por nombre). */
+  private lanesNow = new Map<string, number>();
   private participants: ParticipantPlan[] = [];
   private mangaDurationMs = 0;
   /** baseUrl + id de carrera resueltos tras conectar, para refetch de tires. */
@@ -277,21 +282,36 @@ export class PitWallSource implements DataSource {
     if (!res.ok) throw new Error(`slottime-training-${res.status}`);
     const data: {
       active: boolean;
+      competition?: boolean;
       durationMs: number | null;
-      lanes: { lane: number; color: string; count: number; avgMs: number | null; bestMs: number | null; lastMs: number | null }[];
+      lanes: { lane: number; participantName?: string | null; color: string; count: number; avgMs: number | null; bestMs: number | null; lastMs: number | null }[];
+      participants?: { name: string; color: string | null; lane: number | null }[];
     } = await res.json();
 
     if (!data.active) {
       throw new Error('slottime-no-training-active');
     }
 
-    // En entrenamiento cada carril es un "participante" para el selector.
-    this.participants = data.lanes.map(l => ({
-      id: String(l.lane),
-      name: `Carril ${l.lane}`,
-      color: l.color,
-      mangas: [],
-    }));
+    this.trainingCompetition = !!data.competition && (data.participants?.length ?? 0) > 0;
+    if (this.trainingCompetition) {
+      // Entreno de competición: el "participante" es el equipo/piloto, que rota
+      // de carril en cada heat. El id es su nombre, estable entre heats.
+      this.applyCompetitionLanes(data.lanes);
+      this.participants = (data.participants ?? []).map(p => ({
+        id: p.name,
+        name: p.name,
+        color: p.color ?? '#8b949e',
+        mangas: [],
+      }));
+    } else {
+      // Entreno libre: cada carril es un "participante" para el selector.
+      this.participants = data.lanes.map(l => ({
+        id: String(l.lane),
+        name: `Carril ${l.lane}`,
+        color: l.color,
+        mangas: [],
+      }));
+    }
     this.mangaDurationMs = data.durationMs ?? 0;
     this.currentMangaNum = null;
     this.currentState = emptyLiveState();
@@ -360,7 +380,7 @@ export class PitWallSource implements DataSource {
     this.participants = poleData.startingOrder.map(e => ({
       id: String(e.entryId),
       name: e.name,
-      color: '#f6c90e',
+      color: '#ef4651',
       mangas: [],
     }));
 
@@ -492,12 +512,17 @@ export class PitWallSource implements DataSource {
     const selfName = me?.name ?? null;
 
     if (this.mode === 'training') {
-      // En entrenamiento el id == número de carril. Siempre "my-turn".
-      const myLane = parseInt(id, 10);
+      // Entreno libre: el id es el número de carril y siempre es "my-turn".
+      // Entreno de competición: el id es el nombre y el carril cambia cada heat;
+      // si ahora no rueda en ninguno, descansa.
+      const parsed = parseInt(id, 10);
+      const myLane = this.trainingCompetition
+        ? (this.lanesNow.get(id) ?? null)
+        : (Number.isFinite(parsed) ? parsed : null);
       this.currentState = {
         ...emptyLiveState(),
-        status: 'my-turn',
-        myLane: Number.isFinite(myLane) ? myLane : null,
+        status: this.trainingCompetition && myLane == null ? 'resting' : 'my-turn',
+        myLane,
         selfName,
       };
     } else if (this.mode === 'pole') {
@@ -869,8 +894,17 @@ export class PitWallSource implements DataSource {
     });
 
     socket.on('training:lap', (payload: {
-      lane: number; lapTimeMs: number; bestMs: number | null; avgMs: number | null; count: number;
+      lane: number; participantName?: string | null;
+      lapTimeMs: number; bestMs: number | null; avgMs: number | null; count: number;
     }) => {
+      if (this.trainingCompetition) {
+        // Se sigue por nombre: el carril puede haber cambiado desde la última vez.
+        if (payload.participantName) this.lanesNow.set(payload.participantName, payload.lane);
+        if (payload.participantName !== this.selectedId) return;
+        if (this.currentState.myLane !== payload.lane || this.currentState.status !== 'my-turn') {
+          this.currentState = { ...this.currentState, status: 'my-turn', myLane: payload.lane };
+        }
+      }
       const myLane = this.currentState.myLane;
       if (myLane == null || payload.lane !== myLane) return;
       this.currentState = {
@@ -888,10 +922,12 @@ export class PitWallSource implements DataSource {
       });
     });
 
-    socket.on('training:standby', () => {
+    socket.on('training:standby', (lanes?: { lane: number; participantName?: string | null }[]) => {
       // Sesión de entrenamiento detenida o reseteada — limpiamos contadores.
+      if (this.trainingCompetition && Array.isArray(lanes)) this.applyCompetitionLanes(lanes);
       this.currentState = {
         ...this.currentState,
+        ...this.competitionPlacement(),
         lapCount: 0,
         lastLapMs: null,
         bestLapMs: null,
@@ -899,6 +935,40 @@ export class PitWallSource implements DataSource {
       };
       this.emitState();
     });
+
+    if (this.trainingCompetition) {
+      // El heat arranca: el reparto de carriles ya es el definitivo.
+      socket.on('training:activated', (lanes?: { lane: number; participantName?: string | null }[]) => {
+        if (!Array.isArray(lanes)) return;
+        this.applyCompetitionLanes(lanes);
+        this.currentState = { ...this.currentState, ...this.competitionPlacement() };
+        this.emitState();
+      });
+
+      // Nuevo heat preparado: los equipos han rotado. Si me toca correr, aviso
+      // del carril ("Tu turno, carril N"); si descanso, la pantalla lo muestra.
+      socket.on('competition:heat', (payload: { heat: number }) => {
+        const myLane = this.currentState.myLane;
+        if (myLane != null) {
+          this.emitEvent({ type: 'manga-changed', newMangaNum: payload.heat, newLane: myLane });
+        }
+      });
+    }
+  }
+
+  /** Carril de cada participante según lo que cuenta el servidor ahora. */
+  private applyCompetitionLanes(lanes: { lane: number; participantName?: string | null }[]): void {
+    this.lanesNow = new Map();
+    for (const l of lanes) {
+      if (l.participantName) this.lanesNow.set(l.participantName, l.lane);
+    }
+  }
+
+  /** Dónde está ahora el participante seguido (solo entreno de competición). */
+  private competitionPlacement(): Pick<LiveState, 'status' | 'myLane'> | Record<string, never> {
+    if (!this.trainingCompetition || this.selectedId == null) return {};
+    const myLane = this.lanesNow.get(this.selectedId) ?? null;
+    return { status: myLane == null ? 'resting' : 'my-turn', myLane };
   }
 
   /** true si se pudo leer la manga actual del servidor. */

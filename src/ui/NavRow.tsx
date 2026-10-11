@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   badge: {
     minWidth: 24, height: 24, paddingHorizontal: 7, borderRadius: radius.pill,
-    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.accentFill, alignItems: 'center', justifyContent: 'center',
   },
   badgeText: { color: colors.onAccent, fontSize: 13, fontWeight: '800' },
   chevron: { color: colors.textFaint, fontSize: 26, fontWeight: '300', marginTop: -2 },

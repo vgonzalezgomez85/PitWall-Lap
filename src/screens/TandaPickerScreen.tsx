@@ -17,6 +17,7 @@ import { useDataSource } from '../data/sourceContext';
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
+import { colors } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TandaPicker'>;
 
@@ -106,7 +107,7 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#f6c90e" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loading}>{connecting ? t.comun.conectando : t.tandas.cargando}</Text>
         </View>
       </View>
@@ -146,12 +147,12 @@ export default function TandaPickerScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#0a0d13' },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 12 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 12 },
   loading: { color: '#cfd5dc', fontSize: 14, marginTop: 12 },
   errorTitle: { color: '#ff6b6b', fontSize: 20, fontWeight: '600' },
   errorBody: { color: '#9aa3ad', fontSize: 14, textAlign: 'center', marginTop: 12, lineHeight: 20 },
-  btn: { marginTop: 24, paddingHorizontal: 28, paddingVertical: 12, backgroundColor: '#f6c90e', borderRadius: 8 },
-  btnText: { color: '#0a0d13', fontWeight: '700', fontSize: 16 },
+  btn: { marginTop: 24, paddingHorizontal: 28, paddingVertical: 12, backgroundColor: colors.accentFill, borderRadius: 8 },
+  btnText: { color: colors.onAccent, fontWeight: '700', fontSize: 16 },
   row: {
     backgroundColor: '#141923', paddingVertical: 16, paddingHorizontal: 16,
     marginVertical: 6, borderRadius: 8,

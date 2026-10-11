@@ -15,6 +15,7 @@ import type { RaceStatsSnapshot } from '../data/types';
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
+import { colors } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HistoryDetail'>;
 
@@ -107,7 +108,7 @@ export default function HistoryDetailScreen({ route }: Props) {
     return (
       <View style={styles.center}>
         <BackButton />
-        <ActivityIndicator size="large" color="#f6c90e" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -168,7 +169,7 @@ export default function HistoryDetailScreen({ route }: Props) {
 const styles = StyleSheet.create({
   root:   { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
   center: { flex: 1, padding: 20, backgroundColor: '#0a0d13', alignItems: 'center', justifyContent: 'center' },
-  title:    { color: '#f6c90e', fontSize: 24, fontWeight: '700', marginTop: 4 },
+  title:    { color: colors.text, fontSize: 24, fontWeight: '700', marginTop: 4 },
   subtitle: { color: '#9aa3ad', fontSize: 13, marginTop: 4 },
   error:    { color: '#ff6b6b', fontSize: 14, textAlign: 'center', marginTop: 20 },
   row: {
@@ -177,7 +178,7 @@ const styles = StyleSheet.create({
     marginVertical: 4, borderRadius: 8, borderLeftWidth: 4,
   },
   posCol:  { width: 36 },
-  pos:     { color: '#f6c90e', fontSize: 22, fontWeight: '800' },
+  pos:     { color: colors.accent, fontSize: 22, fontWeight: '800' },
   rowName: { color: '#fff', fontSize: 17, fontWeight: '600' },
   rowMeta: { color: '#9aa3ad', fontSize: 12, marginTop: 4 },
 

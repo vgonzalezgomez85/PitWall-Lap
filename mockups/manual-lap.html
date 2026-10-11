@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PitWall Lap — ilustraciones del manual</title>
+<!--
+  Ilustraciones de las pantallas de PitWall Lap para el manual (no son capturas
+  reales: reproducen la interfaz con los mismos colores, textos y estructura que
+  la app). Cada pantalla se pinta sola con  manual-lap.html#lap-01-menu  y
+  scripts/capturas-manual-lap.sh las saca a PNG con Chrome sin ventana.
+  Colores = src/ui/theme.ts.
+-->
+<style>
+  :root{
+    --bg:#0a0d13; --surface:#141923; --raised:#1c2330; --border:#3a4350; --soft:#1f2633;
+    --text:#fff; --text2:#cfd5dc; --muted:#9aa3ad; --faint:#6b7480;
+    --accent:#ef4651; --fill:#d23e47; --accent-soft:#2a1014;
+    --good:#4ade80; --best:#c084fc; --slow:#fb923c; --danger:#ff6b6b; --info:#2c5cdd;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .screen{display:none;width:390px;height:844px;position:relative;overflow:hidden;background:var(--bg)}
+  .screen:target{display:block}
+  .sb{position:absolute;top:0;left:0;right:0;height:50px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 30px 6px;font-size:15px;font-weight:600}
+  .sb i{font-style:normal;font-size:13px;letter-spacing:2px}
+  .home{position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#fff;opacity:.85}
+  .pad{padding:58px 20px 0}
+  .back{color:var(--accent);font-size:17px;font-weight:600;padding:10px 0 4px}
+  h1{font-size:26px;font-weight:700;margin-top:4px;line-height:1.15}
+  .sub{color:var(--muted);font-size:14px;margin-top:6px;line-height:1.35}
+  .row{background:var(--surface);border-radius:8px;padding:15px 16px;margin-top:10px;display:flex;align-items:center;gap:10px}
+  .row .tx{flex:1;min-width:0}
+  .row b{display:block;font-size:17px;font-weight:600}
+  .row small{display:block;color:var(--muted);font-size:12px;margin-top:3px;line-height:1.3}
+  .badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px}
+  .b-act{background:#1f3a1f;color:#5fd167}.b-pen{background:#2a2a2a;color:var(--muted)}.b-pole{background:var(--accent-soft);color:var(--accent)}
+  .btn{display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:700;font-size:16px;padding:14px;margin-top:16px;color:#fff;background:var(--fill)}
+  .btn.out{background:none;border:1px solid var(--border);color:var(--text2);font-size:13px;font-weight:600;padding:12px 6px;margin:0;flex:1;text-align:center}
+  .lbl{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .sec{margin-top:22px}
+  .chip{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:8px 14px;font-size:14px;color:var(--text2);background:var(--surface)}
+  .chip.on{background:var(--fill);border-color:var(--fill);color:#fff;font-weight:600}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .card{background:var(--surface);border-radius:12px;padding:16px;border:1px solid var(--soft)}
+  .sw{width:51px;height:31px;border-radius:16px;background:var(--border);position:relative;flex:none}
+  .sw::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff}
+  .sw.on{background:var(--fill)}.sw.on::after{left:22px}
+  table{width:100%;border-collapse:collapse}
+  td,th{padding:10px 8px;font-size:14px;text-align:right;border-top:1px solid var(--border);font-variant-numeric:tabular-nums}
+  th{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--raised);border-top:0}
+  td:nth-child(1),th:nth-child(1){text-align:left;width:26px}td:nth-child(2),th:nth-child(2){text-align:left}
+  .tbl{background:var(--surface);border-radius:8px;overflow:hidden;margin-top:10px}
+
+  /* 01 menú */
+  .logo{display:block;width:260px;margin:78px auto 34px}
+  .lap{background:var(--fill);border-radius:16px;display:flex;align-items:center;gap:16px;padding:22px 22px;min-height:104px}
+  .lap .ic{font-size:38px}.lap b{font-size:24px;font-weight:800;display:block}.lap small{font-size:13px;opacity:.85;line-height:1.35;display:block;margin-top:3px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .sq{aspect-ratio:1;background:var(--surface);border:1px solid var(--soft);border-radius:16px;padding:16px;display:flex;flex-direction:column;justify-content:space-between}
+  .sq .ic{font-size:32px}.sq b{font-size:17px;font-weight:700;display:block;line-height:1.15}.sq small{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.3;display:block}
+  .aj{margin-top:12px;border:1px solid var(--soft);border-radius:16px;padding:13px 16px;display:flex;align-items:center;gap:12px}
+  .aj b{font-size:16px;color:var(--text2);font-weight:600;display:block}.aj small{font-size:12px;color:var(--faint)}
+  .ver{text-align:center;color:var(--faint);font-size:12px;margin-top:16px}
+  /* 02 fuentes */
+  .src{border-radius:28px;padding:24px;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;height:318px}
+  .src .wm{position:absolute;top:-18px;right:6px;font-size:150px;font-weight:900;opacity:.14;letter-spacing:-6px;line-height:1}
+  .src b{font-size:40px;font-weight:900;letter-spacing:-1px;display:block}.src small{font-size:14px;opacity:.8;display:block;margin-top:6px;line-height:1.4;padding-right:64px}
+  .src .go{position:absolute;right:20px;bottom:20px;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700}
+  /* 03/10 cabecera con botón */
+  .hd{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .refresh{margin-top:12px;border:1px solid var(--accent);color:var(--accent);border-radius:8px;padding:10px 14px;font-size:14px;font-weight:700;white-space:nowrap}
+  /* 04 mi turno */
+  .name{margin-top:4px}.name .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}.name b{font-size:22px;display:block;margin-top:2px}
+  .hero{margin-top:14px;padding:20px 16px}
+  .top{display:flex;justify-content:space-between;align-items:center}
+  .pill{background:var(--fill);border-radius:8px;padding:6px 12px;font-size:18px;font-weight:800}
+  .big{font-size:76px;font-weight:800;text-align:center;line-height:1;margin-top:6px;font-variant-numeric:tabular-nums}
+  .big.g{color:var(--good)}.delta{text-align:center;font-size:16px;font-weight:700;margin-top:4px}.delta.g{color:var(--good)}
+  .three{display:flex;gap:10px;margin-top:16px;border-top:1px solid var(--soft);padding-top:14px}
+  .three div{flex:1}.three b{font-size:22px;display:block;margin-top:2px;font-variant-numeric:tabular-nums}
+  .three .p{color:var(--best)}
+  .nav{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--soft);border-radius:12px;padding:14px 16px;margin-top:10px}
+  .nav .tx{flex:1}.nav b{font-size:16px;font-weight:600;display:block}.nav small{font-size:13px;color:var(--muted)}.nav i{font-style:normal;font-size:26px;color:var(--faint)}
+  /* 06 calendario */
+  .evt{background:var(--surface);border-radius:8px;padding:15px 16px;margin-top:8px;display:flex;align-items:center;gap:10px}
+  .evt.past{opacity:.55}
+  /* 07 evento */
+  .in{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:17px;margin-top:8px}
+  .in.ph{color:var(--faint)}.in.tall{min-height:76px}
+  .dt{display:flex;gap:12px;margin-top:8px}.dt .in{margin:0}
+  .av{margin-top:8px;border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:12px 14px;font-size:15px;color:var(--text2)}
+  .av.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:600}
+  /* 08 alerta */
+  .dim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+  .alert{position:absolute;left:36px;right:36px;top:230px;background:#2b2f38;border-radius:14px;overflow:hidden;text-align:center}
+  .alert .t{padding:20px 18px 6px;font-size:17px;font-weight:600}
+  .alert .m{padding:2px 16px 18px;font-size:13px;color:#d6dae0;line-height:1.5;text-align:left;white-space:pre-line}
+  .alert .bt{display:flex;border-top:1px solid #444a55}.alert .bt div{flex:1;padding:14px;font-size:17px;color:#4da3ff}.alert .bt div+div{border-left:1px solid #444a55;font-weight:600}
+  /* 12/13 */
+  .okc{color:var(--good);font-size:12px;font-weight:600}.dl{color:var(--accent);font-size:13px;font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- 01 · Menú principal -->
+<div class="screen" id="lap-01-menu">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad" style="padding-top:0">
+    <img class="logo" src="../assets/logo-pitwall.png" alt="PitWall">
+    <div class="lap"><span class="ic">🏁</span><div><b>Lap</b><small>Conecta con PitWall o TicTac y escucha los tiempos</small></div></div>
+    <div class="grid">
+      <div class="sq"><span class="ic">📅</span><div><b>Calendario</b><small>Tus carreras y sus avisos</small></div></div>
+      <div class="sq"><span class="ic">⏱</span><div><b>Entrenamientos</b><small>Tus tandas registradas</small></div></div>
+      <div class="sq"><span class="ic">🎯</span><div><b>Entrenos de competición</b><small>Descárgalos y consúltalos sin conexión</small></div></div>
+      <div class="sq"><span class="ic">🏆</span><div><b>Resultados</b><small>Carreras descargadas y archivos tuyos</small></div></div>
+    </div>
+    <div class="aj"><span style="font-size:20px">⚙️</span><div style="flex:1"><b>Ajustes</b><small>Idioma, voz y estrategia</small></div><span style="color:var(--faint);font-size:24px">›</span></div>
+    <div class="ver">Novedades · v1.9.0</div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 02 · Lap: fuentes -->
+<div class="screen" id="lap-02-fuentes">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad" style="padding-left:20px;padding-right:20px">
+    <div class="back">‹ Volver</div>
+    <div style="display:flex;flex-direction:column;gap:16px;margin-top:8px">
+      <div class="src" style="background:var(--fill);color:#fff"><div class="wm">PW</div><b>PitWall</b><small>Cronómetro DS-300 con PitWall Manager</small><div class="go" style="background:#fff;color:var(--fill)">→</div></div>
+      <div class="src" style="background:var(--surface);border:1px solid var(--border);color:var(--text2)"><div class="wm">TT</div><b>TicTac</b><small>Gestor de Carreras (InfoLap)</small><div class="go" style="background:var(--raised);color:var(--text2)">→</div></div>
+    </div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 03 · Elige actividad -->
+<div class="screen" id="lap-03-actividad">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <div class="hd"><h1>Elige actividad</h1><div class="refresh">↻ Actualizar</div></div>
+    <div class="row" style="border-left:4px solid #22c55e"><div class="tx"><b>Entrenamiento</b><small>Sesión libre · elige tu carril</small></div><span class="badge b-act">Activo</span></div>
+    <div class="row"><div class="tx"><b>Resistencia 24h</b><small>Equipos · 24 · 8 tandas · 20 min/manga</small></div><span class="badge b-pole">POLE</span><span class="badge b-act">En curso</span></div>
+    <div class="row"><div class="tx"><b>Copa Escuderías</b><small>Equipos · 12 · 3 tandas · 10 min/manga</small></div><span class="badge b-pen">Pendiente</span></div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 04 · Mi turno -->
+<div class="screen" id="lap-04-mi-turno">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <div class="top"><div class="name"><span class="l">PitWall</span><b>Scuderia Llinars</b></div><span class="chip on" style="padding:6px 12px;font-size:13px">Voz ON</span></div>
+    <div class="card hero">
+      <div class="top"><span class="pill">Carril 3</span><div style="text-align:right"><span class="lbl">Restante</span><b style="display:block;font-size:24px;color:var(--text2)">3:42</b></div></div>
+      <div class="lbl" style="text-align:center;margin-top:20px">Última vuelta</div>
+      <div class="big g">8.19</div>
+      <div class="delta g">+0.07 vs mejor</div>
+      <div class="three"><div><span class="lbl">Rápida</span><b class="p">8.12</b></div><div><span class="lbl">Media carril</span><b>8.31</b></div><div><span class="lbl">Vueltas</span><b>27</b></div></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="three" style="margin:0;border:0;padding:0"><div><span class="lbl">Posición</span><b style="color:var(--accent);font-size:34px">P2 <small style="font-size:18px;color:var(--muted)">/ 12</small></b></div><div><span class="lbl">Delante</span><b style="font-size:17px">A la par</b><small style="color:var(--muted);font-size:12px">Team PitWall</small></div><div><span class="lbl">Detrás</span><b style="font-size:17px">1 vuelta</b><small style="color:var(--muted);font-size:12px">Blue Racing</small></div></div>
+    </div>
+    <div class="nav"><div class="tx"><b>Estrategia de neumáticos</b><small>Plan y avisos de cambio de goma</small></div><i>›</i></div>
+    <div class="nav"><div class="tx"><b>Seguimiento de rivales</b><small>Vueltas y medias por carril</small></div><i>›</i></div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 05 · Selector de entreno de competición -->
+<div class="screen" id="lap-05-competicion-selector">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <h1>Entrenamiento</h1>
+    <div class="sub">Elige tu equipo o piloto. La app te sigue aunque cambies de carril.</div>
+    <div class="row" style="border-left:4px solid #ef4444"><div class="tx"><b>Circuit Nocturn</b><small>Carril 2</small></div></div>
+    <div class="row" style="border-left:4px solid #3b82f6"><div class="tx"><b>Scuderia Llinars</b><small>Carril 1</small></div></div>
+    <div class="row" style="border-left:4px solid #22c55e"><div class="tx"><b>Blue Racing</b><small>Carril 3</small></div></div>
+    <div class="row" style="border-left:4px solid #f59e0b"><div class="tx"><b>Team PitWall</b><small>Carril 4</small></div></div>
+    <div class="row" style="border-left:4px solid #a855f7"><div class="tx"><b>Escudería Norte</b><small>Descansa</small></div></div>
+    <div class="row" style="border-left:4px solid #94a3b8"><div class="tx"><b>Los Cuervos</b><small>Descansa</small></div></div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 06 · Calendario -->
+<div class="screen" id="lap-06-calendario">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <h1>Calendario</h1>
+    <div class="btn">＋ Añadir carrera</div>
+    <div style="display:flex;gap:8px;margin-top:8px"><div class="btn out">📥 Importar desde Excel</div><div class="btn out">📄 Descargar plantilla</div></div>
+    <div class="sec"><span class="lbl">Próximas</span></div>
+    <div class="evt"><div class="tx" style="flex:1"><b style="font-size:17px;font-weight:600;display:block">Regional · ronda 1</b><small style="color:var(--muted);font-size:12px;display:block;margin-top:3px">sáb, 14 nov 2026, 10:00</small><small style="color:var(--muted);font-size:12px">📍 Circuit Nocturn</small></div><span>🔔</span></div>
+    <div class="evt"><div class="tx" style="flex:1"><b style="font-size:17px;font-weight:600;display:block">Regional · ronda 2</b><small style="color:var(--muted);font-size:12px;display:block;margin-top:3px">sáb, 28 nov 2026, 16:30</small></div><span>🔔</span></div>
+    <div class="evt"><div class="tx" style="flex:1"><b style="font-size:17px;font-weight:600;display:block">24 Horas de Modena</b><small style="color:var(--muted);font-size:12px;display:block;margin-top:3px">sáb, 12 dic 2026, 12:00</small><small style="color:var(--muted);font-size:12px">📍 Modena</small></div><span>🔔</span></div>
+    <div class="sec"><span class="lbl">Pasadas</span></div>
+    <div class="evt past"><div class="tx" style="flex:1"><b style="font-size:17px;font-weight:600;display:block">Copa Escuderías</b><small style="color:var(--muted);font-size:12px;display:block;margin-top:3px">sáb, 3 oct 2026, 10:00</small></div></div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 07 · Nueva carrera -->
+<div class="screen" id="lap-07-evento">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <h1>Nueva carrera</h1>
+    <div class="lbl sec" style="margin-top:18px">Nombre</div><div class="in">Regional · ronda 3</div>
+    <div class="lbl sec" style="margin-top:16px">Fecha · Hora</div>
+    <div class="dt"><div class="in">12 dic 2026</div><div class="in">10:00</div></div>
+    <div class="lbl sec" style="margin-top:16px">Lugar (opcional)</div><div class="in">Circuit Nocturn</div>
+    <div class="lbl sec" style="margin-top:16px">Notas (opcional)</div><div class="in tall ph"></div>
+    <div class="lbl sec" style="margin-top:16px">Avisarme</div>
+    <div class="av">A la hora de inicio</div><div class="av">30 minutos antes</div><div class="av on">✓ 1 hora antes</div><div class="av on">✓ 1 día antes</div><div class="av">1 semana antes</div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 08 · Vista previa de importación -->
+<div class="screen" id="lap-08-importar">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <h1>Calendario</h1>
+    <div class="btn">＋ Añadir carrera</div>
+    <div class="sec"><span class="lbl">Próximas</span></div>
+    <div class="evt"><div class="tx" style="flex:1"><b style="font-size:17px;font-weight:600;display:block">Regional · ronda 1</b><small style="color:var(--muted);font-size:12px">sáb, 14 nov 2026, 10:00</small></div><span>🔔</span></div>
+  </div>
+  <div class="dim"></div>
+  <div class="alert">
+    <div class="t">Importar desde Excel</div>
+    <div class="m">Carreras a importar: 3
+• 28 nov 2026, 16:30 · Regional · ronda 2
+• 12 dic 2026, 12:00 · 24 Horas de Modena
+• 9 ene 2027, 10:00 · Copa de Invierno
+
+Ya estaban en el calendario (se omiten): 1
+
+Filas con errores (no se importan): 1
+• fila 7: fecha no válida</div>
+    <div class="bt"><div>Cancelar</div><div>Importar (3)</div></div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 09 · Entrenamientos -->
+<div class="screen" id="lap-09-entrenamientos">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <div class="hd"><h1>Entrenamientos</h1><span style="color:var(--accent);font-size:15px;font-weight:600;margin-top:6px">Comparar</span></div>
+    <div class="row"><div class="tx"><b>Stint 11/10 18:42</b><small>Carril 2 · 38 vueltas · mejor 8.12 · media 8.31<br>Mini-Z · Motor Ninco 20K · Neumático Slick</small></div></div>
+    <div class="row"><div class="tx"><b>Stint 11/10 17:58</b><small>Carril 2 · 41 vueltas · mejor 8.21 · media 8.40</small></div></div>
+    <div class="row"><div class="tx"><b>Stint 04/10 19:10</b><small>Carril 4 · 29 vueltas · mejor 8.30 · media 8.52</small></div></div>
+    <div class="row"><div class="tx"><b>Stint 04/10 18:25</b><small>Carril 4 · 33 vueltas · mejor 8.28 · media 8.47</small></div></div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 10 · Entrenos de competición: lista -->
+<div class="screen" id="lap-10-competicion-lista">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <h1>Entrenos de competición</h1>
+    <div class="btn" style="margin-top:14px">⬇ Descargar todos (2)</div>
+    <div class="row" style="margin-top:14px"><div class="tx"><b>11 oct 2026, 18:00</b><small>6 heats · 8 participantes · 412 vueltas · mejor 8.07</small></div><span class="okc">✓ en el móvil</span></div>
+    <div class="row"><div class="tx"><b>4 oct 2026, 19:00</b><small>5 heats · 8 participantes · 351 vueltas · mejor 8.14</small></div><span class="okc">✓ en el móvil</span></div>
+    <div class="row"><div class="tx"><b>27 sep 2026, 18:30</b><small>4 heats · 6 participantes · 233 vueltas · mejor 8.22</small></div><span class="dl">⬇ Descargar</span></div>
+    <div class="row"><div class="tx"><b>20 sep 2026, 18:30</b><small>4 heats · 6 participantes · 240 vueltas · mejor 8.19</small></div><span class="dl">⬇ Descargar</span></div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 11 · Entreno de competición: detalle -->
+<div class="screen" id="lap-11-competicion-detalle">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <h1 style="font-size:24px">11 oct 2026, 18:00</h1>
+    <div class="sub" style="font-size:12px;margin-bottom:6px">Descargado el 11 oct 2026, 21:30</div>
+    <div class="sec" style="margin-top:14px"><span class="lbl">Clasificación</span></div>
+    <div class="sub" style="font-size:12px;color:var(--faint)">Gana quien más vueltas suma en todos sus heats; a igualdad, la mejor vuelta.</div>
+    <div class="tbl"><table>
+      <tr><th>#</th><th>Participante</th><th>Vueltas</th><th>Mejor</th><th>Media</th></tr>
+      <tr><td>1</td><td>Circuit Nocturn</td><td>82</td><td>8.07</td><td>8.29</td></tr>
+      <tr><td>2</td><td>Scuderia Llinars</td><td>80</td><td>8.12</td><td>8.31</td></tr>
+      <tr><td>3</td><td>Blue Racing</td><td>77</td><td>8.15</td><td>8.38</td></tr>
+      <tr><td>4</td><td>Team PitWall</td><td>75</td><td>8.21</td><td>8.44</td></tr>
+    </table></div>
+    <div class="sec"><span class="lbl">Heat 1</span></div>
+    <div class="tbl"><table>
+      <tr><th>C</th><th>Participante</th><th>Vueltas</th><th>Mejor</th><th>Media</th></tr>
+      <tr><td>1</td><td>Scuderia Llinars</td><td>14</td><td>8.12</td><td>8.30</td></tr>
+      <tr><td>2</td><td>Circuit Nocturn</td><td>14</td><td>8.07</td><td>8.27</td></tr>
+      <tr><td>3</td><td>Blue Racing</td><td>13</td><td>8.15</td><td>8.36</td></tr>
+    </table></div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 12 · Resultados -->
+<div class="screen" id="lap-12-resultados">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <h1>Resultados</h1>
+    <div class="btn" style="margin-top:14px">＋ Añadir</div>
+    <div class="row"><div class="tx"><b>24h_Modena_resultados</b><small>📎 Excel · subido por ti · 11 oct 2026, 20:15</small></div></div>
+    <div class="row"><div class="tx"><b>Resistencia 24h</b><small>Equipos · 11 oct 2026, 14:00</small></div></div>
+    <div class="row"><div class="tx"><b>Foto hoja de tiempos</b><small>📎 Foto · subido por ti · 4 oct 2026, 21:02</small></div></div>
+    <div class="row"><div class="tx"><b>Copa Escuderías</b><small>Equipos · 4 oct 2026, 13:30 · ☁ en servidor</small></div></div>
+    <div class="row"><div class="tx"><b>Reglamento Regional 2026</b><small>📎 PDF · subido por ti · 20 sep 2026, 09:10</small></div></div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 13 · Archivo de resultados -->
+<div class="screen" id="lap-13-archivo">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <h1>Excel</h1>
+    <div class="lbl sec" style="margin-top:22px">Nombre</div>
+    <div class="in">24h_Modena_resultados</div>
+    <div class="btn" style="margin-top:22px">Abrir</div>
+    <div style="text-align:center;color:var(--danger);font-size:15px;margin-top:22px">Borrar</div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<!-- 14 · Ajustes -->
+<div class="screen" id="lap-14-ajustes">
+  <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+  <div class="pad">
+    <div class="back">‹ Volver</div>
+    <h1>Ajustes</h1>
+    <div class="sec"><span class="lbl">Idioma de la app</span></div>
+    <div class="nav" style="margin-top:8px"><div class="tx"><b>🌐 Castellano</b><small>Automático</small></div><i>›</i></div>
+    <div class="sec"><span class="lbl">Opciones de Lap</span></div>
+    <div class="card" style="margin-top:8px;display:flex;align-items:center;gap:14px"><div style="flex:1"><b style="font-size:16px;font-weight:600">Estrategia de neumáticos</b><div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35">Plan de cambios de goma y avisos en la pantalla de Lap. Apagada, no se calcula ni se muestra.</div></div><div class="sw on"></div></div>
+    <div class="card" style="margin-top:10px;display:flex;align-items:center;gap:14px"><div style="flex:1"><b style="font-size:16px;font-weight:600">Voz</b><div style="font-size:12px;color:var(--muted);margin-top:3px">Interruptor general de los avisos de voz.</div></div><div class="sw on"></div></div>
+    <div class="card" style="margin-top:10px">
+      <span class="lbl">Avisos de voz</span>
+      <div class="chips"><span class="chip on">Vueltas</span><span class="chip on">Posición</span><span class="chip on">Mitad manga</span><span class="chip on">Último minuto</span><span class="chip">30 s</span></div>
+      <div class="lbl" style="margin-top:16px">Periódicos</div>
+      <div class="chips"><span class="chip on">Media carril · cada 2 min</span><span class="chip">Media carrera</span><span class="chip on">Gaps · cada 3 min</span><span class="chip">Para subir</span></div>
+    </div>
+  </div>
+  <div class="home"></div>
+</div>
+
+<script>if(!location.hash){var s=document.querySelector('.screen');if(s)location.hash=s.id;}</script>
+</body>
+</html>

@@ -18,9 +18,14 @@ export const colors = {
   textMuted: '#9aa3ad',
   textFaint: '#6b7480',
 
-  accent: '#f6c90e',
-  onAccent: '#0a0d13',
-  accentSoft: '#1f1804',
+  // Rojo de la marca PitWall (el del logo) y blanco sobre él.
+  accent: '#ef4651',
+  // Rojo algo más profundo para RELLENOS (botones, tarjetas, insignias): con texto
+  // blanco encima llega a 4,6:1 de contraste; el rojo de marca a secas se queda en
+  // 3,7:1. El acento a secas se usa para texto, bordes y marcas sobre fondo oscuro.
+  accentFill: '#d23e47',
+  onAccent: '#ffffff',
+  accentSoft: '#2a1014',
 
   // Semáforo de vueltas, estilo cronometraje de F1.
   best: '#c084fc',      // morado: mejor vuelta propia
@@ -60,7 +65,7 @@ export const type = {
   caption: { color: colors.textFaint, fontSize: 12, lineHeight: 17 },
   body: { color: colors.textSoft, fontSize: 15, lineHeight: 21 },
   bodyStrong: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  title: { color: colors.accent, fontSize: 26, fontWeight: '700' },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700' },
   heading: { color: colors.text, fontSize: 22, fontWeight: '700' },
 
   // Números.

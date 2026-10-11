@@ -4,6 +4,10 @@
 // totalmente tipados. La rutas se declaran en App.tsx.
 
 export type RootStackParamList = {
+  Home: undefined;
+  Calendario: undefined;
+  Evento: { id?: string } | undefined;
+  ArchivoResultado: { id: string };
   Discovery: undefined;
   RacePicker: { host: string; port: number };
   TandaPicker: { host: string; port: number; raceId: number };
@@ -17,6 +21,9 @@ export type RootStackParamList = {
   HistoryDetail: { raceId: number | string };
   Changelog: undefined;
   Idioma: undefined;
+  Ajustes: undefined;
   Training: undefined;
+  EntrenosCompeticion: undefined;
+  EntrenoCompeticion: { id: string };
   StintDetail: { id: string; compareIds?: string[] };
 };

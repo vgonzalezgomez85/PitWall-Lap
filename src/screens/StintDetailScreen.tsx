@@ -19,11 +19,12 @@ import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { Textos } from '../i18n';
 import type { RootStackParamList } from '../navigation';
+import { colors } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'StintDetail'>;
 
 // Paleta para las series de la gráfica (el primero es el stint principal).
-const PALETTE = ['#f6c90e', '#4ea1f6', '#5ec27a', '#e2724b'];
+const PALETTE = [colors.accent, '#4ea1f6', '#5ec27a', '#f6c90e'];
 
 function fmt(ms: number | null): string {
   if (ms == null) return '—';
@@ -110,7 +111,7 @@ export default function StintDetailScreen({ route, navigation }: Props) {
   const allStints = [main, ...others];
   const series: ChartSeries[] = allStints.map((s, i) => ({
     label: seriesLabel(s, t, locale),
-    color: (PALETTE[i % PALETTE.length] ?? '#f6c90e'),
+    color: (PALETTE[i % PALETTE.length] ?? colors.accent),
     laps: s.lapTimes,
   }));
   const comparing = others.length > 0;
@@ -135,7 +136,7 @@ export default function StintDetailScreen({ route, navigation }: Props) {
           const sd = stdDev(s.lapTimes);
           return (
             <View key={s.id} style={styles.statsRow}>
-              <View style={[styles.dot, { backgroundColor: (PALETTE[i % PALETTE.length] ?? '#f6c90e') }]} />
+              <View style={[styles.dot, { backgroundColor: (PALETTE[i % PALETTE.length] ?? colors.accent) }]} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.statsName} numberOfLines={1}>{seriesLabel(s, t, locale)}</Text>
                 <Text style={styles.statsLine}>
@@ -234,7 +235,7 @@ function SetupField({
 
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
-  title: { color: '#f6c90e', fontSize: 24, fontWeight: '700', marginTop: 4 },
+  title: { color: colors.text, fontSize: 24, fontWeight: '700', marginTop: 4 },
   subtitle: { color: '#9aa3ad', fontSize: 13, marginTop: 4 },
   empty: { color: '#9aa3ad', fontSize: 14, textAlign: 'center', marginTop: 48 },
 
@@ -277,11 +278,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center', padding: 24,
   },
   modalCard: { backgroundColor: '#141923', borderRadius: 12, padding: 20 },
-  modalTitle: { color: '#f6c90e', fontSize: 20, fontWeight: '800' },
+  modalTitle: { color: colors.text, fontSize: 20, fontWeight: '800' },
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 20 },
   modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   modalBtnGhost: { borderWidth: 1, borderColor: '#3a4350' },
   modalBtnGhostText: { color: '#cfd5dc', fontSize: 15, fontWeight: '600' },
-  modalBtnPrimary: { backgroundColor: '#f6c90e' },
-  modalBtnPrimaryText: { color: '#0a0d13', fontSize: 15, fontWeight: '700' },
+  modalBtnPrimary: { backgroundColor: colors.accentFill },
+  modalBtnPrimaryText: { color: colors.onAccent, fontSize: 15, fontWeight: '700' },
 });

@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useIdioma } from '../i18n/IdiomaContext';
 import { IDIOMAS, nombreIdioma, type PreferenciaIdioma } from '../i18n/idiomas';
 import BackButton from '../ui/BackButton';
+import { colors } from '../ui/theme';
 
 export default function IdiomaScreen() {
   const { t, preferencia, idiomaSistema, setPreferencia } = useIdioma();
@@ -42,15 +43,15 @@ export default function IdiomaScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 4, marginBottom: 8 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 4, marginBottom: 8 },
   row: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#141923', paddingVertical: 16, paddingHorizontal: 16,
     marginVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: 'transparent',
   },
-  rowActivo: { borderColor: '#f6c90e' },
+  rowActivo: { borderColor: colors.accent },
   rowName: { color: '#fff', fontSize: 18, fontWeight: '600' },
   rowSub: { color: '#9aa3ad', fontSize: 12, marginTop: 4 },
-  check: { color: '#f6c90e', fontSize: 20, fontWeight: '800' },
+  check: { color: colors.accent, fontSize: 20, fontWeight: '800' },
   nota: { color: '#7f8a97', fontSize: 12, lineHeight: 18, marginTop: 18 },
 });

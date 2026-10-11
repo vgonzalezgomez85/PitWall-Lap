@@ -18,6 +18,71 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.9.0] — 2026-10-11
+
+### Añadido
+- **Aviso de versión nueva en Android** (`AvisoActualizacion`, `actualizacionAndroid.ts`). Al abrir la app, consulta `https://www.pitwall.es/software/pitwall-lap/version.json`; si la versión publicada es posterior a la instalada, el menú muestra una tarjeta con el botón **Actualizar**, que **descarga el APK** y abre el instalador de Android (la primera vez Android pide permitir a la app «instalar aplicaciones»; luego se vuelve a pulsar). Comprueba que la descarga llegue completa antes de instalar y, si no hay red o la web no responde, no molesta. **Más tarde** la descarta hasta la próxima vez que se abre. En iPhone no aplica: actualiza TestFlight.
+- `npm run apk` deja ahora también el APK y su `version.json` (versión, tamaño, sha256) en la carpeta de la web (`PitWall Landing/software/pitwall-lap/`); falta desplegarla con su `deploy.sh`. Permiso nuevo en Android: `REQUEST_INSTALL_PACKAGES`.
+- Para que una actualización se instale **encima** de la app ya instalada, el APK nuevo tiene que ir firmado con la misma clave que el anterior (la del proyecto, `android/app/debug.keystore`).
+- Esta versión es la primera que lleva el aviso: las instaladas antes hay que actualizarlas a mano una vez.
+
+### Corregido
+- **iOS: el build ya no falla por «Push Notifications».** `expo-notifications` añadía sola la capacidad Push al hacer `expo prebuild` aunque la app solo usa avisos locales, y la firma fallaba (cuenta gratuita) o fallaría (TestFlight, con un identificador sin Push). El config plugin `plugins/withoutPush.js` la quita siempre.
+
+## [1.8.0] — 2026-10-11
+
+### Añadido
+- **Importar carreras al calendario desde un Excel** (`calendarioImport.ts`, `calendarioImportarArchivo.ts`). En *Calendario*, **Importar desde Excel** abre un `.xlsx`/`.xls`, enseña una **vista previa** (carreras que se importarán, las que ya estaban y las filas con error, con su número de fila) y, al confirmar, las guarda con sus avisos. Las repetidas (mismo nombre y mismo instante, ya en el calendario o dentro del propio archivo) se omiten. Añadir una carrera a mano sigue igual.
+- **Plantilla Excel descargable desde la app** (botón **Descargar plantilla**, abre el menú de compartir de iOS/Android: *Guardar en Archivos*, AirDrop, correo…): una hoja *Carreras* con las columnas Nombre, Fecha, Hora, Lugar, Notas y Avisos y dos filas de ejemplo con fechas futuras (la segunda sin lugar ni notas, que son opcionales), y una hoja *Instrucciones*. Sale en el idioma de la app. El importador entiende las cabeceras en cualquiera de los 8 idiomas y otros nombres habituales (*Carrera*, *Date*, *Circuito*…), en cualquier orden y con filas previas.
+- Fecha como fecha de Excel o texto (`dd/mm/aaaa`, `aaaa-mm-dd`); hora como hora de Excel o `hh:mm` (si falta la columna Hora vale la hora de la propia fecha). **Avisos** opcionales, separados por comas: `hora`, `30min`, `1h`, `1d`, `1sem`; vacío = 1 día y 1 hora antes.
+- Dependencia nueva: SheetJS `xlsx` 0.20.3 (de su web oficial; la de npm es la 0.18.5, anterior a sus correcciones de seguridad).
+
+## [1.7.0] — 2026-10-11
+
+### Añadido
+- **Ajustes** en el menú principal (`AjustesScreen`), una franja bajo las cuatro áreas, con:
+  - **Idioma de la app** (el selector de siempre; el enlace del idioma sale de la pantalla inicial).
+  - **Opciones de Lap:** interruptor de la **estrategia de neumáticos** (apagada no se calcula ni se ofrece su acceso en Lap; `AjustesProvider`, `useAjustes`) y los **avisos de voz** con sus intervalos periódicos (media de carril y de carrera, gaps, media para subir), con el mismo panel que Lap (`VoiceControls`, ahora un componente compartido).
+  - Lo que se fija aquí es **con lo que arranca cada sesión**: se guarda en el móvil y Lap lo carga solo. Desde Lap el piloto puede seguir cambiando los avisos sobre la marcha, como hasta ahora.
+
+## [1.6.3] — 2026-10-11
+
+### Añadido
+- **Botón «Actualizar» en «Elige actividad»** (`RacePickerScreen`), y también al tirar de la lista hacia abajo: vuelve a pedir al servidor las carreras y el entrenamiento activos sin salir y volver a entrar. Está también en las pantallas de «Sin actividad» y de error. Desde ahí, si al actualizar aparece una sola actividad, se entra directo en ella, como al abrir la pantalla; desde una lista con actividades solo se refresca, para no cambiarte de pantalla.
+
+## [1.6.2] — 2026-10-11
+
+### Mejorado
+- **La app adopta los colores de PitWall:** rojo del logo, blanco y fondo oscuro. El **rojo** sustituye al amarillo como color de acento (selecciones, números clave, enlaces, bordes y avisos), los **títulos de pantalla pasan a blanco** (como el «PIT» del logo) para que no se confundan con los mensajes de error, y los **rellenos** (botones principales, tarjetas, insignias) usan un rojo algo más profundo, `colors.accentFill`, con texto blanco encima: llega a 4,6:1 de contraste, frente a 3,7:1 del rojo de marca a secas. Todo vive en `src/ui/theme.ts` (`colors.accent`, `colors.accentFill`, `colors.onAccent`) y las pantallas lo toman de ahí.
+- El amarillo queda solo como cuarto color de las series de las gráficas de entrenamiento. El azul de TicTac y los colores de ritmo de vuelta (morado, verde, ámbar) no cambian.
+
+## [1.6.1] — 2026-10-11
+
+### Corregido
+- **En el entreno de competición la app sigue a tu equipo, no al carril.** Los equipos rotan de carril en cada heat y la app se quedaba fija en el carril elegido, así que tras el primer heat se oían los tiempos del equipo que pasaba a ocuparlo. Ahora se elige al equipo o piloto (también si descansa en ese heat) y la app lo sigue al carril nuevo, avisa de "Tu turno, carril N" al empezar cada heat y muestra "Descansas" cuando no corre. El entreno libre sigue fijado al carril. Hace falta **PitWall Manager 1.56.1** o posterior.
+
+## [1.6.0] — 2026-10-11
+
+### Añadido
+- **Entrenos de competición en el móvil.** Nuevo botón del menú, **Entrenos de competición** (`EntrenosCompeticionScreen`): lista los entrenos de competición que el servidor PitWall ha guardado y los que ya están descargados. Al tocar uno del servidor se **descarga al móvil** y se abre; también hay **Descargar todos**. Una vez descargados se consultan **sin conexión**: clasificación de la sesión (más vueltas; a igualdad, mejor vuelta) y, heat a heat, vueltas, mejor y media de cada carril (`EntrenoCompeticionScreen`). Se pueden quitar del móvil sin tocar el servidor. Hace falta **PitWall Manager 1.56.0** o posterior.
+
+### Mejorado
+- El menú principal pasa a tener cuatro botones cuadrados además de Lap.
+
+## [1.5.0] — 2026-10-11
+
+### Añadido
+- **Menú principal** al abrir la app, con el logo de PitWall arriba y cuatro áreas en cuadrícula: **Lap** (ancho completo, destacada) y tres botones cuadrados, **Calendario**, **Entrenamientos** y **Resultados** (`HomeScreen`). *Lap* es la conexión de siempre con PitWall o TicTac para escuchar los tiempos; ya no cuelgan de ella los enlaces a carreras pasadas y entrenamientos, que ahora son entradas del menú.
+- **Calendario de carreras** (`CalendarioScreen`, `EventoScreen`): se dan de alta carreras con nombre, fecha, hora, lugar y notas, y la app **avisa con notificaciones locales** a la hora de inicio, 30 minutos, 1 hora, 1 día o 1 semana antes, a elegir. Al editar o borrar una carrera se reprograman o cancelan sus avisos. Pide permiso de notificaciones al guardar la primera.
+- **Resultados con archivos propios:** además de las carreras de PitWall, se pueden subir a mano un **Excel, un PDF o una foto** (de la galería o hecha con la cámara). Se copian a la app, se pueden renombrar, abrir/compartir y borrar (`ArchivoResultadoScreen`). Las fotos se ven en pantalla.
+
+### Corregido
+- **El entreno de competición ya aparece al conectarse a PitWall.** Antes la lista solo ofrecía el entreno libre y, con un entreno de competición en marcha, decía que no había actividad. Hace falta **PitWall Manager 1.55.2** o posterior. En la lista de carriles sale el nombre de quien rueda en cada uno.
+
+### Mejorado
+- **Lap** muestra solo el botón de volver y dos tarjetas grandes, **PitWall** (rojo y blanco de la marca) y **TicTac** (sobria, en gris oscuro para que destaque la propia app), sin logo ni textos de más.
+- La antigua pantalla *Histórico* pasa a llamarse **Resultados** y lista juntas las carreras de PitWall y los archivos subidos.
+
 ## [1.4.0] — 2026-10-06
 
 ### Añadido

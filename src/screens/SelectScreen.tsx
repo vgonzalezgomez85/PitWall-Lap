@@ -10,6 +10,7 @@ import { useDataSource } from '../data/sourceContext';
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
+import { colors } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Select'>;
 
@@ -73,7 +74,7 @@ export default function SelectScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 12 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 12 },
   subtitle: { color: '#9aa3ad', fontSize: 14, marginTop: 6, marginBottom: 8 },
   row: {
     backgroundColor: '#141923', paddingVertical: 16, paddingHorizontal: 16,

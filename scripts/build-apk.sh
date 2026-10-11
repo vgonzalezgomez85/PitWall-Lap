@@ -7,6 +7,11 @@
 # El prebuild es imprescindible al subir versión: el versionName del APK sale
 # de android/app/build.gradle, que lo genera prebuild desde app.json.
 #
+# Además deja el APK y su `version.json` en la carpeta de la web
+# (`software/pitwall-lap/` de «PitWall Landing»): la app en Android lo consulta
+# para avisar de que hay una versión nueva. Falta subirlo con su `deploy.sh`.
+# Otra ubicación: LANDING_DIR=/ruta  ·  no publicar: LANDING_DIR=-
+#
 # Uso: npm run apk [directorio-destino]   (por defecto: ~/Desktop)
 
 set -euo pipefail
@@ -55,3 +60,19 @@ echo
 echo "==> APK: $OUT"
 ls -lh "$OUT"
 echo "sha256: $(shasum -a 256 "$OUT" | cut -d' ' -f1)"
+
+# ── Publicar en la carpeta de la web (sin desplegar) ──────────────────────────
+LANDING="${LANDING_DIR:-$HOME/PitWall Landing}"
+if [ "$LANDING" != "-" ] && [ -d "$LANDING" ]; then
+  WEB="$LANDING/software/pitwall-lap"
+  mkdir -p "$WEB"
+  cp "$OUT" "$WEB/PitWallLap.apk"
+  node -e "
+    const fs = require('fs');
+    const [dir, version, sha] = process.argv.slice(1);
+    const bytes = fs.statSync(dir + '/PitWallLap.apk').size;
+    fs.writeFileSync(dir + '/version.json', JSON.stringify({ version, apk: 'PitWallLap.apk', bytes, sha256: sha, notas: process.env.NOTAS || '' }, null, 2) + '\\n');
+  " "$WEB" "$VERSION" "$(shasum -a 256 "$OUT" | cut -d' ' -f1)"
+  echo
+  echo "==> Web: $WEB (PitWallLap.apk + version.json). Falta desplegar: $LANDING/deploy.sh"
+fi

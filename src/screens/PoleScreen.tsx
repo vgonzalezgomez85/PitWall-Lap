@@ -23,6 +23,7 @@ import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { PoleEntry, PoleSnapshot } from '../data/types';
 import type { RootStackParamList } from '../navigation';
+import { colors } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Pole'>;
 
@@ -108,7 +109,7 @@ export default function PoleScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#f6c90e" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loading}>{t.pole.cargando}</Text>
         </View>
       </View>
@@ -274,7 +275,7 @@ function PickerRow({ entry, onPick }: { entry: PoleEntry; onPick: () => void }) 
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 4 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 4 },
   subtitle: { color: '#9aa3ad', fontSize: 14, marginTop: 6 },
   loading: { color: '#cfd5dc', fontSize: 14, marginTop: 12 },
   errTitle: { color: '#ff6b6b', fontSize: 20, fontWeight: '600' },
@@ -285,7 +286,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between',
     marginTop: 4,
   },
-  lane: { color: '#f6c90e', fontSize: 28, fontWeight: '700' },
+  lane: { color: colors.accent, fontSize: 28, fontWeight: '700' },
   remaining: { color: '#cfd5dc', fontSize: 20, fontWeight: '600' },
   block: { marginTop: 16, padding: 16, backgroundColor: '#141923', borderRadius: 8 },
   label: { color: '#9aa3ad', fontSize: 12, textTransform: 'uppercase' },
@@ -305,8 +306,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#141923', paddingVertical: 12, paddingHorizontal: 14,
     marginVertical: 3, borderRadius: 8,
   },
-  standingRowMe: { borderWidth: 1, borderColor: '#f6c90e' },
-  standingPos: { color: '#f6c90e', fontSize: 18, fontWeight: '800', width: 28 },
+  standingRowMe: { borderWidth: 1, borderColor: colors.accent },
+  standingPos: { color: colors.accent, fontSize: 18, fontWeight: '800', width: 28 },
   standingName: { color: '#fff', fontSize: 15, fontWeight: '600', flex: 1 },
   standingTime: { color: '#cfd5dc', fontSize: 16, fontWeight: '600' },
 
@@ -316,8 +317,8 @@ const styles = StyleSheet.create({
     marginVertical: 5, borderRadius: 8,
   },
   pickerPos: {
-    color: '#f6c90e', fontSize: 22, fontWeight: '800',
-    backgroundColor: '#1f1804', paddingHorizontal: 10, paddingVertical: 4,
+    color: colors.accent, fontSize: 22, fontWeight: '800',
+    backgroundColor: colors.accentSoft, paddingHorizontal: 10, paddingVertical: 4,
     borderRadius: 6,
   },
   pickerName: { color: '#fff', fontSize: 17, fontWeight: '600' },

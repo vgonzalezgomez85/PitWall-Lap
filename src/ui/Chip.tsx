@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
     minHeight: 36, paddingHorizontal: 14, justifyContent: 'center',
     borderRadius: radius.pill, borderWidth: 1,
   },
-  on: { backgroundColor: colors.accent, borderColor: colors.accent },
+  on: { backgroundColor: colors.accentFill, borderColor: colors.accent },
   off: { backgroundColor: 'transparent', borderColor: colors.border },
   pressed: { opacity: 0.65 },
   text: { fontSize: 13, fontWeight: '600' },

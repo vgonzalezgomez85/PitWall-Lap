@@ -13,19 +13,32 @@ import { useDataSource } from '../data/sourceContext';
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
+import { colors } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TrainingLanePicker'>;
 
 interface TrainingLane {
   lane: number;
+  /** Solo en un entreno de competición: quién rueda en ese carril. */
+  participantName?: string | null;
   color: string;
   count: number;
   avgMs: number | null;
   bestMs: number | null;
 }
 
+interface Participante {
+  name: string;
+  color: string | null;
+  /** Carril que ocupa en el heat actual; null si descansa. */
+  lane: number | null;
+}
+
 interface TrainingStatus {
   active: boolean;
+  /** Entreno de competición: se elige al participante, no el carril. */
+  competition?: boolean;
+  participants?: Participante[];
   durationMs: number | null;
   lanes: TrainingLane[];
 }
@@ -55,13 +68,13 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
     return () => { cancelled = true; };
   }, [host, port]);
 
-  async function pickLane(lane: number) {
+  async function pickLane(id: string) {
     setConnecting(true);
     try {
       const src = new PitWallSource({ host, port }, { mode: 'training' });
       const raceInfo = await src.connect();
       setSource(src, raceInfo);
-      src.selectParticipant(String(lane));
+      src.selectParticipant(id);
       navigation.replace('MyTurn');
     } catch (err) {
       setConnecting(false);
@@ -86,7 +99,7 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#f6c90e" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loading}>{connecting ? t.comun.conectando : t.entrenoCarril.cargando}</Text>
         </View>
       </View>
@@ -105,27 +118,52 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
     );
   }
 
+  // Entreno de competición: se elige a quién seguir; los equipos rotan de carril
+  // en cada heat y la app los sigue por nombre.
+  const porParticipante = !!status.competition && (status.participants?.length ?? 0) > 0;
+
   return (
     <View style={styles.root}>
       <BackButton />
       <Text style={styles.title}>{t.comun.entrenamiento}</Text>
-      <Text style={styles.subtitle}>{t.entrenoCarril.eligeCarril}</Text>
-      <FlatList
-        data={status.lanes}
-        keyExtractor={l => String(l.lane)}
-        contentContainerStyle={{ paddingVertical: 12 }}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.row, { borderLeftColor: item.color }]}
-            onPress={() => pickLane(item.lane)}
-          >
-            <Text style={styles.rowName}>{t.comun.carril(item.lane)}</Text>
-            <Text style={styles.rowMeta}>
-              {[t.comun.vueltas(item.count), t.comun.mejor(fmt(item.bestMs)), t.comun.media(fmt(item.avgMs))].join(' · ')}
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
+      <Text style={styles.subtitle}>
+        {porParticipante ? t.entrenoCarril.eligeParticipante : t.entrenoCarril.eligeCarril}
+      </Text>
+      {porParticipante ? (
+        <FlatList
+          data={status.participants}
+          keyExtractor={p => p.name}
+          contentContainerStyle={{ paddingVertical: 12 }}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[styles.row, { borderLeftColor: item.color ?? '#8b949e' }]}
+              onPress={() => pickLane(item.name)}
+            >
+              <Text style={styles.rowName}>{item.name}</Text>
+              <Text style={styles.rowMeta}>
+                {item.lane != null ? t.comun.carril(item.lane) : t.entrenoCarril.descansa}
+              </Text>
+            </TouchableOpacity>
+          )}
+        />
+      ) : (
+        <FlatList
+          data={status.lanes}
+          keyExtractor={l => String(l.lane)}
+          contentContainerStyle={{ paddingVertical: 12 }}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[styles.row, { borderLeftColor: item.color }]}
+              onPress={() => pickLane(String(item.lane))}
+            >
+              <Text style={styles.rowName}>{t.comun.carril(item.lane)}</Text>
+              <Text style={styles.rowMeta}>
+                {[t.comun.vueltas(item.count), t.comun.mejor(fmt(item.bestMs)), t.comun.media(fmt(item.avgMs))].join(' · ')}
+              </Text>
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </View>
   );
 }
@@ -133,7 +171,7 @@ export default function TrainingLanePickerScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 4 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 4 },
   subtitle: { color: '#9aa3ad', fontSize: 14, marginTop: 6 },
   loading: { color: '#cfd5dc', fontSize: 14, marginTop: 12 },
   errorTitle: { color: '#ff6b6b', fontSize: 20, fontWeight: '600' },

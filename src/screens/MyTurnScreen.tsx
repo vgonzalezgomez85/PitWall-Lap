@@ -34,6 +34,7 @@ import Chip from '../ui/Chip';
 import NavRow from '../ui/NavRow';
 import Section from '../ui/Section';
 import Stat from '../ui/Stat';
+import VoiceControls from '../ui/VoiceControls';
 import { lapDeltaLabel, lapTone, type LapTone } from '../ui/lapTone';
 import { colors, radius, spacing, type } from '../ui/theme';
 import type { RootStackParamList } from '../navigation';
@@ -343,7 +344,7 @@ export default function MyTurnScreen(_props: Props) {
             </Card>
           )}
           <View style={styles.card}>
-            <NavRow title={t.inicio.misEntrenamientos} onPress={() => navigation.push('Training')} />
+            <NavRow title={t.entrenos.titulo} onPress={() => navigation.push('Training')} />
           </View>
         </Section>
       )}
@@ -518,13 +519,6 @@ function SetupField({
   );
 }
 
-// Cicla por 0 (off) → 1 → 2 → 3 → 5 → 0 cada vez que se pulsa el chip.
-const MINUTE_CYCLE = [0, 1, 2, 3, 5];
-function cycleMinutes(current: number): number {
-  const i = MINUTE_CYCLE.indexOf(current);
-  return MINUTE_CYCLE[(i + 1) % MINUTE_CYCLE.length] ?? 0;
-}
-
 // Resumen de la sección plegada: "Voz ON · 5 avisos".
 function voiceSummary(s: VoiceSettings, full: boolean, t: Textos): string {
   if (!s.enabled) return t.turno.vozOff;
@@ -569,65 +563,6 @@ function MangaDurationControl() {
   );
 }
 
-// Avisos de voz. Reutilizado en "mi turno" y en la vista de espera. El
-// interruptor general vive en la cabecera.
-// `full`: PitWall o TicTac nuevo (todos los avisos); TicTac antiguo, solo vueltas.
-function VoiceControls({ settings, toggle, update, full }: {
-  settings: VoiceSettings;
-  toggle: (k: keyof VoiceSettings) => void;
-  update: (p: Partial<VoiceSettings>) => void;
-  full: boolean;
-}) {
-  const { t } = useIdioma();
-  const c = t.turno;
-  return (
-    <Card style={[styles.settingsCard, !settings.enabled && styles.dimmed]}>
-      <Text style={type.label}>{c.avisosVoz}</Text>
-      <View style={styles.togglesRow}>
-        <Chip label={c.chipVueltas} active={settings.sayLaps} onPress={() => toggle('sayLaps')} />
-        {full && (
-          <>
-            <Chip label={c.chipPosicion}   active={settings.sayPositionChange} onPress={() => toggle('sayPositionChange')} />
-            <Chip label={c.chipMitadManga} active={settings.sayHalfManga}      onPress={() => toggle('sayHalfManga')} />
-            <Chip label={c.chipUltimoMin}  active={settings.sayLastMinute}     onPress={() => toggle('sayLastMinute')} />
-            <Chip label={c.chip30s}        active={settings.sayLast30s}        onPress={() => toggle('sayLast30s')} />
-          </>
-        )}
-      </View>
-      {full && (
-        <>
-          <Text style={[type.label, styles.subLabel]}>{c.periodicos}</Text>
-          <View style={styles.togglesRow}>
-            <Chip
-              label={settings.sayAveragesEveryMin > 0 ? c.cadaMin(c.chipMediaCarril, settings.sayAveragesEveryMin) : c.chipMediaCarril}
-              active={settings.sayAveragesEveryMin > 0}
-              onPress={() => update({ sayAveragesEveryMin: cycleMinutes(settings.sayAveragesEveryMin) })}
-            />
-            <Chip
-              label={settings.sayRaceAvgEveryMin > 0 ? c.cadaMin(c.chipMediaCarrera, settings.sayRaceAvgEveryMin) : c.chipMediaCarrera}
-              active={settings.sayRaceAvgEveryMin > 0}
-              onPress={() => update({ sayRaceAvgEveryMin: cycleMinutes(settings.sayRaceAvgEveryMin) })}
-            />
-            <Chip
-              label={settings.sayGapsEveryMin > 0 ? c.cadaMin(c.chipGaps, settings.sayGapsEveryMin) : c.chipGaps}
-              active={settings.sayGapsEveryMin > 0}
-              onPress={() => update({ sayGapsEveryMin: cycleMinutes(settings.sayGapsEveryMin) })}
-            />
-            <Chip
-              label={settings.sayCatchUpEveryMin > 0 ? c.cadaMin(c.chipParaSubir, settings.sayCatchUpEveryMin) : c.chipParaSubir}
-              active={settings.sayCatchUpEveryMin > 0}
-              onPress={() => update({ sayCatchUpEveryMin: cycleMinutes(settings.sayCatchUpEveryMin) })}
-            />
-          </View>
-        </>
-      )}
-      {!settings.enabled && (
-        <Text style={[type.caption, styles.subLabel]}>{c.vozApagada}</Text>
-      )}
-    </Card>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.xl, paddingBottom: 40 },
@@ -650,7 +585,7 @@ const styles = StyleSheet.create({
   hero: { marginTop: spacing.lg, paddingVertical: spacing.xl },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   lanePill: {
-    backgroundColor: colors.accent, borderRadius: radius.sm,
+    backgroundColor: colors.accentFill, borderRadius: radius.sm,
     paddingHorizontal: 12, paddingVertical: 6,
   },
   lanePillText: { color: colors.onAccent, fontSize: 18, fontWeight: '800' },
@@ -686,9 +621,6 @@ const styles = StyleSheet.create({
 
   // Ajustes
   settingsCard: { marginBottom: spacing.md },
-  dimmed: { opacity: 0.5 },
-  subLabel: { marginTop: spacing.lg },
-  togglesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   stepperRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: spacing.lg, marginVertical: spacing.md,
@@ -712,7 +644,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', padding: 24,
   },
   modalCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.xl },
-  modalTitle: { color: colors.accent, fontSize: 20, fontWeight: '800' },
+  modalTitle: { color: colors.text, fontSize: 20, fontWeight: '800' },
   modalSub: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
   input: {
     marginTop: 4, backgroundColor: colors.bg, borderRadius: radius.sm,

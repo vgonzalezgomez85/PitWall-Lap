@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     minHeight: 48, paddingHorizontal: 16, borderRadius: radius.md,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  primary: { backgroundColor: colors.accent },
+  primary: { backgroundColor: colors.accentFill },
   outline: { borderWidth: 1, borderColor: colors.accent },
   ghost: { borderWidth: 1, borderColor: colors.border },
   danger: {},

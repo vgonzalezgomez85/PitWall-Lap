@@ -1,5 +1,5 @@
-// Pantalla inicial: el usuario elige primero qué fuente quiere usar
-// (PitWall o TicTac/InfoLap). Tras elegir:
+// Lap: el usuario elige qué fuente quiere usar (PitWall o TicTac/InfoLap),
+// con dos tarjetas grandes y el botón de volver al menú. Tras elegir:
 //   1. Auto-discovery para esa fuente (mDNS para PitWall, UDP broadcast
 //      para InfoLap). ~6 s.
 //   2. Si no encuentra → pantalla con input de IP + botón "Conectar".
@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput,
+  ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,11 +18,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getCurrentVersion } from '../data/appVersion';
 import { discover, type SourceKind } from '../data/discovery';
 import { useDataSource } from '../data/sourceContext';
 import { useIdioma } from '../i18n/IdiomaContext';
-import { nombreIdioma } from '../i18n/idiomas';
+import BackButton from '../ui/BackButton';
+import { colors } from '../ui/theme';
 import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Discovery'>;
@@ -35,10 +35,44 @@ type Mode =
   | { phase: 'manual';    kind: SourceKind; error?: string }
   | { phase: 'connecting'; kind: SourceKind; host: string };
 
+/** Tarjeta grande de una fuente de tiempos (PitWall o TicTac). */
+function Fuente({ titulo, subtitulo, marca, fondo, tinta, borde, chip, onPress }: {
+  titulo: string;
+  subtitulo: string;
+  marca: string;
+  fondo: string;
+  tinta: string;
+  /** Borde de la tarjeta; sin él, la tarjeta no lleva. */
+  borde?: string;
+  /** Fondo del círculo de la flecha; por defecto, el color del texto. */
+  chip?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.fuente, { backgroundColor: fondo },
+        borde ? { borderWidth: 1, borderColor: borde } : null, pressed && styles.fuentePulsada,
+      ]}
+    >
+      {/* Marca de agua: da cuerpo a la tarjeta sin competir con el texto. */}
+      <Text style={[styles.marca, { color: tinta }]}>{marca}</Text>
+      <View style={styles.fuenteTextos}>
+        <Text style={[styles.fuenteTitulo, { color: tinta }]}>{titulo}</Text>
+        <Text style={[styles.fuenteSub, { color: tinta }]}>{subtitulo}</Text>
+      </View>
+      <View style={[styles.flecha, { backgroundColor: chip ?? tinta }]}>
+        <Text style={[styles.flechaTexto, { color: chip ? tinta : fondo }]}>→</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 export default function DiscoveryScreen({ navigation }: Props) {
   const { setSource, clearSource } = useDataSource();
   const insets = useSafeAreaInsets();
-  const { t, idioma } = useIdioma();
+  const { t } = useIdioma();
   const tRef = useRef(t);
   tRef.current = t;
   const [mode, setMode] = useState<Mode>({ phase: 'choose' });
@@ -154,59 +188,32 @@ export default function DiscoveryScreen({ navigation }: Props) {
   // ── Render por phase ────────────────────────────────────────────────────
 
   if (mode.phase === 'choose') {
-    // ScrollView: con los tres enlaces del pie el contenido puede no caber en
-    // pantallas pequeñas (iPhone SE); centrado cuando sobra sitio.
+    // Solo volver y las dos fuentes: cada una ocupa media pantalla, así el
+    // toque en pista es grande y no hay nada más que mirar.
     return (
-      <ScrollView
-        style={styles.chooseRoot}
-        contentContainerStyle={[styles.chooseContent, { paddingBottom: insets.bottom + 24 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <Image
-          source={require('../../assets/icon.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.subtitle}>{t.inicio.elige}</Text>
-        <TouchableOpacity
-          style={[styles.bigBtn, styles.btnPitWall]}
-          onPress={() => setMode({ phase: 'searching', kind: 'pitwall' })}
-        >
-          <Text style={[styles.bigBtnTitle, { color: '#0a0d13' }]}>PitWall</Text>
-          <Text style={[styles.bigBtnSub, { color: '#0a0d13' }]}>{t.inicio.pitwallSub}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.bigBtn, styles.btnInfolap]}
-          onPress={() => setMode({ phase: 'searching', kind: 'infolap' })}
-        >
-          <Text style={[styles.bigBtnTitle, { color: '#fff' }]}>TicTac</Text>
-          <Text style={[styles.bigBtnSub, { color: '#fff' }]}>{t.inicio.tictacSub}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.historyLink}
-          onPress={() => navigation.push('History')}
-        >
-          <Text style={styles.historyLinkText}>{t.inicio.carrerasPasadas}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.historyLink}
-          onPress={() => navigation.push('Training')}
-        >
-          <Text style={styles.historyLinkText}>{t.inicio.misEntrenamientos}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.idiomaLink}
-          onPress={() => navigation.push('Idioma')}
-        >
-          <Text style={styles.idiomaLinkText}>🌐 {nombreIdioma(idioma)}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.versionLink}
-          onPress={() => navigation.push('Changelog')}
-        >
-          <Text style={styles.versionLinkText}>{t.inicio.novedades(getCurrentVersion())}</Text>
-        </TouchableOpacity>
-      </ScrollView>
+      <View style={[styles.chooseRoot, { paddingBottom: insets.bottom + 20 }]}>
+        <BackButton />
+        <View style={styles.fuentes}>
+          <Fuente
+            titulo="PitWall"
+            subtitulo={t.inicio.pitwallSub}
+            marca="PW"
+            fondo={colors.accentFill}
+            tinta="#ffffff"
+            onPress={() => setMode({ phase: 'searching', kind: 'pitwall' })}
+          />
+          <Fuente
+            titulo="TicTac"
+            subtitulo={t.inicio.tictacSub}
+            marca="TT"
+            fondo={colors.surface}
+            tinta={colors.textSoft}
+            borde={colors.border}
+            chip={colors.surfaceRaised}
+            onPress={() => setMode({ phase: 'searching', kind: 'infolap' })}
+          />
+        </View>
+      </View>
     );
   }
 
@@ -215,7 +222,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
     return (
       <View style={styles.root}>
         <Text style={styles.title}>{label}</Text>
-        <ActivityIndicator size="large" color="#f6c90e" style={{ marginTop: 32 }} />
+        <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 32 }} />
         <Text style={styles.phase}>{t.inicio.buscando(label)}</Text>
         {/* Salida directa a IP manual, sin esperar al timeout de la búsqueda. */}
         <TouchableOpacity
@@ -236,7 +243,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
     return (
       <View style={styles.root}>
         <Text style={styles.title}>{label}</Text>
-        <ActivityIndicator size="large" color="#f6c90e" style={{ marginTop: 32 }} />
+        <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 32 }} />
         <Text style={styles.phase}>{t.inicio.conectandoA(mode.host)}</Text>
       </View>
     );
@@ -299,22 +306,8 @@ const styles = StyleSheet.create({
     flex: 1, alignItems: 'center', justifyContent: 'center',
     padding: 24, backgroundColor: '#0a0d13',
   },
-  title: { color: '#f6c90e', fontSize: 36, fontWeight: '700' },
-  logo: { width: 120, height: 120, marginBottom: 16 },
-  subtitle: { color: '#9aa3ad', fontSize: 14, marginTop: 8, marginBottom: 32 },
+  title: { color: colors.text, fontSize: 36, fontWeight: '700' },
   phase: { color: '#cfd5dc', fontSize: 16, marginTop: 16, textAlign: 'center' },
-
-  bigBtn: {
-    width: '100%', paddingVertical: 28, paddingHorizontal: 20,
-    borderRadius: 12, marginTop: 16, alignItems: 'center',
-  },
-  btnPitWall: { backgroundColor: '#f6c90e' },
-  btnInfolap:  { backgroundColor: '#2c5cdd' },
-  bigBtnTitle: { fontSize: 26, fontWeight: '800' },
-  bigBtnSub:   { fontSize: 13, marginTop: 6, opacity: 0.85 },
-  // bigBtn text colors set inline via parent style — but we override
-  // separately. To keep TS happy and styles flat:
-  // (using inline color via wrapper Text styles below)
 
   errorTitle: { color: '#ff6b6b', fontSize: 20, fontWeight: '600', marginTop: 32 },
   errorBody: {
@@ -329,8 +322,8 @@ const styles = StyleSheet.create({
     borderColor: '#3a4350', borderWidth: 1,
   },
   btn: { marginTop: 12, paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
-  btnPrimary: { backgroundColor: '#f6c90e' },
-  btnPrimaryText: { color: '#0a0d13', fontWeight: '700', fontSize: 16 },
+  btnPrimary: { backgroundColor: colors.accentFill },
+  btnPrimaryText: { color: colors.onAccent, fontWeight: '700', fontSize: 16 },
   btnDisabled: { opacity: 0.4 },
   btnGhost: { borderColor: '#3a4350', borderWidth: 1 },
   btnGhostText: { color: '#cfd5dc', fontSize: 14 },
@@ -338,15 +331,23 @@ const styles = StyleSheet.create({
   backBtn: { marginTop: 24, paddingVertical: 8 },
   backText: { color: '#9aa3ad', fontSize: 14, textDecorationLine: 'underline' },
 
-  historyLink: { marginTop: 32, paddingVertical: 8 },
-  historyLinkText: { color: '#9aa3ad', fontSize: 14, textDecorationLine: 'underline' },
-  idiomaLink: { marginTop: 20, paddingVertical: 8 },
-  idiomaLinkText: { color: '#9aa3ad', fontSize: 14 },
-  versionLink: { marginTop: 12, paddingVertical: 8 },
-  versionLinkText: { color: '#5a6573', fontSize: 12 },
-  chooseRoot: { flex: 1, backgroundColor: '#0a0d13' },
-  chooseContent: {
-    flexGrow: 1, alignItems: 'center', justifyContent: 'center',
-    padding: 24, paddingBottom: 24,
+  chooseRoot: { flex: 1, backgroundColor: '#0a0d13', paddingHorizontal: 20 },
+  fuentes: { flex: 1, gap: 16, paddingTop: 8 },
+  fuente: {
+    flex: 1, borderRadius: 28, padding: 24, overflow: 'hidden',
+    justifyContent: 'flex-end', maxHeight: 360,
   },
+  fuentePulsada: { opacity: 0.85, transform: [{ scale: 0.99 }] },
+  marca: {
+    position: 'absolute', top: -18, right: 6, fontSize: 150, fontWeight: '900',
+    opacity: 0.14, letterSpacing: -6,
+  },
+  fuenteTextos: { paddingRight: 64 },
+  fuenteTitulo: { fontSize: 40, fontWeight: '900', letterSpacing: -1 },
+  fuenteSub: { fontSize: 14, marginTop: 6, opacity: 0.8, lineHeight: 20 },
+  flecha: {
+    position: 'absolute', right: 20, bottom: 20, width: 48, height: 48,
+    borderRadius: 24, alignItems: 'center', justifyContent: 'center',
+  },
+  flechaTexto: { fontSize: 24, fontWeight: '700', marginTop: -2 },
 });

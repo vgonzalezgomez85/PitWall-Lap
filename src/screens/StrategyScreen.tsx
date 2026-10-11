@@ -14,6 +14,7 @@ import { MIN_CONFIDENCE_LAPS, type StrategyResult } from '../strategy/computeTir
 import type { Textos } from '../i18n';
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
+import { colors } from '../ui/theme';
 
 export default function StrategyScreen() {
   const {
@@ -293,7 +294,7 @@ function fmtDeg(ms: number | null): string {
 }
 
 function posStyle(action: 'change' | 'hold' | 'neutral') {
-  if (action === 'change') return { borderColor: '#f6c90e', borderWidth: 1 };
+  if (action === 'change') return { borderColor: colors.accent, borderWidth: 1 };
   if (action === 'hold') return { borderColor: '#2c5cdd', borderWidth: 1 };
   return {};
 }
@@ -301,7 +302,7 @@ function posStyle(action: 'change' | 'hold' | 'neutral') {
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 12 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 12 },
   self: { color: '#fff', fontSize: 20, fontWeight: '700', marginTop: 4 },
   muted: { color: '#9aa3ad', fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
@@ -337,15 +338,15 @@ const styles = StyleSheet.create({
   // Confirmación de cambio de rival
   confirmBanner: {
     marginTop: 16, padding: 16, borderRadius: 10,
-    backgroundColor: '#1a2030', borderWidth: 1, borderColor: '#f6c90e',
+    backgroundColor: '#1a2030', borderWidth: 1, borderColor: colors.accent,
   },
   confirmText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   confirmBtns: { flexDirection: 'row', gap: 12, marginTop: 14 },
   confirmBtn: { flex: 1, paddingVertical: 11, borderRadius: 8, alignItems: 'center' },
   confirmNo: { borderWidth: 1, borderColor: '#3a4350' },
   confirmNoText: { color: '#cfd5dc', fontSize: 15, fontWeight: '600' },
-  confirmYes: { backgroundColor: '#f6c90e' },
-  confirmYesText: { color: '#0a0d13', fontSize: 15, fontWeight: '700' },
+  confirmYes: { backgroundColor: colors.accentFill },
+  confirmYesText: { color: colors.onAccent, fontSize: 15, fontWeight: '700' },
 
   // Goma de rivales
   rivalCard: {
@@ -357,7 +358,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8,
     borderWidth: 1, borderColor: '#3a4350',
   },
-  markBtnText: { color: '#f6c90e', fontSize: 13, fontWeight: '700' },
+  markBtnText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
 
   section: {
     color: '#9aa3ad', fontSize: 12, marginTop: 28, marginBottom: 8,
@@ -374,6 +375,6 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 8, backgroundColor: '#0a0d13',
     borderWidth: 1, borderColor: '#3a4350', alignItems: 'center', justifyContent: 'center',
   },
-  stepBtnText: { color: '#f6c90e', fontSize: 22, fontWeight: '800' },
+  stepBtnText: { color: colors.accent, fontSize: 22, fontWeight: '800' },
   stepperValue: { color: '#fff', fontSize: 20, fontWeight: '700', minWidth: 36, textAlign: 'center' },
 });

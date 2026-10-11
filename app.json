@@ -2,7 +2,7 @@
   "expo": {
     "name": "PitWall Lap",
     "slug": "pitwall-lap",
-    "version": "1.4.0",
+    "version": "1.9.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -21,9 +21,10 @@
         ],
         "UIBackgroundModes": [
           "audio"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.anonymous.pitwall-lap"
+      "bundleIdentifier": "es.pitwall.lap"
     },
     "android": {
       "package": "com.anonymous.pitwalllap",
@@ -39,19 +40,35 @@
         "ACCESS_WIFI_STATE",
         "CHANGE_WIFI_MULTICAST_STATE",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false
+        }
+      ],
       "./plugins/withScriptSandboxDisabled.js",
       "./plugins/withAndroidCleartextTraffic.js",
       "./plugins/withSceneLifecycle.js",
       "expo-asset",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "PitWall Lap usa la cámara para que puedas fotografiar los resultados de una carrera.",
+          "microphonePermission": false,
+          "photosPermission": "PitWall Lap accede a tus fotos para que puedas añadir resultados de una carrera."
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "./plugins/withoutPush.js"
     ],
     "extra": {
       "eas": {

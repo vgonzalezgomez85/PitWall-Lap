@@ -16,6 +16,7 @@ import React, {
   type ReactNode,
 } from 'react';
 
+import { useAjustes } from '../data/AjustesContext';
 import { useDataSource, useSourceEvent } from '../data/sourceContext';
 import { computeTireStrategy, type StrategyResult } from './computeTireStrategy';
 import { buildRivalModel, detectTireChange, type RivalModel } from './rivalTireModel';
@@ -106,7 +107,10 @@ export function TireStrategyProvider({ children }: { children: ReactNode }) {
   // (InfolapSource); sin control de neumáticos del servidor → config manual.
   const liveSource = raceInfo?.source === 'pitwall'
     || (raceInfo?.source === 'infolap' && raceInfo.capabilities.gaps);
-  const available = liveSource && raceId != null && !!entity;
+  // Ajustes → Lap → Estrategia de neumáticos: apagada, no se calcula ni se ofrece.
+  const { ajustes, listo: ajustesListos } = useAjustes();
+  const available = ajustes.estrategiaNeumaticos && ajustesListos
+    && liveSource && raceId != null && !!entity;
   const key = available ? stintKey(raceId!, entity!) : null;
 
   const keyRef = useRef<string | null>(key);

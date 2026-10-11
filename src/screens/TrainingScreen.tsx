@@ -12,6 +12,7 @@ import { listStints, stintSetupLabel, type StintMeta } from '../data/trainingSto
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
+import { colors } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Training'>;
 
@@ -142,8 +143,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 4,
   },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700' },
-  compareToggle: { color: '#f6c90e', fontSize: 15, fontWeight: '600' },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700' },
+  compareToggle: { color: colors.accent, fontSize: 15, fontWeight: '600' },
   hint: { color: '#9aa3ad', fontSize: 13, marginTop: 8 },
   empty: {
     color: '#9aa3ad', fontSize: 14, textAlign: 'center',
@@ -154,7 +155,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#141923', paddingVertical: 14, paddingHorizontal: 16,
     marginVertical: 6, borderRadius: 8,
   },
-  rowSelected: { borderWidth: 1, borderColor: '#f6c90e' },
+  rowSelected: { borderWidth: 1, borderColor: colors.accent },
   rowName: { color: '#fff', fontSize: 17, fontWeight: '600' },
   rowMeta: { color: '#9aa3ad', fontSize: 12, marginTop: 4 },
   rowStats: { color: '#cfd5dc', fontSize: 13, marginTop: 4 },
@@ -162,12 +163,12 @@ const styles = StyleSheet.create({
     width: 26, height: 26, borderRadius: 13, borderWidth: 1.5,
     borderColor: '#3a4350', alignItems: 'center', justifyContent: 'center',
   },
-  checkOn: { backgroundColor: '#f6c90e', borderColor: '#f6c90e' },
-  checkMark: { color: '#0a0d13', fontSize: 15, fontWeight: '800' },
+  checkOn: { backgroundColor: colors.accentFill, borderColor: colors.accent },
+  checkMark: { color: colors.onAccent, fontSize: 15, fontWeight: '800' },
   compareBtn: {
-    backgroundColor: '#f6c90e', paddingVertical: 14, borderRadius: 10,
+    backgroundColor: colors.accentFill, paddingVertical: 14, borderRadius: 10,
     alignItems: 'center', marginBottom: 8,
   },
   compareBtnDisabled: { opacity: 0.4 },
-  compareBtnText: { color: '#0a0d13', fontSize: 16, fontWeight: '700' },
+  compareBtnText: { color: colors.onAccent, fontSize: 16, fontWeight: '700' },
 });

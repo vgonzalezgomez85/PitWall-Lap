@@ -24,6 +24,9 @@ UI y mensajes de commit. Escribe el código nuevo en castellano.
   `CHANGELOG.md`.
 - `npm run apk` — APK de release: sync del changelog + `expo prebuild` +
   gradle `assembleRelease` + copia a `~/Desktop/pitwall-lap-<versión>.apk`.
+- `APPLE_TEAM_ID=… npm run ios:testflight` — archive de iOS y subida a
+  TestFlight (`--sin-subida` solo genera el `.ipa`). Guía en
+  `docs/testflight.md`.
 
 ## Versionado (regla dura)
 

@@ -10,6 +10,12 @@ import { TireStrategyProvider } from './src/strategy/useTireStrategy';
 import { useAutoSaveHistory } from './src/data/useAutoSaveHistory';
 import { migrateLegacyStorage } from './src/data/migrateStorage';
 import { prewarmLocalNetworkPermission } from './src/data/discovery';
+import HomeScreen        from './src/screens/HomeScreen';
+import CalendarioScreen from './src/screens/CalendarioScreen';
+import EventoScreen     from './src/screens/EventoScreen';
+import ArchivoResultadoScreen from './src/screens/ArchivoResultadoScreen';
+import EntrenosCompeticionScreen from './src/screens/EntrenosCompeticionScreen';
+import EntrenoCompeticionScreen  from './src/screens/EntrenoCompeticionScreen';
 import DiscoveryScreen   from './src/screens/DiscoveryScreen';
 import RacePickerScreen  from './src/screens/RacePickerScreen';
 import TandaPickerScreen from './src/screens/TandaPickerScreen';
@@ -24,6 +30,8 @@ import HistoryDetailScreen from './src/screens/HistoryDetailScreen';
 import ChangelogScreen from './src/screens/ChangelogScreen';
 import IdiomaScreen from './src/screens/IdiomaScreen';
 import { IdiomaProvider } from './src/i18n/IdiomaContext';
+import { AjustesProvider } from './src/data/AjustesContext';
+import AjustesScreen from './src/screens/AjustesScreen';
 import TrainingScreen     from './src/screens/TrainingScreen';
 import StintDetailScreen  from './src/screens/StintDetailScreen';
 import type { RootStackParamList } from './src/navigation';
@@ -38,12 +46,19 @@ function AppInner() {
     <NavigationContainer>
       <StatusBar style="light" />
       <Stack.Navigator
+        initialRouteName="Home"
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: '#0a0d13' },
           animation: 'slide_from_right',
         }}
       >
+        <Stack.Screen name="Home"          component={HomeScreen} />
+        <Stack.Screen name="Calendario"    component={CalendarioScreen} />
+        <Stack.Screen name="Evento"        component={EventoScreen} />
+        <Stack.Screen name="ArchivoResultado" component={ArchivoResultadoScreen} />
+        <Stack.Screen name="EntrenosCompeticion" component={EntrenosCompeticionScreen} />
+        <Stack.Screen name="EntrenoCompeticion"  component={EntrenoCompeticionScreen} />
         <Stack.Screen name="Discovery"     component={DiscoveryScreen} />
         <Stack.Screen name="RacePicker"    component={RacePickerScreen} />
         <Stack.Screen name="TandaPicker"   component={TandaPickerScreen} />
@@ -57,6 +72,7 @@ function AppInner() {
         <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
         <Stack.Screen name="Changelog"     component={ChangelogScreen} />
         <Stack.Screen name="Idioma"        component={IdiomaScreen} />
+        <Stack.Screen name="Ajustes"       component={AjustesScreen} />
         <Stack.Screen name="Training"      component={TrainingScreen} />
         <Stack.Screen name="StintDetail"   component={StintDetailScreen} />
       </Stack.Navigator>
@@ -98,11 +114,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <IdiomaProvider>
-        <SourceProvider>
-          <TireStrategyProvider>
-            <AppInner />
-          </TireStrategyProvider>
-        </SourceProvider>
+        <AjustesProvider>
+          <SourceProvider>
+            <TireStrategyProvider>
+              <AppInner />
+            </TireStrategyProvider>
+          </SourceProvider>
+        </AjustesProvider>
       </IdiomaProvider>
     </SafeAreaProvider>
   );

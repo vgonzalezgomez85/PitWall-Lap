@@ -17,6 +17,7 @@ import { loadTeamPin, saveTeamPin } from '../data/trackingStore';
 import type { TrackingData, TrackingLane, TrackingTeam } from '../data/types';
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
+import { colors } from '../ui/theme';
 
 const REFRESH_MS = 60_000;
 
@@ -114,7 +115,7 @@ export default function TrackingScreen() {
         <BackButton />
         <Text style={styles.title}>{g.titulo}</Text>
         <View style={styles.center}>
-          {status === 'loading' ? <ActivityIndicator color="#f6c90e" /> : (
+          {status === 'loading' ? <ActivityIndicator color={colors.accent} /> : (
             <Text style={styles.muted}>
               {status === 'error' ? g.errorCarga : g.noDisponible}
             </Text>
@@ -260,18 +261,18 @@ function Row({ cells, head, total }: { cells: string[]; head?: boolean; total?: 
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 12 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 12 },
   note: { color: '#7f8a97', fontSize: 13, marginTop: 6, lineHeight: 18 },
   muted: { color: '#9aa3ad', fontSize: 14, textAlign: 'center', lineHeight: 20 },
   mutedLeft: { color: '#9aa3ad', fontSize: 14, marginTop: 8 },
   dim: { color: '#566170' },
 
   card: { marginTop: 14, padding: 14, backgroundColor: '#141923', borderRadius: 10 },
-  cardMe: { borderWidth: 1, borderColor: '#f6c90e' },
+  cardMe: { borderWidth: 1, borderColor: colors.accent },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   cardName: { color: '#fff', fontSize: 18, fontWeight: '700', flexShrink: 1 },
   meBadge: {
-    color: '#0a0d13', backgroundColor: '#f6c90e', fontSize: 12, fontWeight: '800',
+    color: colors.onAccent, backgroundColor: colors.accentFill, fontSize: 12, fontWeight: '800',
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden',
   },
   dot: { width: 12, height: 12, borderRadius: 6 },
@@ -287,14 +288,14 @@ const styles = StyleSheet.create({
   label: { color: '#9aa3ad', fontSize: 12, textTransform: 'uppercase' },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
   check: { color: '#9aa3ad', fontSize: 20 },
-  checkOn: { color: '#f6c90e' },
+  checkOn: { color: colors.accent },
   checkName: { color: '#fff', fontSize: 16, flexShrink: 1 },
 
   outlineBtn: {
     marginTop: 18, paddingVertical: 14, borderRadius: 10, alignItems: 'center',
-    borderWidth: 1, borderColor: '#f6c90e',
+    borderWidth: 1, borderColor: colors.accent,
   },
-  outlineBtnText: { color: '#f6c90e', fontSize: 15, fontWeight: '700' },
+  outlineBtnText: { color: colors.accent, fontSize: 15, fontWeight: '700' },
   resetBtn: { marginTop: 14, paddingVertical: 12, alignItems: 'center' },
   resetBtnText: { color: '#e07a7a', fontSize: 14, fontWeight: '600' },
 
@@ -302,12 +303,12 @@ const styles = StyleSheet.create({
   btn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   btnGhost: { borderWidth: 1, borderColor: '#3a4350' },
   btnGhostText: { color: '#cfd5dc', fontSize: 15, fontWeight: '600' },
-  btnPrimary: { backgroundColor: '#f6c90e' },
-  btnPrimaryText: { color: '#0a0d13', fontSize: 15, fontWeight: '700' },
+  btnPrimary: { backgroundColor: colors.accentFill },
+  btnPrimaryText: { color: colors.onAccent, fontSize: 15, fontWeight: '700' },
 
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 24 },
   modal: { backgroundColor: '#141923', borderRadius: 12, padding: 20 },
-  modalTitle: { color: '#f6c90e', fontSize: 20, fontWeight: '700' },
+  modalTitle: { color: colors.text, fontSize: 20, fontWeight: '700' },
   modalText: { color: '#cfd5dc', fontSize: 14, marginTop: 8, lineHeight: 20 },
   pinInput: {
     marginTop: 16, paddingVertical: 12, borderRadius: 8, backgroundColor: '#0a0d13',

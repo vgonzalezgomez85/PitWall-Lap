@@ -1,0 +1,58 @@
+import { compararVersiones, hayVersionNueva, leerManifiesto, urlDelApk } from './actualizacion';
+
+describe('compararVersiones', () => {
+  it('compara número a número, no como texto', () => {
+    expect(compararVersiones('1.10.0', '1.9.0')).toBeGreaterThan(0);
+    expect(compararVersiones('1.9.0', '1.10.0')).toBeLessThan(0);
+    expect(compararVersiones('2.0.0', '1.99.99')).toBeGreaterThan(0);
+    expect(compararVersiones('1.8.0', '1.8.0')).toBe(0);
+  });
+
+  it('tolera versiones incompletas o con sufijo', () => {
+    expect(compararVersiones('1.8', '1.8.0')).toBe(0);
+    expect(compararVersiones('1.8.1-beta', '1.8.0')).toBeGreaterThan(0);
+  });
+});
+
+describe('leerManifiesto', () => {
+  it('lee un manifiesto completo', () => {
+    expect(leerManifiesto({ version: '1.9.0', apk: 'PitWallLap.apk', bytes: 76385971, notas: ' Calendario ' }))
+      .toEqual({ version: '1.9.0', apk: 'PitWallLap.apk', bytes: 76385971, notas: 'Calendario' });
+  });
+
+  it('rellena lo que falte con valores razonables', () => {
+    expect(leerManifiesto({ version: '1.9.0' }))
+      .toEqual({ version: '1.9.0', apk: 'PitWallLap.apk', bytes: null, notas: null });
+  });
+
+  it('rechaza lo que no es un manifiesto', () => {
+    expect(leerManifiesto(null)).toBeNull();
+    expect(leerManifiesto({})).toBeNull();
+    expect(leerManifiesto({ version: 'nueva' })).toBeNull();
+    expect(leerManifiesto({ version: 190 })).toBeNull();
+    expect(leerManifiesto('<html>404</html>')).toBeNull();
+  });
+});
+
+describe('hayVersionNueva', () => {
+  const m = (version: string) => leerManifiesto({ version });
+  it('solo si la de la web es posterior a la instalada', () => {
+    expect(hayVersionNueva('1.8.0', m('1.9.0'))).toBe(true);
+    expect(hayVersionNueva('1.9.0', m('1.9.0'))).toBe(false);
+    expect(hayVersionNueva('1.10.0', m('1.9.0'))).toBe(false);
+    expect(hayVersionNueva('1.8.0', null)).toBe(false);
+  });
+});
+
+describe('urlDelApk', () => {
+  const carpeta = 'https://www.pitwall.es/software/pitwall-lap/';
+  it('cuelga la ruta relativa de la carpeta del manifiesto y añade la versión', () => {
+    expect(urlDelApk(carpeta, leerManifiesto({ version: '1.9.0', apk: 'PitWallLap.apk' })!))
+      .toBe('https://www.pitwall.es/software/pitwall-lap/PitWallLap.apk?v=1.9.0');
+  });
+
+  it('respeta una URL absoluta', () => {
+    expect(urlDelApk(carpeta, leerManifiesto({ version: '1.9.0', apk: 'https://otro.es/a.apk' })!))
+      .toBe('https://otro.es/a.apk');
+  });
+});

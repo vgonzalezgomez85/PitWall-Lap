@@ -2,15 +2,16 @@
 // y pendientes del servidor. Si sólo hay una, salta automáticamente al
 // selector de tanda. Si hay varias, deja al usuario elegir.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { RootStackParamList } from '../navigation';
+import { colors } from '../ui/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RacePicker'>;
 
@@ -31,19 +32,31 @@ export default function RacePickerScreen({ route, navigation }: Props) {
   const [races, setRaces] = useState<RaceBrief[] | null>(null);
   const [trainingActive, setTrainingActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refrescando, setRefrescando] = useState(false);
   const { t } = useIdioma();
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
+  // Solo vale la respuesta de la última petición, y ninguna tras salir.
+  const peticion = useRef(0);
+  useEffect(() => () => { peticion.current = -1; }, []);
+
+  /**
+   * Pide las carreras y el entrenamiento activos. `saltar` aplica los atajos de
+   * siempre (una sola actividad → directo a ella); al refrescar desde una lista
+   * que ya tenía actividades no se salta, para no mover al usuario de pantalla.
+   */
+  const cargar = useCallback((saltar: boolean) => {
+    const mia = ++peticion.current;
+    setError(null);
+    return Promise.all([
       fetch(`http://${host}:${port}/api/mobile/races/active`).then(r => r.json()),
       fetch(`http://${host}:${port}/api/mobile/training`).then(r => r.json()),
     ])
       .then(([racesData, trainingData]: [{ races: RaceBrief[] }, { active: boolean }]) => {
-        if (cancelled) return;
+        if (peticion.current !== mia) return;
         const list = racesData.races ?? [];
         setRaces(list);
         setTrainingActive(!!trainingData.active);
+        if (!saltar) return;
 
         // Si no hay carreras y hay entrenamiento → directo al selector
         // de carriles de entrenamiento.
@@ -63,10 +76,32 @@ export default function RacePickerScreen({ route, navigation }: Props) {
         }
       })
       .catch(err => {
-        if (!cancelled) setError(err?.message ?? String(err));
+        if (peticion.current === mia) setError(err?.message ?? String(err));
       });
-    return () => { cancelled = true; };
   }, [host, port, navigation]);
+
+  useEffect(() => { void cargar(true); }, [cargar]);
+
+  // Botón "Actualizar" / tirar de la lista. Desde "sin actividad" o un error sí
+  // se aplican los atajos: no había nada que elegir y ahora puede haberlo.
+  const sinNada = error != null || (races != null && races.length === 0 && !trainingActive);
+  const actualizar = useCallback(async () => {
+    setRefrescando(true);
+    await cargar(sinNada);
+    setRefrescando(false);
+  }, [cargar, sinNada]);
+
+  const botonActualizar = (
+    <TouchableOpacity
+      style={[styles.refresh, refrescando && styles.refreshBusy]}
+      onPress={actualizar}
+      disabled={refrescando}
+    >
+      {refrescando
+        ? <ActivityIndicator size="small" color={colors.accent} />
+        : <Text style={styles.refreshText}>↻ {t.carreras.actualizar}</Text>}
+    </TouchableOpacity>
+  );
 
   if (error) {
     return (
@@ -75,6 +110,7 @@ export default function RacePickerScreen({ route, navigation }: Props) {
         <View style={styles.center}>
           <Text style={styles.errorTitle}>{t.comun.error}</Text>
           <Text style={styles.errorBody}>{error}</Text>
+          <View style={{ marginTop: 16 }}>{botonActualizar}</View>
         </View>
       </View>
     );
@@ -85,7 +121,7 @@ export default function RacePickerScreen({ route, navigation }: Props) {
       <View style={styles.root}>
         <BackButton />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#f6c90e" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loading}>{t.carreras.cargando}</Text>
         </View>
       </View>
@@ -99,6 +135,7 @@ export default function RacePickerScreen({ route, navigation }: Props) {
         <View style={styles.center}>
           <Text style={styles.errorTitle}>{t.carreras.sinActividad}</Text>
           <Text style={styles.errorBody}>{t.carreras.sinActividadTexto}</Text>
+          <View style={{ marginTop: 16 }}>{botonActualizar}</View>
         </View>
       </View>
     );
@@ -107,11 +144,17 @@ export default function RacePickerScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       <BackButton />
-      <Text style={styles.title}>{t.carreras.eligeActividad}</Text>
+      <View style={styles.header}>
+        <Text style={[styles.title, styles.headerTitle]}>{t.carreras.eligeActividad}</Text>
+        {botonActualizar}
+      </View>
       <FlatList
         data={races}
         keyExtractor={r => String(r.id)}
         contentContainerStyle={{ paddingVertical: 12 }}
+        refreshControl={
+          <RefreshControl refreshing={refrescando} onRefresh={actualizar} tintColor={colors.accent} />
+        }
         ListHeaderComponent={trainingActive ? (
           <TouchableOpacity
             style={[styles.row, styles.trainingRow]}
@@ -165,12 +208,12 @@ export default function RacePickerScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 20, backgroundColor: '#0a0d13' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#0a0d13' },
-  title: { color: '#f6c90e', fontSize: 26, fontWeight: '700', marginTop: 12 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '700', marginTop: 12 },
   loading: { color: '#cfd5dc', fontSize: 14, marginTop: 12 },
   errorTitle: { color: '#ff6b6b', fontSize: 20, fontWeight: '600' },
   errorBody: { color: '#9aa3ad', fontSize: 14, textAlign: 'center', marginTop: 12, lineHeight: 20 },
-  btn: { marginTop: 24, paddingHorizontal: 28, paddingVertical: 12, backgroundColor: '#f6c90e', borderRadius: 8 },
-  btnText: { color: '#0a0d13', fontWeight: '700', fontSize: 16 },
+  btn: { marginTop: 24, paddingHorizontal: 28, paddingVertical: 12, backgroundColor: colors.accentFill, borderRadius: 8 },
+  btnText: { color: colors.onAccent, fontWeight: '700', fontSize: 16 },
   row: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#141923', paddingVertical: 16, paddingHorizontal: 16,
@@ -184,8 +227,18 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700' },
   badgeTextActive: { color: '#5fd167' },
   badgeTextPending: { color: '#9aa3ad' },
-  badgePole: { backgroundColor: '#3a2a00' },
-  badgeTextPole: { color: '#f6c90e' },
+  badgePole: { backgroundColor: colors.accentSoft },
+  badgeTextPole: { color: colors.accent },
 
   trainingRow: { borderLeftWidth: 4, borderLeftColor: '#22c55e' },
+
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  headerTitle: { flex: 1 },
+  refresh: {
+    minWidth: 112, minHeight: 40, paddingHorizontal: 14, marginTop: 12,
+    borderRadius: 8, borderWidth: 1, borderColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  refreshBusy: { opacity: 0.6 },
+  refreshText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
 });
