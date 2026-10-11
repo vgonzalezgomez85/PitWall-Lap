@@ -1,5 +1,6 @@
 import {
-  compararVersiones, debeComprobar, hayVersionNueva, INTERVALO_COMPROBACION_MS, leerManifiesto, urlDelApk,
+  compararVersiones, debeComprobar, estaAtascada, hayVersionNueva, INTERVALO_COMPROBACION_MS, leerManifiesto,
+  LIMITE_DESCARGA_MS, LIMITE_SIN_AVANCE_MS, porcentaje, urlDelApk,
 } from './actualizacion';
 
 describe('compararVersiones', () => {
@@ -75,5 +76,23 @@ describe('debeComprobar', () => {
 
   it('si el reloj del móvil retrocedió, comprueba', () => {
     expect(debeComprobar(2_000_000, 1_000_000)).toBe(true);
+  });
+});
+
+describe('descarga: atasco y porcentaje', () => {
+  it('se da por atascada tras 30 s sin avances, no antes', () => {
+    expect(LIMITE_SIN_AVANCE_MS).toBe(30_000);
+    expect(LIMITE_DESCARGA_MS).toBe(600_000);
+    expect(estaAtascada(1_000, 1_000 + 29_999)).toBe(false);
+    expect(estaAtascada(1_000, 1_000 + 30_000)).toBe(true);
+  });
+
+  it('porcentaje entero, tope en 100 y null si no hay tamaño', () => {
+    expect(porcentaje(0, 1000)).toBe(0);
+    expect(porcentaje(425, 1000)).toBe(42);
+    expect(porcentaje(1000, 1000)).toBe(100);
+    expect(porcentaje(1200, 1000)).toBe(100);
+    expect(porcentaje(500, -1)).toBeNull();
+    expect(porcentaje(500, 0)).toBeNull();
   });
 });

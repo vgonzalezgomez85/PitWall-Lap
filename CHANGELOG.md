@@ -18,6 +18,15 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.10.1] — 2026-10-12
+
+### Corregido
+- **Sin red, el aviso de actualización ya no se «da por hecho».** Al volver a la app, la comprobación solo se anota si la web respondió; si no había internet, se reintenta la próxima vez que se vuelve a la app, en vez de esperar 6 horas.
+- **«Buscar actualizaciones» de Ajustes ya no puede quedarse colgado:** hacía una segunda consulta sin límite de tiempo. Ahora es una sola, con el mismo límite de 6 segundos (`comprobarActualizacion` devuelve *nueva*, *al día* o *error*).
+
+### Mejorado
+- **La descarga del APK se puede cancelar y no se atasca.** Muestra el **porcentaje**, tiene un botón **Cancelar** y se corta sola si pasan **30 segundos sin recibir datos** o **10 minutos** en total (`iniciarDescarga`); entonces avisa del error y deja volver a intentarlo.
+
 ## [1.10.0] — 2026-10-12
 
 ### Mejorado

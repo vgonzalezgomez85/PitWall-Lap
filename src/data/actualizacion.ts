@@ -57,3 +57,18 @@ export const INTERVALO_COMPROBACION_MS = 6 * 60 * 60 * 1000;
 export function debeComprobar(ultima: number | null, ahora: number, intervaloMs = INTERVALO_COMPROBACION_MS): boolean {
   return ultima == null || ahora - ultima >= intervaloMs || ahora < ultima;
 }
+
+/** Una descarga sin ningún avance durante tanto tiempo se da por atascada (30 s). */
+export const LIMITE_SIN_AVANCE_MS = 30_000;
+/** Tiempo máximo de toda la descarga (10 min). */
+export const LIMITE_DESCARGA_MS = 10 * 60_000;
+
+export function estaAtascada(ultimoAvanceMs: number, ahoraMs: number, limiteMs = LIMITE_SIN_AVANCE_MS): boolean {
+  return ahoraMs - ultimoAvanceMs >= limiteMs;
+}
+
+/** Porcentaje entero 0–100; null si el servidor no dijo el tamaño total. */
+export function porcentaje(escritos: number, total: number): number | null {
+  if (!(total > 0) || !(escritos >= 0)) return null;
+  return Math.min(100, Math.floor((escritos / total) * 100));
+}

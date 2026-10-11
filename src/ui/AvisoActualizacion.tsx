@@ -13,7 +13,7 @@ import {
 import { debeComprobar } from '../data/actualizacion';
 import { getCurrentVersion } from '../data/appVersion';
 import {
-  buscarActualizacion, descargarEInstalar, type Actualizacion,
+  comprobarActualizacion, iniciarDescarga, type Actualizacion, type Descarga,
 } from '../data/actualizacionAndroid';
 import { useIdioma } from '../i18n/IdiomaContext';
 import { colors, radius, spacing } from './theme';
@@ -25,14 +25,24 @@ export function TarjetaActualizacion({ nueva, onMasTarde }: {
   const { t } = useIdioma();
   const a = t.actualizacion;
   const [descargando, setDescargando] = useState(false);
+  const [pct, setPct] = useState<number | null>(null);
+  const descarga = useRef<Descarga | null>(null);
+
+  // Si se sale de la pantalla a mitad de descarga, se corta.
+  useEffect(() => () => descarga.current?.cancelar(), []);
 
   async function actualizar() {
     setDescargando(true);
+    setPct(null);
+    const d = iniciarDescarga(nueva, setPct);
+    descarga.current = d;
     try {
-      await descargarEInstalar(nueva);
-    } catch {
-      Alert.alert(t.comun.error, a.errorDescarga);
+      await d.promesa;
+    } catch (e) {
+      // Cancelar a propósito no es un error.
+      if ((e as Error)?.message !== 'cancelada') Alert.alert(t.comun.error, a.errorDescarga);
     } finally {
+      descarga.current = null;
       setDescargando(false);
     }
   }
@@ -50,15 +60,19 @@ export function TarjetaActualizacion({ nueva, onMasTarde }: {
           {descargando
             ? <View style={styles.cargando}>
                 <ActivityIndicator color="#fff" />
-                <Text style={styles.actualizarTexto}>{a.descargando}</Text>
+                <Text style={styles.actualizarTexto}>{pct != null ? `${a.descargando} ${pct} %` : a.descargando}</Text>
               </View>
             : <Text style={styles.actualizarTexto}>⬇ {a.actualizar}</Text>}
         </Pressable>
-        {onMasTarde && (
-          <Pressable style={styles.masTarde} onPress={onMasTarde} disabled={descargando}>
+        {descargando ? (
+          <Pressable style={styles.masTarde} onPress={() => descarga.current?.cancelar()}>
+            <Text style={styles.masTardeTexto}>{t.comun.cancelar}</Text>
+          </Pressable>
+        ) : onMasTarde ? (
+          <Pressable style={styles.masTarde} onPress={onMasTarde}>
             <Text style={styles.masTardeTexto}>{a.masTarde}</Text>
           </Pressable>
-        )}
+        ) : null}
       </View>
       <Text style={styles.nota}>{a.permiso}</Text>
     </View>
@@ -72,9 +86,10 @@ export default function AvisoActualizacion() {
   const ultima = useRef<number | null>(null);
 
   const comprobar = useCallback(async () => {
-    ultima.current = Date.now();
-    const a = await buscarActualizacion(getCurrentVersion());
-    if (a) setNueva(a);
+    const r = await comprobarActualizacion(getCurrentVersion());
+    // Si no hubo respuesta (sin red), no se anota: se reintenta en cuanto se pueda.
+    if (r.estado !== 'error') ultima.current = Date.now();
+    if (r.estado === 'nueva') setNueva(r.actualizacion);
   }, []);
 
   useEffect(() => {
@@ -103,15 +118,9 @@ export function BuscarActualizacion() {
   async function buscar() {
     setEstado('buscando');
     setNueva(null);
-    const r = await buscarActualizacion(actual);
-    if (r) { setNueva(r); setEstado('reposo'); return; }
-    // buscarActualizacion no distingue "al día" de "sin red": se comprueba la web a parte.
-    try {
-      const res = await fetch(`https://www.pitwall.es/software/pitwall-lap/version.json?t=${Date.now()}`);
-      setEstado(res.ok ? 'alDia' : 'error');
-    } catch {
-      setEstado('error');
-    }
+    const r = await comprobarActualizacion(actual);
+    if (r.estado === 'nueva') { setNueva(r.actualizacion); setEstado('reposo'); return; }
+    setEstado(r.estado === 'alDia' ? 'alDia' : 'error');
   }
 
   return (
