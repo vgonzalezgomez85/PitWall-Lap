@@ -18,6 +18,13 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.10.0] — 2026-10-12
+
+### Mejorado
+- **El aviso de versión nueva en Android se comprueba más veces.** Además de al abrir la app, ahora también **al volver a ella** si han pasado **más de 6 horas** desde la última consulta (`debeComprobar`, `AvisoActualizacion`): quien deja la app en segundo plano ya no tiene que cerrarla del todo para enterarse.
+- **Ajustes → Aplicación (solo Android): «Buscar actualizaciones».** Muestra la versión instalada y comprueba a mano; si hay una nueva, enseña la misma tarjeta con **Actualizar**; si no, «Estás al día», y si no hay red, lo dice.
+- La tarjeta de actualización se ha separado en `TarjetaActualizacion`, reutilizada por el menú y por Ajustes.
+
 ## [1.9.0] — 2026-10-11
 
 ### Añadido

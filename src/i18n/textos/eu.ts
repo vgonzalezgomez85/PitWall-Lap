@@ -443,6 +443,11 @@ const eu: Textos = {
     masTarde: 'Geroago',
     errorDescarga: 'Ezin izan da eguneraketa deskargatu. Saiatu berriro edo deskargatu pitwall.es-etik.',
     permiso: 'Androidek galdetzen badu, utzi PitWall Lap-i aplikazioak instalatzen eta sakatu berriro Eguneratu.',
+    buscar: 'Bilatu eguneraketak',
+    alDia: 'Egunean zaude.',
+    noSePudo: 'Ezin izan da egiaztatu. Begiratu konexioa.',
+    versionInstalada: (v: string) => `Instalatutako bertsioa: v${v}`,
+    seccion: 'Aplikazioa',
   },
 
   novedades: {

@@ -441,6 +441,11 @@ const it: Textos = {
     masTarde: 'Più tardi',
     errorDescarga: "Impossibile scaricare l'aggiornamento. Riprova o scaricalo da pitwall.es.",
     permiso: 'Se Android lo chiede, consenti a PitWall Lap di installare app e tocca di nuovo Aggiorna.',
+    buscar: 'Cerca aggiornamenti',
+    alDia: 'Sei aggiornato.',
+    noSePudo: 'Impossibile controllare. Verifica la connessione.',
+    versionInstalada: (v: string) => `Versione installata: v${v}`,
+    seccion: 'App',
   },
 
   novedades: {

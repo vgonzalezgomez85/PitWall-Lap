@@ -2,7 +2,7 @@
 // de voz). Lo que se fija aquí es con lo que arranca cada sesión; el piloto
 // puede cambiar los avisos sobre la marcha desde la pantalla de Lap.
 
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useAjustes } from '../data/AjustesContext';
@@ -10,6 +10,7 @@ import { useIdioma } from '../i18n/IdiomaContext';
 import { nombreIdioma } from '../i18n/idiomas';
 import { useVoiceSettings } from '../voice/settings';
 import BackButton from '../ui/BackButton';
+import { BuscarActualizacion } from '../ui/AvisoActualizacion';
 import Card from '../ui/Card';
 import NavRow from '../ui/NavRow';
 import Section from '../ui/Section';
@@ -92,6 +93,12 @@ export default function AjustesScreen({ navigation }: Props) {
         />
         <Text style={type.caption}>{a.vozNota}</Text>
       </Section>
+
+      {Platform.OS === 'android' && (
+        <Section title={t.actualizacion.seccion}>
+          <BuscarActualizacion />
+        </Section>
+      )}
     </ScrollView>
   );
 }

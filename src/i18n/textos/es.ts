@@ -440,6 +440,11 @@ const es = {
     masTarde: 'Más tarde',
     errorDescarga: 'No se pudo descargar la actualización. Inténtalo de nuevo o descárgala desde pitwall.es.',
     permiso: 'Si Android te pregunta, permite a PitWall Lap instalar aplicaciones y vuelve a pulsar Actualizar.',
+    buscar: 'Buscar actualizaciones',
+    alDia: 'Estás al día.',
+    noSePudo: 'No se pudo comprobar. Revisa tu conexión.',
+    versionInstalada: (v: string) => `Versión instalada: v${v}`,
+    seccion: 'Aplicación',
   },
 
   novedades: {

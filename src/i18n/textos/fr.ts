@@ -441,6 +441,11 @@ const fr: Textos = {
     masTarde: 'Plus tard',
     errorDescarga: 'Impossible de télécharger la mise à jour. Réessaie ou télécharge-la depuis pitwall.es.',
     permiso: 'Si Android te le demande, autorise PitWall Lap à installer des applications et appuie de nouveau sur Mettre à jour.',
+    buscar: 'Rechercher des mises à jour',
+    alDia: 'Tu es à jour.',
+    noSePudo: 'Vérification impossible. Vérifie ta connexion.',
+    versionInstalada: (v: string) => `Version installée : v${v}`,
+    seccion: 'Application',
   },
 
   novedades: {

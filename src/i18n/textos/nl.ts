@@ -441,6 +441,11 @@ const nl: Textos = {
     masTarde: 'Later',
     errorDescarga: 'De update kon niet worden gedownload. Probeer het opnieuw of download hem via pitwall.es.',
     permiso: 'Als Android erom vraagt, sta PitWall Lap toe apps te installeren en tik opnieuw op Bijwerken.',
+    buscar: 'Controleren op updates',
+    alDia: 'Je bent bij.',
+    noSePudo: 'Controleren mislukt. Controleer je verbinding.',
+    versionInstalada: (v: string) => `Geïnstalleerde versie: v${v}`,
+    seccion: 'App',
   },
 
   novedades: {

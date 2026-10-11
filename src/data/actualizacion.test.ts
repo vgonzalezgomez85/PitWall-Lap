@@ -1,4 +1,6 @@
-import { compararVersiones, hayVersionNueva, leerManifiesto, urlDelApk } from './actualizacion';
+import {
+  compararVersiones, debeComprobar, hayVersionNueva, INTERVALO_COMPROBACION_MS, leerManifiesto, urlDelApk,
+} from './actualizacion';
 
 describe('compararVersiones', () => {
   it('compara número a número, no como texto', () => {
@@ -54,5 +56,24 @@ describe('urlDelApk', () => {
   it('respeta una URL absoluta', () => {
     expect(urlDelApk(carpeta, leerManifiesto({ version: '1.9.0', apk: 'https://otro.es/a.apk' })!))
       .toBe('https://otro.es/a.apk');
+  });
+});
+
+describe('debeComprobar', () => {
+  const h = 60 * 60 * 1000;
+  it('la primera vez, siempre', () => {
+    expect(debeComprobar(null, 1_000_000)).toBe(true);
+  });
+
+  it('no antes de 6 horas; a partir de ahí, sí', () => {
+    const t0 = 1_000_000_000;
+    expect(INTERVALO_COMPROBACION_MS).toBe(6 * h);
+    expect(debeComprobar(t0, t0 + 5 * h)).toBe(false);
+    expect(debeComprobar(t0, t0 + 6 * h)).toBe(true);
+    expect(debeComprobar(t0, t0 + 30 * h)).toBe(true);
+  });
+
+  it('si el reloj del móvil retrocedió, comprueba', () => {
+    expect(debeComprobar(2_000_000, 1_000_000)).toBe(true);
   });
 });

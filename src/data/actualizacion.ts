@@ -49,3 +49,11 @@ export function urlDelApk(carpeta: string, manifiesto: ManifiestoVersion): strin
   const base = carpeta.replace(/\/+$/, '');
   return `${base}/${manifiesto.apk.replace(/^\/+/, '')}?v=${encodeURIComponent(manifiesto.version)}`;
 }
+
+/** Mínimo entre dos comprobaciones automáticas al volver a la app (6 horas). */
+export const INTERVALO_COMPROBACION_MS = 6 * 60 * 60 * 1000;
+
+/** ¿Toca volver a preguntar a la web? `ultima` = instante de la última comprobación (null = nunca). */
+export function debeComprobar(ultima: number | null, ahora: number, intervaloMs = INTERVALO_COMPROBACION_MS): boolean {
+  return ultima == null || ahora - ultima >= intervaloMs || ahora < ultima;
+}

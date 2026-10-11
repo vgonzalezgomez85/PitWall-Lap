@@ -441,6 +441,11 @@ const en: Textos = {
     masTarde: 'Later',
     errorDescarga: "Couldn't download the update. Try again or download it from pitwall.es.",
     permiso: 'If Android asks, allow PitWall Lap to install apps and tap Update again.',
+    buscar: 'Check for updates',
+    alDia: "You're up to date.",
+    noSePudo: "Couldn't check. Check your connection.",
+    versionInstalada: (v: string) => `Installed version: v${v}`,
+    seccion: 'App',
   },
 
   novedades: {

@@ -441,6 +441,11 @@ const ca: Textos = {
     masTarde: 'Més tard',
     errorDescarga: "No s'ha pogut descarregar l'actualització. Torna-ho a provar o descarrega-la des de pitwall.es.",
     permiso: 'Si Android et ho pregunta, permet a PitWall Lap instal·lar aplicacions i torna a prémer Actualitzar.',
+    buscar: 'Cercar actualitzacions',
+    alDia: 'Estàs al dia.',
+    noSePudo: "No s'ha pogut comprovar. Revisa la connexió.",
+    versionInstalada: (v: string) => `Versió instal·lada: v${v}`,
+    seccion: 'Aplicació',
   },
 
   novedades: {
