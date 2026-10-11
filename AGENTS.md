@@ -45,6 +45,12 @@ La versión que muestra la app (`src/data/appVersion.ts`) se lee del binario ví
 se refleja hasta reconstruir**, no basta con recargar Metro. Si el manifest no
 está disponible, se cae a la última versión del changelog.
 
+En iOS pasa lo mismo con el `app.config` que expo-constants embebe al compilar:
+Xcode **no lo regenera** si ya existe en `ios/build`, y la app puede enseñar una
+versión vieja (se vio «1.8.0» siendo la 1.10.1). `npm run ios:testflight` ya lo
+borra; al compilar a mano para el iPhone, haz antes
+`find ios/build -name app.config -delete`.
+
 Para el APK, usa siempre **`npm run apk`**: incluye el `expo prebuild` sin el
 cual `versionName`/`versionCode` del APK no se actualizan (salen de
 `android/app/build.gradle`, generado desde `app.json`), aunque el resto del

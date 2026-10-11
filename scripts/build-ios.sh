@@ -53,6 +53,12 @@ echo "==> pod install"
 # genera pod install y no xcodebuild.
 rm -rf "$ARCHIVE" "$EXPORT_DIR"
 
+# La versión que enseña la app sale del `app.config` que expo-constants embebe al
+# compilar, y Xcode NO lo regenera si ya existe (la app decía 1.8.0 siendo la
+# 1.10.1). Se borran las copias viejas para que se genere con la versión de ahora.
+find "$ROOT/ios/build" ~/Library/Developer/Xcode/DerivedData/PitWallLap-* \
+  -name app.config -path '*EXConstants.bundle*' -delete 2>/dev/null || true
+
 echo "==> Archive (versión $VERSION, build $BUILD)"
 xcodebuild archive \
   -workspace "$ROOT/ios/PitWallLap.xcworkspace" \
