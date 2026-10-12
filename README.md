@@ -190,4 +190,5 @@ PC de la red — versión antigua (UDP) o la nueva (WSS).
 
 ## Licencia
 
-Propietario. Todos los derechos reservados.
+[GNU GPL v3](LICENSE), como el resto del ecosistema PitWall (PitWall Manager,
+PitWall Lap y PitWall Control).

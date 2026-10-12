@@ -81,7 +81,7 @@ build sí.
 
 ## Notas
 
-- Licencia **propietaria**: no añadir cabeceras GPL/AGPL (a diferencia de
-  PitWall Manager / PitWall Control).
+- Licencia **GPLv3** (`LICENSE`), igual que todo el ecosistema: PitWall
+  Manager, PitWall Lap y PitWall Control.
 - El servidor PitWall Manager vive en `~/PitWall` (proyecto aparte); la app
   solo consume su API móvil (`/api/mobile/...`).

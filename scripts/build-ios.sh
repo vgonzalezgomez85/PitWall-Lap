@@ -46,6 +46,11 @@ node "$ROOT/scripts/sync-changelog.js"
 echo "==> Prebuild (app.json → ios/: versión $VERSION y plugins)"
 (cd "$ROOT" && CI=1 npx expo prebuild --platform ios --no-install)
 
+# El Info.plist que genera prebuild trae CFBundleVersion fijo a «1» (no usa
+# $(CURRENT_PROJECT_VERSION)), así que pasarlo a xcodebuild no basta: el primer
+# build se subió como 1.11.0 (1) y el siguiente lo rechazaría por repetido.
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$ROOT/ios/PitWallLap/Info.plist"
+
 echo "==> pod install"
 (cd "$ROOT/ios" && pod install)
 
