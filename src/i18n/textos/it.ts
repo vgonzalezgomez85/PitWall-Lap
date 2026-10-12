@@ -380,6 +380,36 @@ const it: Textos = {
     confirmar: (n: number) => `Importa (${n})`,
   },
 
+  calendarioWeb: {
+    boton: 'Gare di pitwall.es',
+    titulo: 'Gare di pitwall.es',
+    subtitulo: 'Calendario pubblico delle gare di slot. Aggiungile una alla volta con ＋ oppure selezionale e aggiungile insieme. Vengono fissate alle 9:00 con promemoria 1 giorno e 1 ora prima; poi puoi cambiarlo.',
+    buscar: 'Cerca: nome, campionato, club, città…',
+    errorCarga: 'Impossibile caricare il calendario di pitwall.es. Controlla la connessione a internet.',
+    reintentar: 'Riprova',
+    nada: 'Nessuna gara in programma pubblicata.',
+    sinResultados: 'Nessuna gara corrisponde alla ricerca.',
+    verificada: 'Verificata',
+    ia: 'Trovata dall’IA',
+    web: 'Sito',
+    anadir: 'Aggiungi',
+    anadida: 'Aggiunta',
+    seleccionarTodas: (n: number) => `Seleziona tutte (${n})`,
+    quitarSeleccion: 'Annulla selezione',
+    anadirSeleccionadas: (n: number) => `Aggiungi (${n})`,
+    confirmarLote: (n: number) => `Aggiungere ${plural(n, 'gara', 'gare')} al calendario con i promemoria?`,
+    anadidas: (n: number) => `Gare aggiunte al calendario: ${n}`,
+    tipos: {
+      resistencia: 'Endurance', velocidad: 'Velocità', rally: 'Rally', raid: 'Raid', otro: 'Altro',
+    },
+    notas: {
+      campeonato: 'Campionato',
+      categoria: 'Categoria',
+      hasta: (dia: string) => `Fino al ${dia}`,
+      web: 'Sito',
+    },
+  },
+
   resultados: {
     titulo: 'Risultati',
     anadir: 'Aggiungi',

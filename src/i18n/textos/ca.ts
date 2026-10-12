@@ -380,6 +380,36 @@ const ca: Textos = {
     confirmar: (n: number) => `Importar (${n})`,
   },
 
+  calendarioWeb: {
+    boton: 'Curses de pitwall.es',
+    titulo: 'Curses de pitwall.es',
+    subtitulo: 'Calendari públic de curses de slot. Afegeix-les una a una amb ＋ o marca-les i afegeix-les juntes. S’apunten a les 9:00 amb avisos 1 dia i 1 hora abans; després ho pots canviar.',
+    buscar: 'Cerca: nom, campionat, club, ciutat…',
+    errorCarga: 'No s’ha pogut carregar el calendari de pitwall.es. Comprova la connexió a internet.',
+    reintentar: 'Torna-ho a provar',
+    nada: 'No hi ha curses properes publicades.',
+    sinResultados: 'Cap cursa coincideix amb la cerca.',
+    verificada: 'Verificada',
+    ia: 'Trobada per IA',
+    web: 'Web',
+    anadir: 'Afegeix',
+    anadida: 'Afegida',
+    seleccionarTodas: (n: number) => `Selecciona-les totes (${n})`,
+    quitarSeleccion: 'Treu la selecció',
+    anadirSeleccionadas: (n: number) => `Afegeix (${n})`,
+    confirmarLote: (n: number) => `Vols afegir ${plural(n, 'cursa', 'curses')} al calendari amb els seus avisos?`,
+    anadidas: (n: number) => `Curses afegides al calendari: ${n}`,
+    tipos: {
+      resistencia: 'Resistència', velocidad: 'Velocitat', rally: 'Ral·li', raid: 'Raid', otro: 'Altres',
+    },
+    notas: {
+      campeonato: 'Campionat',
+      categoria: 'Categoria',
+      hasta: (dia: string) => `Fins al ${dia}`,
+      web: 'Web',
+    },
+  },
+
   resultados: {
     titulo: 'Resultats',
     anadir: 'Afegir',

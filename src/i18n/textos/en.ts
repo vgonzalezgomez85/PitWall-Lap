@@ -380,6 +380,36 @@ const en: Textos = {
     confirmar: (n: number) => `Import (${n})`,
   },
 
+  calendarioWeb: {
+    boton: 'Races from pitwall.es',
+    titulo: 'Races from pitwall.es',
+    subtitulo: 'Public slot racing calendar. Add races one by one with ＋ or tick several and add them together. They are set for 9:00 with reminders 1 day and 1 hour before; you can change that later.',
+    buscar: 'Search: name, championship, club, city…',
+    errorCarga: 'Couldn’t load the pitwall.es calendar. Check your internet connection.',
+    reintentar: 'Retry',
+    nada: 'No upcoming races published.',
+    sinResultados: 'No races match your search.',
+    verificada: 'Verified',
+    ia: 'Found by AI',
+    web: 'Website',
+    anadir: 'Add',
+    anadida: 'Added',
+    seleccionarTodas: (n: number) => `Select all (${n})`,
+    quitarSeleccion: 'Clear selection',
+    anadirSeleccionadas: (n: number) => `Add (${n})`,
+    confirmarLote: (n: number) => `Add ${plural(n, 'race', 'races')} to the calendar with their reminders?`,
+    anadidas: (n: number) => `Races added to the calendar: ${n}`,
+    tipos: {
+      resistencia: 'Endurance', velocidad: 'Sprint', rally: 'Rally', raid: 'Raid', otro: 'Other',
+    },
+    notas: {
+      campeonato: 'Championship',
+      categoria: 'Category',
+      hasta: (dia: string) => `Until ${dia}`,
+      web: 'Website',
+    },
+  },
+
   resultados: {
     titulo: 'Results',
     anadir: 'Add',

@@ -13,6 +13,7 @@ import { prewarmLocalNetworkPermission } from './src/data/discovery';
 import HomeScreen        from './src/screens/HomeScreen';
 import CalendarioScreen from './src/screens/CalendarioScreen';
 import EventoScreen     from './src/screens/EventoScreen';
+import CarrerasWebScreen from './src/screens/CarrerasWebScreen';
 import ArchivoResultadoScreen from './src/screens/ArchivoResultadoScreen';
 import EntrenosCompeticionScreen from './src/screens/EntrenosCompeticionScreen';
 import EntrenoCompeticionScreen  from './src/screens/EntrenoCompeticionScreen';
@@ -56,6 +57,7 @@ function AppInner() {
         <Stack.Screen name="Home"          component={HomeScreen} />
         <Stack.Screen name="Calendario"    component={CalendarioScreen} />
         <Stack.Screen name="Evento"        component={EventoScreen} />
+        <Stack.Screen name="CarrerasWeb"   component={CarrerasWebScreen} />
         <Stack.Screen name="ArchivoResultado" component={ArchivoResultadoScreen} />
         <Stack.Screen name="EntrenosCompeticion" component={EntrenosCompeticionScreen} />
         <Stack.Screen name="EntrenoCompeticion"  component={EntrenoCompeticionScreen} />

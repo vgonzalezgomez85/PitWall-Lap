@@ -382,6 +382,36 @@ const eu: Textos = {
     confirmar: (n: number) => `Inportatu (${n})`,
   },
 
+  calendarioWeb: {
+    boton: 'pitwall.es-eko lasterketak',
+    titulo: 'pitwall.es-eko lasterketak',
+    subtitulo: 'Slot lasterketen egutegi publikoa. Gehitu banan-banan ＋ botoiarekin, edo markatu eta gehitu batera. 9:00etan gordetzen dira, egun 1 eta ordu 1 lehenagoko abisuekin; gero alda dezakezu.',
+    buscar: 'Bilatu: izena, txapelketa, kluba, hiria…',
+    errorCarga: 'Ezin izan da pitwall.es-eko egutegia kargatu. Egiaztatu interneteko konexioa.',
+    reintentar: 'Saiatu berriro',
+    nada: 'Ez dago hurrengo lasterketarik argitaratuta.',
+    sinResultados: 'Ez dago bilaketarekin bat datorren lasterketarik.',
+    verificada: 'Egiaztatua',
+    ia: 'IAk aurkitua',
+    web: 'Weba',
+    anadir: 'Gehitu',
+    anadida: 'Gehitua',
+    seleccionarTodas: (n: number) => `Hautatu denak (${n})`,
+    quitarSeleccion: 'Kendu hautapena',
+    anadirSeleccionadas: (n: number) => `Gehitu (${n})`,
+    confirmarLote: (n: number) => `Gehitu ${n} lasterketa egutegira abisuekin?`,
+    anadidas: (n: number) => `Egutegira gehitutako lasterketak: ${n}`,
+    tipos: {
+      resistencia: 'Erresistentzia', velocidad: 'Abiadura', rally: 'Rallya', raid: 'Raid', otro: 'Besteak',
+    },
+    notas: {
+      campeonato: 'Txapelketa',
+      categoria: 'Kategoria',
+      hasta: (dia: string) => `Noiz arte: ${dia}`,
+      web: 'Weba',
+    },
+  },
+
   resultados: {
     titulo: 'Emaitzak',
     anadir: 'Gehitu',

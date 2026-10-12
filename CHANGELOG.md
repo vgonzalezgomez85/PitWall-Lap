@@ -18,6 +18,12 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.11.0] — 2026-10-12
+
+### Añadido
+- **Calendario → «Carreras de pitwall.es».** Muestra las **próximas carreras publicadas en [pitwall.es/carreras](https://pitwall.es/carreras.html)** (las verificadas y las encontradas por la búsqueda automática, mezcladas con las mismas reglas que la web), agrupadas por mes, con buscador por nombre, campeonato, club, ciudad, país o tipo. Se añaden **de una en una** con ＋ o **por lote**: se marcan (o «Seleccionar todas») y «Añadir (n)». Cada carrera entra a las **9:00 del primer día** con los avisos de siempre (1 día y 1 hora antes), el lugar y unas notas con campeonato, categoría, día de fin y web; luego se edita como cualquier otra.
+- Las que ya están en el calendario salen como **Añadida** y no se duplican: el evento guarda el id de la web (`webId`), que se conserva al editarlo (`carrerasWeb.ts`, `CarrerasWebScreen`).
+
 ## [1.10.1] — 2026-10-12
 
 ### Corregido

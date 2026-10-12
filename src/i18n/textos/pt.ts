@@ -380,6 +380,36 @@ const pt: Textos = {
     confirmar: (n: number) => `Importar (${n})`,
   },
 
+  calendarioWeb: {
+    boton: 'Corridas de pitwall.es',
+    titulo: 'Corridas de pitwall.es',
+    subtitulo: 'Calendário público de corridas de slot. Adicione-as uma a uma com ＋ ou marque várias e adicione-as juntas. Ficam às 9:00 com lembretes 1 dia e 1 hora antes; depois pode alterar.',
+    buscar: 'Pesquisar: nome, campeonato, clube, cidade…',
+    errorCarga: 'Não foi possível carregar o calendário de pitwall.es. Verifique a ligação à internet.',
+    reintentar: 'Tentar de novo',
+    nada: 'Não há próximas corridas publicadas.',
+    sinResultados: 'Nenhuma corrida corresponde à pesquisa.',
+    verificada: 'Verificada',
+    ia: 'Encontrada por IA',
+    web: 'Site',
+    anadir: 'Adicionar',
+    anadida: 'Adicionada',
+    seleccionarTodas: (n: number) => `Selecionar todas (${n})`,
+    quitarSeleccion: 'Limpar seleção',
+    anadirSeleccionadas: (n: number) => `Adicionar (${n})`,
+    confirmarLote: (n: number) => `Adicionar ${plural(n, 'corrida', 'corridas')} ao calendário com os lembretes?`,
+    anadidas: (n: number) => `Corridas adicionadas ao calendário: ${n}`,
+    tipos: {
+      resistencia: 'Resistência', velocidad: 'Velocidade', rally: 'Rali', raid: 'Raid', otro: 'Outras',
+    },
+    notas: {
+      campeonato: 'Campeonato',
+      categoria: 'Categoria',
+      hasta: (dia: string) => `Até ${dia}`,
+      web: 'Site',
+    },
+  },
+
   resultados: {
     titulo: 'Resultados',
     anadir: 'Adicionar',

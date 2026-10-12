@@ -67,7 +67,7 @@ export async function elegirYPreparar(): Promise<PreparacionImportacion | null> 
  * programar y el sistema no dejó (la carrera se guarda igual).
  */
 export async function guardarCarreras(
-  carreras: CarreraImportada[],
+  carreras: (Pick<CarreraImportada, 'nombre' | 'lugar' | 'notas' | 'inicio' | 'avisos'> & { webId?: string })[],
   cuerpo: (aviso: AvisoId, lugar?: string) => string,
 ): Promise<{ guardadas: number; sinPermiso: boolean }> {
   let sinPermiso = false;
@@ -80,6 +80,7 @@ export async function guardarCarreras(
       inicio: c.inicio.toISOString(),
       avisos: c.avisos,
       notificaciones: [],
+      webId: c.webId,
     };
     evento.notificaciones = await programarAvisos(evento, a => cuerpo(a, evento.lugar));
     if (evento.notificaciones.length === 0

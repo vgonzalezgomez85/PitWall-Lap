@@ -23,6 +23,8 @@ export interface Evento {
   inicio: string;               // ISO
   avisos: AvisoId[];
   notificaciones: string[];     // ids de las notificaciones programadas
+  /** Id de la carrera en pitwall.es, si se añadió desde allí. */
+  webId?: string;
 }
 
 export function fechaAviso(inicioIso: string, aviso: AvisoId): Date {

@@ -380,6 +380,36 @@ const nl: Textos = {
     confirmar: (n: number) => `Importeren (${n})`,
   },
 
+  calendarioWeb: {
+    boton: 'Races van pitwall.es',
+    titulo: 'Races van pitwall.es',
+    subtitulo: 'Openbare kalender van slotraces. Voeg ze één voor één toe met ＋ of vink er meerdere aan en voeg ze samen toe. Ze staan op 9:00 met herinneringen 1 dag en 1 uur vooraf; dat kun je later wijzigen.',
+    buscar: 'Zoeken: naam, kampioenschap, club, stad…',
+    errorCarga: 'De kalender van pitwall.es kon niet worden geladen. Controleer je internetverbinding.',
+    reintentar: 'Opnieuw',
+    nada: 'Geen komende races gepubliceerd.',
+    sinResultados: 'Geen races gevonden voor deze zoekopdracht.',
+    verificada: 'Geverifieerd',
+    ia: 'Gevonden door AI',
+    web: 'Website',
+    anadir: 'Toevoegen',
+    anadida: 'Toegevoegd',
+    seleccionarTodas: (n: number) => `Alles selecteren (${n})`,
+    quitarSeleccion: 'Selectie wissen',
+    anadirSeleccionadas: (n: number) => `Toevoegen (${n})`,
+    confirmarLote: (n: number) => `${plural(n, 'race', 'races')} met herinneringen aan de kalender toevoegen?`,
+    anadidas: (n: number) => `Races toegevoegd aan de kalender: ${n}`,
+    tipos: {
+      resistencia: 'Endurance', velocidad: 'Sprint', rally: 'Rally', raid: 'Raid', otro: 'Overig',
+    },
+    notas: {
+      campeonato: 'Kampioenschap',
+      categoria: 'Categorie',
+      hasta: (dia: string) => `Tot en met ${dia}`,
+      web: 'Website',
+    },
+  },
+
   resultados: {
     titulo: 'Resultaten',
     anadir: 'Toevoegen',

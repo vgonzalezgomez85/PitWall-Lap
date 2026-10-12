@@ -7,6 +7,7 @@ export type RootStackParamList = {
   Home: undefined;
   Calendario: undefined;
   Evento: { id?: string } | undefined;
+  CarrerasWeb: undefined;
   ArchivoResultado: { id: string };
   Discovery: undefined;
   RacePicker: { host: string; port: number };

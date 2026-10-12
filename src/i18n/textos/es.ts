@@ -379,6 +379,36 @@ const es = {
     confirmar: (n: number) => `Importar (${n})`,
   },
 
+  calendarioWeb: {
+    boton: 'Carreras de pitwall.es',
+    titulo: 'Carreras de pitwall.es',
+    subtitulo: 'Calendario público de carreras de slot. Añádelas una a una con ＋ o márcalas y añádelas juntas. Se apuntan a las 9:00 con avisos 1 día y 1 hora antes; luego puedes cambiarlo.',
+    buscar: 'Buscar: nombre, campeonato, club, ciudad…',
+    errorCarga: 'No se pudo cargar el calendario de pitwall.es. Comprueba la conexión a internet.',
+    reintentar: 'Reintentar',
+    nada: 'No hay carreras próximas publicadas.',
+    sinResultados: 'Ninguna carrera coincide con la búsqueda.',
+    verificada: 'Verificada',
+    ia: 'Encontrada por IA',
+    web: 'Web',
+    anadir: 'Añadir',
+    anadida: 'Añadida',
+    seleccionarTodas: (n: number) => `Seleccionar todas (${n})`,
+    quitarSeleccion: 'Quitar selección',
+    anadirSeleccionadas: (n: number) => `Añadir (${n})`,
+    confirmarLote: (n: number) => `¿Añadir ${plural(n, 'carrera', 'carreras')} al calendario con sus avisos?`,
+    anadidas: (n: number) => `Carreras añadidas al calendario: ${n}`,
+    tipos: {
+      resistencia: 'Resistencia', velocidad: 'Velocidad', rally: 'Rally', raid: 'Raid', otro: 'Otros',
+    },
+    notas: {
+      campeonato: 'Campeonato',
+      categoria: 'Categoría',
+      hasta: (dia: string) => `Hasta el ${dia}`,
+      web: 'Web',
+    },
+  },
+
   resultados: {
     titulo: 'Resultados',
     anadir: 'Añadir',

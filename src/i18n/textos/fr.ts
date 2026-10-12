@@ -380,6 +380,36 @@ const fr: Textos = {
     confirmar: (n: number) => `Importer (${n})`,
   },
 
+  calendarioWeb: {
+    boton: 'Courses de pitwall.es',
+    titulo: 'Courses de pitwall.es',
+    subtitulo: 'Calendrier public des courses de slot. Ajoutez-les une par une avec ＋ ou cochez-en plusieurs et ajoutez-les ensemble. Elles sont fixées à 9:00 avec des rappels 1 jour et 1 heure avant ; vous pourrez le modifier.',
+    buscar: 'Rechercher : nom, championnat, club, ville…',
+    errorCarga: 'Impossible de charger le calendrier de pitwall.es. Vérifiez la connexion internet.',
+    reintentar: 'Réessayer',
+    nada: 'Aucune course à venir publiée.',
+    sinResultados: 'Aucune course ne correspond à la recherche.',
+    verificada: 'Vérifiée',
+    ia: 'Trouvée par l’IA',
+    web: 'Site',
+    anadir: 'Ajouter',
+    anadida: 'Ajoutée',
+    seleccionarTodas: (n: number) => `Tout sélectionner (${n})`,
+    quitarSeleccion: 'Effacer la sélection',
+    anadirSeleccionadas: (n: number) => `Ajouter (${n})`,
+    confirmarLote: (n: number) => `Ajouter ${plural(n, 'course', 'courses')} au calendrier avec leurs rappels ?`,
+    anadidas: (n: number) => `Courses ajoutées au calendrier: ${n}`,
+    tipos: {
+      resistencia: 'Endurance', velocidad: 'Vitesse', rally: 'Rallye', raid: 'Raid', otro: 'Autres',
+    },
+    notas: {
+      campeonato: 'Championnat',
+      categoria: 'Catégorie',
+      hasta: (dia: string) => `Jusqu’au ${dia}`,
+      web: 'Site',
+    },
+  },
+
   resultados: {
     titulo: 'Résultats',
     anadir: 'Ajouter',

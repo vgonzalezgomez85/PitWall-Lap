@@ -34,6 +34,7 @@ export default function EventoScreen({ navigation, route }: Props) {
   const { t, locale } = useIdioma();
   const [cargado, setCargado] = useState(!id);
   const [anteriores, setAnteriores] = useState<string[]>([]);
+  const [webId, setWebId] = useState<string | undefined>();
   const [nombre, setNombre] = useState('');
   const [lugar, setLugar] = useState('');
   const [notas, setNotas] = useState('');
@@ -51,6 +52,7 @@ export default function EventoScreen({ navigation, route }: Props) {
         setInicio(new Date(e.inicio));
         setAvisos(e.avisos);
         setAnteriores(e.notificaciones);
+        setWebId(e.webId);
       }
       setCargado(true);
     });
@@ -89,6 +91,7 @@ export default function EventoScreen({ navigation, route }: Props) {
         inicio: inicio.toISOString(),
         avisos,
         notificaciones: [],
+        webId,
       };
       evento.notificaciones = await programarAvisos(evento, a => {
         const cuerpo = t.calendario.avisoCuerpo[a];

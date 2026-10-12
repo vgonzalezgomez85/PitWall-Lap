@@ -179,6 +179,13 @@ export default function CalendarioScreen({ navigation }: Props) {
         </Pressable>
       </View>
 
+      <Pressable
+        style={({ pressed }) => [styles.excelBtn, styles.web, pressed && styles.pulsada]}
+        onPress={() => navigation.push('CarrerasWeb')}
+      >
+        <Text style={styles.excelTexto}>🌐 {t.calendarioWeb.boton}</Text>
+      </Pressable>
+
       {eventos === null ? (
         <Text style={styles.vacio}>{t.comun.cargando}</Text>
       ) : eventos.length === 0 ? (
@@ -213,6 +220,7 @@ const styles = StyleSheet.create({
     flex: 1, minHeight: 44, paddingHorizontal: spacing.sm, borderRadius: radius.sm,
     borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
   },
+  web: { flex: 0, marginTop: spacing.sm },
   excelTexto: { color: colors.textSoft, fontSize: 13, fontWeight: '600', textAlign: 'center' },
   vacio: {
     color: colors.textMuted, fontSize: 14, textAlign: 'center',
