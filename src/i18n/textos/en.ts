@@ -310,6 +310,10 @@ const en: Textos = {
     competicionSub: 'Download it and view it offline',
     ajustes: 'Settings',
     ajustesSub: 'Language, voice and strategy',
+    garage: 'Garage',
+    garageSub: 'Your SlotGarage cars',
+    garageError: 'Could not open SlotGarage. Check your connection.',
+    garageReintentar: 'Retry',
   },
 
   calendario: {

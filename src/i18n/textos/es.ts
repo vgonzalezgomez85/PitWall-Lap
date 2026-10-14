@@ -309,6 +309,10 @@ const es = {
     competicionSub: 'Descárgalos y consúltalos sin conexión',
     ajustes: 'Ajustes',
     ajustesSub: 'Idioma, voz y estrategia',
+    garage: 'Garage',
+    garageSub: 'Tus coches de SlotGarage',
+    garageError: 'No se pudo abrir SlotGarage. Comprueba la conexión.',
+    garageReintentar: 'Reintentar',
   },
 
   calendario: {

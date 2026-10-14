@@ -310,6 +310,10 @@ const nl: Textos = {
     competicionSub: 'Download ze en bekijk ze offline',
     ajustes: 'Instellingen',
     ajustesSub: 'Taal, stem en strategie',
+    garage: 'Garage',
+    garageSub: 'Je SlotGarage-auto\'s',
+    garageError: 'SlotGarage kon niet worden geopend. Controleer je verbinding.',
+    garageReintentar: 'Opnieuw',
   },
 
   calendario: {

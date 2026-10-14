@@ -310,6 +310,10 @@ const ca: Textos = {
     competicionSub: "Descarrega'ls i consulta'ls sense connexió",
     ajustes: 'Ajustos',
     ajustesSub: 'Idioma, veu i estratègia',
+    garage: 'Garage',
+    garageSub: 'Els teus cotxes de SlotGarage',
+    garageError: 'No s\'ha pogut obrir SlotGarage. Comprova la connexió.',
+    garageReintentar: 'Reintenta',
   },
 
   calendario: {

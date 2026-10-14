@@ -310,6 +310,10 @@ const fr: Textos = {
     competicionSub: 'Téléchargez-les et consultez-les hors ligne',
     ajustes: 'Réglages',
     ajustesSub: 'Langue, voix et stratégie',
+    garage: 'Garage',
+    garageSub: 'Vos voitures SlotGarage',
+    garageError: 'Impossible d\'ouvrir SlotGarage. Vérifiez la connexion.',
+    garageReintentar: 'Réessayer',
   },
 
   calendario: {

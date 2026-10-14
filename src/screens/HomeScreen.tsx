@@ -110,6 +110,19 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
 
         <Pressable
+          onPress={() => navigation.push('Garage')}
+          style={({ pressed }) => [styles.ajustes, pressed && styles.pulsada]}
+        >
+          {/* TODO: sustituir por el logo de SlotGarage (assets/slotgarage-logo.png) */}
+          <Text style={styles.ajustesIcono}>🏎️</Text>
+          <View style={styles.ajustesTextos}>
+            <Text style={styles.ajustesTitulo}>{t.menu.garage}</Text>
+            <Text style={styles.ajustesSub} numberOfLines={1}>{t.menu.garageSub}</Text>
+          </View>
+          <Text style={styles.ajustesChevron}>›</Text>
+        </Pressable>
+
+        <Pressable
           onPress={() => navigation.push('Ajustes')}
           style={({ pressed }) => [styles.ajustes, pressed && styles.pulsada]}
         >

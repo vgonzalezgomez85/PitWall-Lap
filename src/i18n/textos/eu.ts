@@ -312,6 +312,10 @@ const eu: Textos = {
     competicionSub: 'Deskargatu eta kontsultatu konexiorik gabe',
     ajustes: 'Ezarpenak',
     ajustesSub: 'Hizkuntza, ahotsa eta estrategia',
+    garage: 'Garage',
+    garageSub: 'Zure SlotGarage autoak',
+    garageError: 'Ezin izan da SlotGarage ireki. Egiaztatu konexioa.',
+    garageReintentar: 'Saiatu berriro',
   },
 
   calendario: {

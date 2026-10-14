@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.12.0] — 2026-10-14
+
+### Añadido
+- **Garage.** Nuevo botón en la pantalla inicial que abre **SlotGarage**, la app de Emanuele Palena para guardar la configuración de tus coches, dentro de PitWall Lap (`GarageScreen`, con `react-native-webview`). Se inicia sesión con la cuenta de SlotGarage. Requiere reconstruir la app (módulo nativo nuevo).
+
 ## [1.11.0] — 2026-10-12
 
 ### Añadido
