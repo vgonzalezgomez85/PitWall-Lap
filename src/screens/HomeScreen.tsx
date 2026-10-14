@@ -111,13 +111,17 @@ export default function HomeScreen({ navigation }: Props) {
 
         <Pressable
           onPress={() => navigation.push('Garage')}
-          style={({ pressed }) => [styles.ajustes, pressed && styles.pulsada]}
+          style={({ pressed }) => [styles.garage, pressed && styles.pulsada]}
         >
-          {/* TODO: sustituir por el logo de SlotGarage (assets/slotgarage-logo.png) */}
-          <Text style={styles.ajustesIcono}>🏎️</Text>
+          <Image
+            source={require('../../assets/slotgarage-logo.png')}
+            style={styles.garageLogo}
+            accessibilityLabel="SlotGarage"
+          />
           <View style={styles.ajustesTextos}>
-            <Text style={styles.ajustesTitulo}>{t.menu.garage}</Text>
-            <Text style={styles.ajustesSub} numberOfLines={1}>{t.menu.garageSub}</Text>
+            <Text style={styles.garageTitulo}>{t.menu.garage}</Text>
+            <Text style={styles.garageSub} numberOfLines={2}>{t.menu.garageSub}</Text>
+            <Text style={styles.garageAutor} numberOfLines={1}>{t.menu.garageAutor}</Text>
           </View>
           <Text style={styles.ajustesChevron}>›</Text>
         </Pressable>
@@ -168,6 +172,18 @@ const styles = StyleSheet.create({
   icono: { fontSize: 32 },
   titulo: { color: colors.text, fontSize: 17, fontWeight: '700' },
   subtitulo: { color: colors.textMuted, fontSize: 12, marginTop: 3, lineHeight: 16 },
+
+  // Garage: ancho completo, con el logo de SlotGarage (app de Emanuele Palena).
+  garage: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.lg,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
+    borderRadius: radius.md + 4, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.borderSoft,
+  },
+  garageLogo: { width: 64, height: 64, borderRadius: 32 },
+  garageTitulo: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  garageSub: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
+  garageAutor: { color: '#e8641e', fontSize: 12, marginTop: 3 },
 
   // Ajustes: franja baja y discreta; no compite con las cuatro áreas de arriba.
   ajustes: {
