@@ -18,6 +18,17 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.12.0] — 2026-10-16
+
+### Añadido
+- **TicTac nuevo: fin de manga marcado por el propio TicTac.** Al agotarse el tiempo, el TicTac manda la clasificación cerrada sin vuelta detrás (`RIVALS_UPDATE` suelto); la app lo usa para avisar **«Fin de la manga, segundo»** con tu posición final, guardar el histórico y cerrar la manga en el seguimiento de rivales. El reloj de la app solo da la manga por acabada si ese cierre no llega en 10 s.
+- **TicTac nuevo: duración de manga detectada sola.** Si no la configuras, se deduce al cerrarse la primera manga vista (lo que tarda el TicTac desde el `CONFIG`, redondeado al minuto por debajo) y aparece como «1 min (detectada)». A partir de la siguiente manga hay tiempo restante, avisos, proyección y media para subir. El reloj descuenta el semáforo (~3 s) medido. Si la configurada no coincide con la del TicTac, se avisa en el ajuste.
+- **TicTac nuevo: última manga y fin de carrera.** Si la app ve empezar la carrera (clasificación a cero en el `CONFIG` o justo antes), sabe el total de mangas por la rotación (tantas como carriles) y muestra **«Manga 3 de 6»**. Al empezar la última avisa **«Tu turno, carril 4, última manga»**, y al acabarla **«Fin de carrera, primero»** y pasa a la vista **FINAL**. Si te conectas con la carrera ya empezada no se puede saber cuántas van, y no se anuncia.
+
+### Mejorado
+- **TicTac nuevo: reinicio de carrera más fiable.** Además de mirar si se repiten pilotos y carriles, se usa la clasificación que acompaña al `CONFIG`: si viene a cero es una carrera nueva, y si trae datos de mangas anteriores la carrera sigue.
+- **TicTac nuevo: sin aviso de posición duplicado al acabar la manga.** El cambio de posición del cierre va dentro del aviso de fin.
+
 ## [1.11.0] — 2026-10-12
 
 ### Añadido

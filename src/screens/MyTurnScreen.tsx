@@ -172,6 +172,7 @@ export default function MyTurnScreen(_props: Props) {
             {!isPre && state.currentMangaNum != null && !mangaCerrada(state) && (
               <Text style={[type.body, styles.waitSub]}>
                 {t.turno.ahoraManga(state.currentMangaNum)}
+                {state.totalMangas != null && ` / ${state.totalMangas}`}
                 {state.remainingMs != null && t.turno.quedan(fmtRemaining(state.remainingMs))}
               </Text>
             )}
@@ -232,6 +233,14 @@ export default function MyTurnScreen(_props: Props) {
       <BackButton />
       {header}
       <AvisoManga state={state} conSiguiente />
+      {/* TicTac nuevo con la carrera vista desde el principio. */}
+      {state.totalMangas != null && state.currentMangaNum != null && (
+        <Text style={[type.label, styles.mangaDe]}>
+          {state.currentMangaNum === state.totalMangas
+            ? t.turno.ultimaMangaDe(state.totalMangas)
+            : t.turno.mangaDe(state.currentMangaNum, state.totalMangas)}
+        </Text>
+      )}
 
       {/* ── Tarjeta principal ─────────────────────────────────────────── */}
       <Card style={styles.hero}>
@@ -442,6 +451,9 @@ function mangaCerrada(s: LiveState): boolean {
 // del piloto (en la vista de espera ya sale en su tarjeta).
 function AvisoManga({ state, conSiguiente }: { state: LiveState; conSiguiente: boolean }) {
   const { t } = useIdioma();
+  const { raceInfo } = useDataSource();
+  // El TicTac no manda el plan: tras cerrar una manga solo sabemos que viene otra.
+  const sinPlan = raceInfo?.source === 'infolap' && !state.isFinal;
   const e = state.estadoManga;
   if (e == null || e === 'en-curso') return null;
   let titulo: string;
@@ -460,6 +472,7 @@ function AvisoManga({ state, conSiguiente }: { state: LiveState; conSiguiente: b
     const sig = state.nextMangaInfo;
     texto = !conSiguiente ? null
       : sig ? t.turno.proximaMangaCarril(sig.mangaNum, sig.lane)
+      : sinPlan ? t.turno.esperandoSiguiente
       : t.turno.sinMasMangas;
     color = colors.accent;
   }
@@ -531,12 +544,14 @@ function voiceSummary(s: VoiceSettings, full: boolean, t: Textos): string {
   return t.turno.vozResumen(n);
 }
 
-// Duración de manga para TicTac: el TicTac no la transmite y sin ella no hay
-// tiempo restante, avisos de fin, proyección ni media para subir.
+// Duración de manga para TicTac: no la transmite y sin ella no hay tiempo
+// restante, avisos de fin, proyección ni media para subir. El TicTac nuevo la
+// deja deducir al cerrar la primera manga; lo configurado aquí manda.
 function MangaDurationControl() {
-  const { source } = useDataSource();
+  const { source, state } = useDataSource();
   const [min, setMin] = useMangaDurationMin();
   const { t } = useIdioma();
+  const detectada = state.detectedMangaMs != null ? Math.round(state.detectedMangaMs / 60_000) : null;
   useEffect(() => {
     source?.setMangaDurationMs?.(min > 0 ? min * 60_000 : null);
   }, [source, min]);
@@ -550,7 +565,11 @@ function MangaDurationControl() {
         >
           <Text style={styles.stepBtnText}>−</Text>
         </Pressable>
-        <Text style={styles.stepValue}>{min > 0 ? t.turno.minutos(min) : t.turno.sinConfigurar}</Text>
+        <Text style={styles.stepValue}>
+          {min > 0 ? t.turno.minutos(min)
+            : detectada != null ? t.turno.minutosDetectada(detectada)
+            : t.turno.sinConfigurar}
+        </Text>
         <Pressable
           style={({ pressed }) => [styles.stepBtn, pressed && styles.pressed]}
           onPress={() => setMin(min + 1)}
@@ -558,7 +577,10 @@ function MangaDurationControl() {
           <Text style={styles.stepBtnText}>+</Text>
         </Pressable>
       </View>
-      <Text style={type.caption}>{t.turno.duracionTexto}</Text>
+      <Text style={type.caption}>
+        {t.turno.duracionTexto} {t.turno.duracionDetecta}
+        {detectada != null && min > 0 && detectada !== min && ` ${t.turno.duracionNoCoincide(detectada)}`}
+      </Text>
     </Card>
   );
 }
@@ -568,6 +590,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingBottom: 40 },
   flex: { flex: 1 },
   pressed: { opacity: 0.65 },
+  mangaDe: { marginBottom: spacing.md },
 
   // Cabecera
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },

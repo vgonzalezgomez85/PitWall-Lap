@@ -93,12 +93,17 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         bestLapRef.current = null;
         vueltasValidasRef.current = 0;
         if (e.newLane != null) {
-          speak(stateRef.current.pole ? v.poleTuTurno(e.newLane) : v.tuTurno(e.newLane));
+          speak(stateRef.current.pole ? v.poleTuTurno(e.newLane)
+            : e.lastManga ? `${v.tuTurno(e.newLane)}, ${v.ultimaManga}` : v.tuTurno(e.newLane));
         }
         break;
-      case 'race-finished':
-        speak(stateRef.current.pole ? v.finPole : v.finManga);
+      case 'race-finished': {
+        if (stateRef.current.pole) { speak(v.finPole); break; }
+        // TicTac nuevo: posición final de la clasificación cerrada.
+        const fin = e.raceOver ? v.finCarrera : v.finManga;
+        speak(e.position != null ? `${fin}, ${ordinalHablado(e.position, v)}` : fin);
         break;
+      }
       case 'manga-paused':
         speak(v.mangaPausa);
         break;
