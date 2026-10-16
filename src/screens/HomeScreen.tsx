@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getCurrentVersion } from '../data/appVersion';
 import { useIdioma } from '../i18n/IdiomaContext';
+import { useRadio } from '../radio/RadioContext';
 import AvisoActualizacion from '../ui/AvisoActualizacion';
 import { colors, radius, spacing } from '../ui/theme';
 import type { RootStackParamList } from '../navigation';
@@ -31,6 +32,7 @@ interface Baldosa {
 
 export default function HomeScreen({ navigation }: Props) {
   const { t } = useIdioma();
+  const radio = useRadio();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
@@ -89,6 +91,22 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         </Pressable>
 
+        <Pressable
+          onPress={() => navigation.push('Radio')}
+          style={({ pressed }) => [styles.radio, pressed && styles.pulsada]}
+        >
+          <Text style={styles.radioIcono}>🎧</Text>
+          <View style={styles.lapTextos}>
+            <View style={styles.radioTituloRow}>
+              <Text style={styles.radioTitulo}>{t.menu.radio}</Text>
+              {radio.conectado && <View style={styles.radioPunto} />}
+            </View>
+            <Text style={styles.radioSubtitulo} numberOfLines={1}>
+              {radio.conectado ? t.radio.sala(radio.codigo) : t.menu.radioSub}
+            </Text>
+          </View>
+        </Pressable>
+
         <View style={styles.rejilla}>
           {cuadradas.map(b => (
             <Pressable
@@ -144,6 +162,22 @@ const styles = StyleSheet.create({
   lapTextos: { flex: 1 },
   lapTitulo: { color: colors.onAccent, fontSize: 24, fontWeight: '800' },
   lapSubtitulo: { color: colors.onAccent, opacity: 0.8, fontSize: 13, marginTop: 3, lineHeight: 18 },
+
+  // Radio: ancho completo, misma franja que Lap pero en superficie (no compite
+  // con el rojo del Lap). El punto verde indica una sala viva.
+  radio: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.lg,
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.xl, minHeight: 84,
+    borderRadius: radius.md + 4, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.borderSoft,
+  },
+  radioIcono: { fontSize: 30 },
+  radioTituloRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  radioTitulo: { color: colors.text, fontSize: 20, fontWeight: '800' },
+  radioSubtitulo: { color: colors.textMuted, fontSize: 13, marginTop: 3, lineHeight: 18 },
+  radioPunto: {
+    width: 10, height: 10, borderRadius: 5, backgroundColor: colors.good,
+  },
 
   // Las otras tres: cuadradas, en dos columnas.
   rejilla: { flexDirection: 'row', flexWrap: 'wrap', gap: HUECO },

@@ -27,4 +27,8 @@ export type RootStackParamList = {
   EntrenosCompeticion: undefined;
   EntrenoCompeticion: { id: string };
   StintDetail: { id: string; compareIds?: string[] };
+  Radio: undefined;
+  RadioAsistente: undefined;
+  RadioPiloto: undefined;
+  RadioSeguidor: undefined;
 };

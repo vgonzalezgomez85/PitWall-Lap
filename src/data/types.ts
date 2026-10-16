@@ -11,7 +11,7 @@
 // La capacidad de cada fuente difiere; ver `SourceCapabilities` y la
 // matriz documentada en project_slottime_mobile.md.
 
-export type SourceKind = 'pitwall' | 'infolap';
+export type SourceKind = 'pitwall' | 'infolap' | 'asistente';
 
 export interface Participant {
   /** PitWall: team.id o driver.id; Infolap: el código `#001..#999`. */
@@ -429,6 +429,19 @@ export const INFOLAP_CAPABILITIES: SourceCapabilities = {
   gaps: true,
   raceTimeRemaining: true,
   laneAverages: true,
+  multiMangaPlan: false,
+  history: false,
+};
+
+/** Radio (cronómetro manual del asistente): solo tiempos de vuelta de un
+ *  coche, sin posición, gaps, tiempo restante ni plan de mangas. El historial
+ *  se construye en el móvil (como TicTac), no viene del asistente. */
+export const ASISTENTE_CAPABILITIES: SourceCapabilities = {
+  lapTimes: true,
+  positions: false,
+  gaps: false,
+  raceTimeRemaining: false,
+  laneAverages: false,
   multiMangaPlan: false,
   history: false,
 };

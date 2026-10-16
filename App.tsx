@@ -35,6 +35,11 @@ import { AjustesProvider } from './src/data/AjustesContext';
 import AjustesScreen from './src/screens/AjustesScreen';
 import TrainingScreen     from './src/screens/TrainingScreen';
 import StintDetailScreen  from './src/screens/StintDetailScreen';
+import RadioScreen        from './src/screens/RadioScreen';
+import RadioAsistenteScreen from './src/screens/RadioAsistenteScreen';
+import RadioPilotoScreen  from './src/screens/RadioPilotoScreen';
+import RadioSeguidorScreen from './src/screens/RadioSeguidorScreen';
+import { RadioProvider } from './src/radio/RadioContext';
 import type { RootStackParamList } from './src/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -77,6 +82,10 @@ function AppInner() {
         <Stack.Screen name="Ajustes"       component={AjustesScreen} />
         <Stack.Screen name="Training"      component={TrainingScreen} />
         <Stack.Screen name="StintDetail"   component={StintDetailScreen} />
+        <Stack.Screen name="Radio"          component={RadioScreen} />
+        <Stack.Screen name="RadioAsistente" component={RadioAsistenteScreen} />
+        <Stack.Screen name="RadioPiloto"    component={RadioPilotoScreen} />
+        <Stack.Screen name="RadioSeguidor"  component={RadioSeguidorScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -118,9 +127,11 @@ export default function App() {
       <IdiomaProvider>
         <AjustesProvider>
           <SourceProvider>
-            <TireStrategyProvider>
-              <AppInner />
-            </TireStrategyProvider>
+            <RadioProvider>
+              <TireStrategyProvider>
+                <AppInner />
+              </TireStrategyProvider>
+            </RadioProvider>
           </SourceProvider>
         </AjustesProvider>
       </IdiomaProvider>

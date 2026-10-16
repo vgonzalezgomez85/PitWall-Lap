@@ -68,6 +68,7 @@ function fmtGap(laps: number | null, ms: number | null, t: Textos): string {
 function sourceLabel(source: string | undefined): string {
   if (source === 'pitwall') return 'PitWall';
   if (source === 'infolap') return 'TicTac';
+  if (source === 'asistente') return 'Asistente';
   return '—';
 }
 

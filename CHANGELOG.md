@@ -18,6 +18,13 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.12.0] — 2026-10-16
+
+### Añadido
+- **Radio: voz y tiempos entre el piloto y su equipo, sin WiFi ni cronómetro.** Nueva área **Radio** (🎧) en el menú. El **asistente** crea una sala (servidor TCP + anuncio mDNS) y es su centro: pulsa **«Vuelta»** en cada cruce y cronometra; el **piloto** se une y **escucha los tiempos locutados**; el **seguidor** solo mira. Sin servidor propio: la sala vive en la zona WiFi que monta el asistente. Tres perfiles y un código corto para que entre quien toca.
+- Fuente de datos **`AsistenteSource`** (`src/data/types.ts`, `src/data/AsistenteSource.ts`): los tiempos que manda el asistente llegan como `LiveState`/`SourceEvent`, así que la locución reutiliza el motor de voz (`useVoice`) y, al terminar, la tanda se guarda en el **histórico** igual que una sesión de TicTac.
+- Protocolo y reglas de sala en `src/radio/` (puro y testeado): un solo piloto y un solo asistente, seguidores hasta el límite de la zona WiFi, transporte TCP con framing JSON y descubrimiento por Bonjour (`_pitwall-radio._tcp`). El audio por WebRTC llega en la fase siguiente.
+
 ## [1.11.0] — 2026-10-12
 
 ### Añadido
