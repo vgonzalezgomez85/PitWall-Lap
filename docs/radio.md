@@ -251,6 +251,39 @@ falta, indicador en la baldosa, guía de uso.
 Cada fase que se mergee sigue la regla de versionado de `AGENTS.md` (versión en
 `app.json` + `package.json`, entrada en `CHANGELOG.md`, `changelog:sync`).
 
+### Estado de implementación (2026-10-16)
+
+La PoC de voz se hizo **integrada** en el flujo Radio (no código desechable):
+es el arranque real de la Fase 2, commiteada en `radio` (`d5904fe`, versión
+1.13.0). Alcance: **audio solo, topología en estrella** (D6) — cada participante
+abre UN peer WebRTC con el asistente, que es el hub.
+
+**Hecho y verificado en build:**
+- `react-native-webrtc@155.0.0` compila bajo New Architecture (riesgo Nº 0 → OK);
+  APK de release generado sin errores.
+- Enrutado de señalización (`oferta`/`respuesta`/`candidato`) en
+  `ServidorRadio`/`ClienteRadio`: unicast por id, expuesto en `RadioContext`.
+- Motor WebRTC (`src/radio/voz.ts`): un `Par` = conexión asistente↔participante;
+  oferente (participante) / respondedor (asistente), micro del piloto abierto,
+  seguidor con transceiver `recvonly`, medidor de nivel por `getStats`.
+- `useVozRadio` (ciclo de vida de peers por rol) + sesión de audio
+  playAndRecord (`audioSesion.ts`).
+- Integración por pantalla: walkie PTT + medidor (asistente), medidor (piloto),
+  `RTCView` de audio remoto en los tres roles.
+- Permisos de micro/Bluetooth (config plugin local) y textos i18n (8 idiomas).
+- Tests puros de la lógica aislada (candidatos ICE + nivel de audio) y del
+  enrutado de señalización. `tsc` limpio, 215 tests en verde.
+
+**Pendiente de validar en pista** (2–3 móviles, lo ejecuta el usuario): los 5
+puntos de la Fase 0 — mDNS en el hotspot del iPhone, audio + locución con
+pantalla bloqueada, ruido en reposo (umbral de la puerta de voz), cascos
+Bluetooth, y que el seguidor oye al asistente. iOS queda preparado con
+`APPLE_TEAM_ID=… npm run ios:testflight`.
+
+**Diferido a Fase 2/3** (no es ninguno de los 5 puntos): reenvío
+piloto→seguidor (re-encodear audio), prioridad locución↔voz
+(`useCoordinacionAudio`), RNNoise y botón de auricular.
+
 ---
 
 ## 10. Descartado (y por qué)
