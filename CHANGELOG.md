@@ -18,6 +18,12 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.13.0] — 2026-10-16
+
+### Añadido
+- **Radio: voz por WebRTC entre el asistente y su equipo (inicio de la Fase 2).** La sala ya no es solo datos: el **asistente** habla con el **piloto** y los **seguidores** con un **walkie (pulsar-para-hablar)**, el **piloto** lleva el **micro abierto** para que el asistente le oiga en pista, y los **seguidores** solo escuchan. Topología en estrella (cada participante abre un peer con el asistente), señalización SDP/ICE por el TCP de la sala y un **medidor de nivel de micro** para calibrar la puerta de voz.
+- Motor WebRTC en `src/radio/voz.ts` (sobre `react-native-webrtc`, solo audio) y ciclo de vida por rol en `src/radio/useVozRadio.ts`. El permiso de micrófono ya no se borra en el build (`expo-audio`/`expo-image-picker` con texto de uso) y se añaden los permisos Android de red y Bluetooth en `plugins/withWebrtcPermissions.js`.
+
 ## [1.12.0] — 2026-10-16
 
 ### Añadido

@@ -9,7 +9,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useDataSource } from '../data/sourceContext';
 import { useIdioma } from '../i18n/IdiomaContext';
 import { useRadio } from '../radio/RadioContext';
+import { AudioRemoto } from '../radio/AudioRemoto';
 import { useAsistenteSource } from '../radio/useAsistenteSource';
+import { useVozRadio } from '../radio/useVozRadio';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Stat from '../ui/Stat';
@@ -25,6 +27,7 @@ export default function RadioSeguidorScreen({ navigation }: Props) {
   const { state } = useDataSource();
 
   useAsistenteSource(nombre);
+  const { pistas } = useVozRadio();
 
   // Al salir de la pantalla (gesto atrás, swipe), dejamos la sala libre.
   const salirRef = useRef(salir);
@@ -88,6 +91,9 @@ export default function RadioSeguidorScreen({ navigation }: Props) {
       </Card>
 
       <Button label={t.radio.salir} variant="danger" onPress={confirmarSalir} style={styles.salir} />
+
+      {/* Reproduce la voz del asistente (RTCView invisible). */}
+      <AudioRemoto pistas={pistas} />
     </ScrollView>
   );
 }

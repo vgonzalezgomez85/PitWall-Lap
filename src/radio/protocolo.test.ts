@@ -1,6 +1,6 @@
 import { crearClienteRadio, crearServidorRadio } from './protocolo';
 import { crearTransporteMemoria } from './transporte';
-import type { MensajeRadio, Participante } from './mensajes';
+import type { MensajeRadio, MensajeSenalizacion, Participante } from './mensajes';
 
 const HOST = 'host';
 const PUERTO = 1;
@@ -103,5 +103,30 @@ describe('protocolo de sala (loopback en memoria)', () => {
 
     piloto.enviar({ tipo: 'estado', hablando: 'piloto' });
     expect(enAsistente).toEqual([{ tipo: 'estado', hablando: 'piloto' }]);
+  });
+
+  it('enruta la señalización WebRTC por participante (unicast, sin difusión)', async () => {
+    const { transporte, servidor } = await montar();
+    const piloto = crearClienteRadio();
+    const seguidor = crearClienteRadio();
+    await piloto.unirse(transporte, HOST, PUERTO, { nombre: 'Ana', rol: 'piloto', codigo: 'K7M-4QX' });
+    await seguidor.unirse(transporte, HOST, PUERTO, { nombre: 'Seg', rol: 'seguidor', codigo: 'K7M-4QX' });
+
+    // El asistente recibe la señalización con el id de la conexión emisora.
+    const enAsistente: { de: string; sig: MensajeSenalizacion }[] = [];
+    servidor.onSenalizacion((de, sig) => enAsistente.push({ de, sig }));
+
+    piloto.enviarSenalizacion({ tipo: 'oferta', de: 'p1', sdp: 'v=0' });
+    expect(enAsistente).toEqual([{ de: 'p1', sig: { tipo: 'oferta', de: 'p1', sdp: 'v=0' } }]);
+
+    // El asistente responde solo al piloto (unicast), no al seguidor.
+    const enPiloto: MensajeSenalizacion[] = [];
+    const enSeguidor: MensajeSenalizacion[] = [];
+    piloto.onSenalizacion(sig => enPiloto.push(sig));
+    seguidor.onSenalizacion(sig => enSeguidor.push(sig));
+
+    servidor.enviarSenalizacion('p1', { tipo: 'respuesta', de: 'asistente', sdp: 'v=0' });
+    expect(enPiloto).toEqual([{ tipo: 'respuesta', de: 'asistente', sdp: 'v=0' }]);
+    expect(enSeguidor).toEqual([]);
   });
 });

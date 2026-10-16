@@ -356,6 +356,10 @@ const nl: Textos = {
     esperandoTiempos: 'De assistent heeft nog geen rondes opgeslagen.',
     sala: (c: string) => `Ruimte ${c}`,
     conectadoComo: (papel: string) => 'Verbonden als ' + papel,
+    hablar: 'Praat',
+    nivelMicro: 'Microniveau',
+    vozLista: 'Stem klaar',
+    vozConectando: 'Stem verbinden…',
   },
 
   calendario: {

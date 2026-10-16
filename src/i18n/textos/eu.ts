@@ -358,6 +358,10 @@ const eu: Textos = {
     esperandoTiempos: 'Laguntzaileak oraindik ez du itzulirik erregistratu.',
     sala: (c: string) => `Gela ${c}`,
     conectadoComo: (papel: string) => ' gisa konektatuta' + papel,
+    hablar: 'Hitz egin',
+    nivelMicro: 'Mikro maila',
+    vozLista: 'Ahotsa prest',
+    vozConectando: 'Ahotsa konektatzen…',
   },
 
   calendario: {

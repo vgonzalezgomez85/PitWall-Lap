@@ -32,6 +32,12 @@ export interface ServidorRadio {
   /** Recibe los mensajes de datos que manda un participante (p. ej. `estado`).
    *  Devuelve la función de cancelación. */
   onMensaje(cb: (m: MensajeRadio) => void): () => void;
+  /** Recibe la señalización WebRTC (oferta/respuesta/candidato) de un
+   *  participante. `de` es el id del participante emisor. Devuelve la
+   *  cancelación. */
+  onSenalizacion(cb: (de: string, sig: MensajeSenalizacion) => void): () => void;
+  /** Envía señalización WebRTC a un participante concreto (unicast). */
+  enviarSenalizacion(destinoId: string, sig: MensajeSenalizacion): void;
   /** Sala actual (para que la UI muestre código y conectados). */
   sala(): EstadoSala;
   cerrar(): void;
@@ -44,6 +50,7 @@ export function crearServidorRadio(
   let onParticipantes: ((lista: Participante[]) => void) | null = null;
   const canales = new Map<string, Canal>();
   const oyentesDatos = new Set<(m: MensajeRadio) => void>();
+  const oyentesSenalizacion = new Set<(de: string, sig: MensajeSenalizacion) => void>();
   let transporte: TransporteRadio | null = null;
   let cerrado = false;
 
@@ -105,11 +112,21 @@ export function crearServidorRadio(
         return;
       }
 
-      // Ya presentado: `salir` lo quita; la señalización WebRTC (Fase 2) y el
-      // resto se ignoran aquí.
+      // Ya presentado: `salir` lo quita.
       if (id !== null && sig?.tipo === 'salir') {
         alCerrar(id);
         canal.cerrar();
+        return;
+      }
+
+      // Señalización WebRTC (oferta/respuesta/candidato): no es ni `unirse` ni
+      // `salir`; se entrega al asistente con el id del emisor para que negocie
+      // el peer 1:1 (nunca se reenvía a otros participantes).
+      if (
+        id !== null && sig !== null &&
+        (sig.tipo === 'oferta' || sig.tipo === 'respuesta' || sig.tipo === 'candidato')
+      ) {
+        for (const cb of [...oyentesSenalizacion]) cb(id, sig);
         return;
       }
 
@@ -140,6 +157,15 @@ export function crearServidorRadio(
       oyentesDatos.add(cb);
       return () => oyentesDatos.delete(cb);
     },
+    onSenalizacion(cb) {
+      oyentesSenalizacion.add(cb);
+      return () => oyentesSenalizacion.delete(cb);
+    },
+    enviarSenalizacion(destinoId, sig) {
+      const canal = canales.get(destinoId);
+      if (!canal) return;
+      try { canal.enviar(serializarSenalizacion(sig)); } catch { /* ignore */ }
+    },
     sala() {
       return sala;
     },
@@ -167,10 +193,15 @@ export interface ClienteRadio {
   ): Promise<ResultadoUnionCliente>;
   /** Se suscribe a los mensajes de datos reenviados por el asistente. */
   onMensaje(cb: (m: MensajeRadio) => void): () => void;
+  /** Se suscribe a la señalización WebRTC del asistente (oferta/respuesta/
+   *  candidato). */
+  onSenalizacion(cb: (sig: MensajeSenalizacion) => void): () => void;
   /** Se suscribe al cierre de la conexión (asistente caído o sala cerrada). */
   onCerrar(cb: () => void): () => void;
   /** Envía un mensaje de datos al asistente (p. ej. `estado`). */
   enviar(m: MensajeRadio): void;
+  /** Envía señalización WebRTC al asistente. */
+  enviarSenalizacion(sig: MensajeSenalizacion): void;
   /** Se va de la sala. */
   salir(): void;
 }
@@ -179,6 +210,7 @@ export function crearClienteRadio(): ClienteRadio {
   let canal: Canal | null = null;
   let tuId = '';
   const oyentes = new Set<(m: MensajeRadio) => void>();
+  const oyentesSenalizacion = new Set<(sig: MensajeSenalizacion) => void>();
   const oyentesCierre = new Set<() => void>();
   const offs: (() => void)[] = [];
 
@@ -200,6 +232,14 @@ export function crearClienteRadio(): ClienteRadio {
         if (dato) {
           for (const cb of [...oyentes]) cb(dato);
           return;
+        }
+        // Señalización WebRTC del asistente.
+        const sig = deserializarSenalizacion(texto);
+        if (
+          sig !== null &&
+          (sig.tipo === 'oferta' || sig.tipo === 'respuesta' || sig.tipo === 'candidato')
+        ) {
+          for (const cb of [...oyentesSenalizacion]) cb(sig);
         }
       });
       offs.push(offMensaje);
@@ -233,6 +273,11 @@ export function crearClienteRadio(): ClienteRadio {
       return () => oyentes.delete(cb);
     },
 
+    onSenalizacion(cb) {
+      oyentesSenalizacion.add(cb);
+      return () => oyentesSenalizacion.delete(cb);
+    },
+
     onCerrar(cb) {
       oyentesCierre.add(cb);
       return () => oyentesCierre.delete(cb);
@@ -240,6 +285,10 @@ export function crearClienteRadio(): ClienteRadio {
 
     enviar(m) {
       try { canal?.enviar(serializar(m)); } catch { /* ignore */ }
+    },
+
+    enviarSenalizacion(sig) {
+      try { canal?.enviar(serializarSenalizacion(sig)); } catch { /* ignore */ }
     },
 
     salir() {

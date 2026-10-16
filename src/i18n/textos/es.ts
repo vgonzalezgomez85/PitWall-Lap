@@ -355,6 +355,10 @@ const es = {
     sinConexion: 'Se perdió la conexión con el asistente.',
     esperandoTiempos: 'El asistente aún no ha registrado vueltas.',
     conectadoComo: (papel: string) => `Conectado como ${papel}`,
+    hablar: 'Hablar',
+    nivelMicro: 'Nivel de micro',
+    vozLista: 'Voz lista',
+    vozConectando: 'Conectando voz…',
   },
 
   calendario: {

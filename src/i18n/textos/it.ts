@@ -356,6 +356,10 @@ const it: Textos = {
     esperandoTiempos: "L'assistente non ha ancora registrato giri.",
     sala: (c: string) => `Sala ${c}`,
     conectadoComo: (papel: string) => 'Connesso come ' + papel,
+    hablar: 'Parla',
+    nivelMicro: 'Livello micro',
+    vozLista: 'Voce pronta',
+    vozConectando: 'Connessione voce…',
   },
 
   calendario: {

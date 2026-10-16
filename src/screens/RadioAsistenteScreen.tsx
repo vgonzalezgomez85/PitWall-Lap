@@ -9,6 +9,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useIdioma } from '../i18n/IdiomaContext';
 import { useRadio } from '../radio/RadioContext';
+import { AudioRemoto } from '../radio/AudioRemoto';
+import { MedidorNivel } from '../radio/MedidorNivel';
+import { useVozRadio } from '../radio/useVozRadio';
 import { fmtTime } from '../voice/speak';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
@@ -24,6 +27,7 @@ export default function RadioAsistenteScreen({ navigation }: Props) {
     codigo, nombre, participantes, vueltas, mejor, tandaIniciada,
     conectado, salir, pulsarVuelta, deshacerVuelta, terminarTanda,
   } = useRadio();
+  const { nivel, hablando, fijarMicro, listo, pistas } = useVozRadio();
 
   // Al salir de la pantalla (gesto atrás, swipe), dejamos la sala libre.
   const salirRef = useRef(salir);
@@ -73,6 +77,23 @@ export default function RadioAsistenteScreen({ navigation }: Props) {
         )}
       </Pressable>
 
+      {/* Voz: walkie (pulsar-para-hablar) + medidor de nivel. */}
+      <Card style={styles.vozCard}>
+        <Text style={type.label}>{t.radio.nivelMicro}</Text>
+        <Text style={styles.vozEstado}>{listo ? t.radio.vozLista : t.radio.vozConectando}</Text>
+        <MedidorNivel nivel={nivel} />
+        <Pressable
+          onPressIn={() => fijarMicro(true)}
+          onPressOut={() => fijarMicro(false)}
+          style={({ pressed }) => [
+            styles.walkie,
+            (pressed || hablando) && styles.walkieActivo,
+          ]}
+        >
+          <Text style={styles.walkieTexto}>{t.radio.hablar}</Text>
+        </Pressable>
+      </Card>
+
       {/* Tiempos. */}
       <Card>
         <View style={styles.statsRow}>
@@ -120,6 +141,9 @@ export default function RadioAsistenteScreen({ navigation }: Props) {
       </Card>
 
       <Button label={t.radio.salir} variant="danger" onPress={confirmarSalir} style={styles.salir} />
+
+      {/* Reproduce la voz entrante del piloto (RTCView invisible). */}
+      <AudioRemoto pistas={pistas} />
     </ScrollView>
   );
 }
@@ -152,6 +176,20 @@ const styles = StyleSheet.create({
   vueltaSub: { color: colors.onAccent, opacity: 0.85, fontSize: 13, marginTop: 4 },
 
   statsRow: { flexDirection: 'row', gap: spacing.md },
+
+  vozCard: { marginTop: spacing.lg },
+  vozEstado: { ...type.body, color: colors.textMuted, marginTop: 2 },
+  walkie: {
+    marginTop: spacing.md, paddingVertical: 18, borderRadius: radius.md,
+    backgroundColor: colors.surfaceRaised, alignItems: 'center',
+    borderWidth: 1, borderColor: colors.border,
+  },
+  walkieActivo: {
+    backgroundColor: colors.accentFill, borderColor: colors.accentFill,
+  },
+  walkieTexto: {
+    color: colors.onAccent, fontSize: 18, fontWeight: '700',
+  },
 
   acciones: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   flex: { flex: 1 },

@@ -356,6 +356,10 @@ const fr: Textos = {
     esperandoTiempos: "L'assistant n'a pas encore enregistré de tours.",
     sala: (c: string) => `Salle ${c}`,
     conectadoComo: (papel: string) => 'Connecté en tant que ' + papel,
+    hablar: 'Parler',
+    nivelMicro: 'Niveau micro',
+    vozLista: 'Voix prête',
+    vozConectando: 'Connexion de la voix…',
   },
 
   calendario: {

@@ -12,7 +12,10 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useDataSource } from '../data/sourceContext';
 import { useIdioma } from '../i18n/IdiomaContext';
 import { useRadio } from '../radio/RadioContext';
+import { AudioRemoto } from '../radio/AudioRemoto';
+import { MedidorNivel } from '../radio/MedidorNivel';
 import { useAsistenteSource } from '../radio/useAsistenteSource';
+import { useVozRadio } from '../radio/useVozRadio';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Stat from '../ui/Stat';
@@ -31,6 +34,7 @@ export default function RadioPilotoScreen({ navigation }: Props) {
   // Fuente de tiempos + locución (voz en cada vuelta).
   useAsistenteSource(nombre);
   useVoice();
+  const { nivel, pistas } = useVozRadio();
 
   // Al salir de la pantalla (gesto atrás, swipe), dejamos la sala libre.
   const salirRef = useRef(salir);
@@ -84,6 +88,12 @@ export default function RadioPilotoScreen({ navigation }: Props) {
         )}
       </Card>
 
+      {/* Micro abierto: medidor para calibrar la puerta de voz. */}
+      <Card style={styles.microCard}>
+        <Text style={type.label}>{t.radio.nivelMicro}</Text>
+        <MedidorNivel nivel={nivel} />
+      </Card>
+
       {/* Conectados. */}
       <Card>
         <Text style={type.label}>{t.radio.conectados}</Text>
@@ -102,6 +112,9 @@ export default function RadioPilotoScreen({ navigation }: Props) {
       </Card>
 
       <Button label={t.radio.salir} variant="danger" onPress={confirmarSalir} style={styles.salir} />
+
+      {/* Reproduce la voz del asistente (RTCView invisible). */}
+      <AudioRemoto pistas={pistas} />
     </ScrollView>
   );
 }
@@ -120,6 +133,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs, marginBottom: spacing.lg, fontVariant: ['tabular-nums'],
   },
   statsRow: { flexDirection: 'row', gap: spacing.md },
+
+  microCard: { marginTop: spacing.lg },
 
   nadie: { ...type.body, color: colors.textMuted, marginTop: spacing.sm },
   participante: {

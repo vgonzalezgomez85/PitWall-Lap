@@ -356,6 +356,10 @@ const en: Textos = {
     esperandoTiempos: 'The assistant has not recorded any laps yet.',
     sala: (c: string) => `Room ${c}`,
     conectadoComo: (papel: string) => 'Connected as ' + papel,
+    hablar: 'Talk',
+    nivelMicro: 'Mic level',
+    vozLista: 'Voice ready',
+    vozConectando: 'Connecting voice…',
   },
 
   calendario: {

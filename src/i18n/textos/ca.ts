@@ -356,6 +356,10 @@ const ca: Textos = {
     esperandoTiempos: "L'assistent encara no ha registrat voltes.",
     sala: (c: string) => `Sala ${c}`,
     conectadoComo: (papel: string) => 'Connectat com a ' + papel,
+    hablar: 'Parla',
+    nivelMicro: 'Nivell de micro',
+    vozLista: 'Veu llesta',
+    vozConectando: 'Connectant la veu…',
   },
 
   calendario: {

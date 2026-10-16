@@ -18,7 +18,7 @@ import {
 import { emitirMensajeRadio } from './bus';
 import { generarCodigo } from './codigo';
 import { crearCronometro, type Vuelta } from './cronometro';
-import type { MensajeRadio, MotivoRechazo, Participante, Rol } from './mensajes';
+import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol } from './mensajes';
 import { crearClienteRadio, crearServidorRadio } from './protocolo';
 import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta } from './red';
 import { crearTransporteTcp } from './tcp';
@@ -58,6 +58,16 @@ interface RadioContextValue {
 
   /** Suscripción a los mensajes de datos entrantes (para las pantallas). */
   onMensaje: (cb: (m: MensajeRadio) => void) => () => void;
+
+  // Señalización WebRTC (voz, Fase 2).
+  /** Nuestro id en la sala: `asistente` en el asistente, `p1`/`p2`… en el resto. */
+  tuId: string;
+  /** Recibe la señalización entrante. `de` es el id del emisor. */
+  onSenalizacion: (cb: (de: string, sig: MensajeSenalizacion) => void) => () => void;
+  /** Envía señalización al asistente (lado participante). */
+  enviarSenalizacion: (sig: MensajeSenalizacion) => void;
+  /** Envía señalización a un participante concreto (lado asistente). */
+  enviarSenalizacionA: (destinoId: string, sig: MensajeSenalizacion) => void;
 }
 
 const Context = createContext<RadioContextValue | null>(null);
@@ -75,6 +85,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
 
   const [vueltas, setVueltas] = useState<Vuelta[]>([]);
   const [tandaIniciada, setTandaIniciada] = useState(false);
+  const [tuId, setTuId] = useState('');
 
   // Recursos vivos de la conexión actual (se cierran al salir o al crear otra).
   const servidorRef = useRef<ReturnType<typeof crearServidorRadio> | null>(null);
@@ -87,6 +98,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
 
   const cronometro = useMemo(() => crearCronometro(), []);
   const oyentesRef = useRef<Set<(m: MensajeRadio) => void>>(new Set());
+  const oyentesSenalizacionRef = useRef<Set<(de: string, sig: MensajeSenalizacion) => void>>(new Set());
 
   /** Cierra todo lo abierto y deja el estado como al empezar (sin error). */
   const limpiar = useCallback(() => {
@@ -109,6 +121,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setParticipantes([]);
     setVueltas([]);
     setTandaIniciada(false);
+    setTuId('');
   }, [cronometro]);
 
   /** Mensaje de datos entrante: lo publica en el bus y actualiza el estado. */
@@ -133,6 +146,21 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     return () => { oyentesRef.current.delete(cb); };
   }, []);
 
+  const onSenalizacion = useCallback((cb: (de: string, sig: MensajeSenalizacion) => void) => {
+    oyentesSenalizacionRef.current.add(cb);
+    return () => { oyentesSenalizacionRef.current.delete(cb); };
+  }, []);
+
+  const enviarSenalizacion = useCallback((sig: MensajeSenalizacion) => {
+    // Lado participante: el mensaje ya lleva `de` = nuestro id.
+    clienteRef.current?.enviarSenalizacion(sig);
+  }, []);
+
+  const enviarSenalizacionA = useCallback((destinoId: string, sig: MensajeSenalizacion) => {
+    // Lado asistente: unicast al participante concreto.
+    servidorRef.current?.enviarSenalizacion(destinoId, sig);
+  }, []);
+
   const crearSala = useCallback(async (nombreAsistente: string) => {
     limpiar();
     const codigoNuevo = generarCodigo();
@@ -143,12 +171,16 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     servidorRef.current = servidor;
     anuncioRef.current = publicarSala(codigoNuevo);
     offDatosRef.current = servidor.onMensaje(alMensaje);
+    servidor.onSenalizacion((de, sig) => {
+      for (const cb of [...oyentesSenalizacionRef.current]) cb(de, sig);
+    });
     setRol('asistente');
     setNombre(nombreAsistente);
     setCodigo(codigoNuevo);
     setParticipantes([]);
     setVueltas([]);
     setTandaIniciada(false);
+    setTuId('asistente');
     setError(null);
     setConectado(true);
   }, [limpiar, alMensaje]);
@@ -174,6 +206,9 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     transporteRef.current = transporte;
     clienteRef.current = cliente;
     offDatosRef.current = cliente.onMensaje(alMensaje);
+    cliente.onSenalizacion((sig) => {
+      for (const cb of [...oyentesSenalizacionRef.current]) cb('asistente', sig);
+    });
     offCierreRef.current = cliente.onCerrar(() => {
       // Se perdió la conexión con el asistente (zona WiFi caída, etc.).
       limpiar();
@@ -183,6 +218,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setNombre(nombreParticipante);
     setCodigo(sala.codigo);
     setParticipantes(resultado.lista);
+    setTuId(resultado.tuId);
     setError(null);
     setConectado(true);
     return null;
@@ -276,11 +312,13 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
     pulsarVuelta, deshacerVuelta, terminarTanda,
     onMensaje,
+    tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
   }), [
     rol, conectado, codigo, nombre, participantes, error,
     salas, descubriendo, vueltas, mejor, tandaIniciada,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
     pulsarVuelta, deshacerVuelta, terminarTanda, onMensaje,
+    tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
   ]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
