@@ -366,6 +366,14 @@ const eu: Textos = {
     salaViva: 'Gela bizirik',
     pistaCronometrando: 'Pistak kronometratzen ari da',
     irAPista: 'Joan pistaren ikuspegira',
+    tuIp: (ip: string) => `Zure IPa: ${ip}`,
+    tuIpTexto: 'Gela aurkitzen ez badute, sar daitezela IP honekin eta kodearekin. Zure iPhonea WiFi gunea bada, erabili 172.20.10.1.',
+    entrarConIp: 'Sartu IParekin',
+    entrarConIpTexto: 'Ez da gela agertzen? Eskatu laguntzaileari bere IPa (kodearen azpian dago) eta idatzi kodearekin.',
+    ipPh: 'Laguntzailearen IPa',
+    codigoPh: 'Kodea',
+    usarSala: 'Erabili gela hau',
+    datosManualesNoValidos: 'Egiaztatu IPa (adib. 192.168.1.34) eta 6 karaktereko kodea.',
   },
 
   calendario: {

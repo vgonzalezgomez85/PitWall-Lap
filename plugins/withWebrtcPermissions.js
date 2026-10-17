@@ -17,10 +17,25 @@ const PERMISOS = [
   { nombre: 'android.permission.BLUETOOTH_ADMIN', maxSdkVersion: '30' },
 ];
 
+const PERMISOS_MICRO = ['android.permission.RECORD_AUDIO'];
+
 module.exports = function withWebrtcPermissions(config) {
   return withAndroidManifest(config, (cfg) => {
     const manifest = cfg.modResults.manifest;
-    const usos = (manifest['uses-permission'] = manifest['uses-permission'] || []);
+    // Algún plugin del prebuild deja RECORD_AUDIO marcado con
+    // tools:node="remove": el APK salía SIN permiso de micrófono, getUserMedia
+    // fallaba en Android y la voz de Radio se quedaba en «Conectando voz…» en
+    // los dos móviles (sin micro no hay oferta WebRTC). Se quita la marca y se
+    // declara el permiso de forma normal.
+    manifest['uses-permission'] = (manifest['uses-permission'] || []).filter(
+      (p) => !(p.$?.['android:name'] === 'android.permission.RECORD_AUDIO' && p.$?.['tools:node'] === 'remove'),
+    );
+    PERMISOS_MICRO.forEach((nombre) => {
+      if (!manifest['uses-permission'].some((p) => p.$?.['android:name'] === nombre)) {
+        manifest['uses-permission'].push({ $: { 'android:name': nombre } });
+      }
+    });
+    const usos = manifest['uses-permission'];
     const presentes = new Set(usos.map((p) => p.$?.['android:name']));
 
     for (const p of PERMISOS) {

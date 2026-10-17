@@ -364,6 +364,14 @@ const it: Textos = {
     salaViva: 'Stanza viva',
     pistaCronometrando: 'La pista sta cronometrando',
     irAPista: 'Vai alla vista pista',
+    tuIp: (ip: string) => `Il tuo IP: ${ip}`,
+    tuIpTexto: "Se non trovano la stanza, possono entrare con questo IP e il codice. Se il tuo iPhone è l'hotspot, usa 172.20.10.1.",
+    entrarConIp: 'Entra con IP',
+    entrarConIpTexto: "La stanza non compare? Chiedi all'assistente il suo IP (sotto il codice) e scrivilo insieme al codice.",
+    ipPh: "IP dell'assistente",
+    codigoPh: 'Codice',
+    usarSala: 'Usa questa stanza',
+    datosManualesNoValidos: "Controlla l'IP (es. 192.168.1.34) e il codice di 6 caratteri.",
   },
 
   calendario: {

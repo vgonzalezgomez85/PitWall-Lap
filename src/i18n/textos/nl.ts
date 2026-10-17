@@ -364,6 +364,14 @@ const nl: Textos = {
     salaViva: 'Sessie actief',
     pistaCronometrando: 'De baan telt de tijd',
     irAPista: 'Naar baanweergave',
+    tuIp: (ip: string) => `Jouw IP: ${ip}`,
+    tuIpTexto: 'Vinden ze de kamer niet, dan kunnen ze met dit IP en de code binnenkomen. Is je iPhone de hotspot, gebruik dan 172.20.10.1.',
+    entrarConIp: 'Verbinden via IP',
+    entrarConIpTexto: 'Verschijnt de kamer niet? Vraag de assistent om zijn IP (onder de code) en typ het samen met de code.',
+    ipPh: 'IP van de assistent',
+    codigoPh: 'Code',
+    usarSala: 'Deze kamer gebruiken',
+    datosManualesNoValidos: 'Controleer het IP (bijv. 192.168.1.34) en de code van 6 tekens.',
   },
 
   calendario: {

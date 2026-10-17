@@ -224,6 +224,15 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     }
   }, [limpiar, esHub, ejecutarPulso, ejecutarDeshacer, ejecutarTerminar]);
 
+  // El servidor/cliente se suscriben UNA vez (al crear o unirse), pero
+  // `alMensaje` cambia con `esHub`, `tandaIniciada`… Se suscribe este puente
+  // estable, que llama siempre a la versión actual. Antes se registraba
+  // `alMensaje` directamente y quedaba congelado con `esHub = false` (se crea
+  // antes de `setTuId`): el hub ignoraba los pulsos del asistente remoto.
+  const alMensajeRef = useRef(alMensaje);
+  alMensajeRef.current = alMensaje;
+  const alMensajeActual = useCallback((m: MensajeRadio) => alMensajeRef.current(m), []);
+
   const onMensaje = useCallback((cb: (m: MensajeRadio) => void) => {
     oyentesRef.current.add(cb);
     return () => { oyentesRef.current.delete(cb); };
@@ -262,7 +271,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     transporteRef.current = transporte;
     servidorRef.current = servidor;
     anuncioRef.current = publicarSala(codigoNuevo);
-    offDatosRef.current = servidor.onMensaje(alMensaje);
+    offDatosRef.current = servidor.onMensaje(alMensajeActual);
     servidor.onSenalizacion((de, sig) => {
       for (const cb of [...oyentesSenalizacionRef.current]) cb(de, sig);
     });
@@ -273,7 +282,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setTuId(ID_ASISTENTE);
     setError(null);
     setConectado(true);
-  }, [limpiar, alMensaje]);
+  }, [limpiar, alMensajeActual]);
 
   const unirse = useCallback(async (
     sala: SalaDescubierta,
@@ -309,7 +318,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     }
     transporteRef.current = transporte;
     clienteRef.current = cliente;
-    offDatosRef.current = cliente.onMensaje(alMensaje);
+    offDatosRef.current = cliente.onMensaje(alMensajeActual);
     cliente.onSenalizacion((sig) => {
       for (const cb of [...oyentesSenalizacionRef.current]) cb('asistente', sig);
     });
@@ -325,7 +334,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setError(null);
     setConectado(true);
     return null;
-  }, [limpiar, alMensaje]);
+  }, [limpiar, alMensajeActual]);
 
   const salir = useCallback(() => {
     limpiar();

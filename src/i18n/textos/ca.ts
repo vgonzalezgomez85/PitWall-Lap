@@ -364,6 +364,14 @@ const ca: Textos = {
     salaViva: 'Sala viva',
     pistaCronometrando: 'La pista està cronometrant',
     irAPista: 'Ves a la vista de pista',
+    tuIp: (ip: string) => `La teva IP: ${ip}`,
+    tuIpTexto: 'Si no troben la sala, que hi entrin amb aquesta IP i el codi. Si el teu iPhone és la zona WiFi, fes servir 172.20.10.1.',
+    entrarConIp: 'Entrar amb IP',
+    entrarConIpTexto: "No apareix la sala? Demana a l'assistent la seva IP (surt sota el codi) i escriu-la amb el codi.",
+    ipPh: "IP de l'assistent",
+    codigoPh: 'Codi',
+    usarSala: 'Fer servir aquesta sala',
+    datosManualesNoValidos: 'Revisa la IP (p. ex. 192.168.1.34) i el codi de 6 caràcters.',
   },
 
   calendario: {

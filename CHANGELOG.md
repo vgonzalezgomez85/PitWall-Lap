@@ -18,6 +18,15 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.15.7] — 2026-10-17
+
+### Añadido
+- **Radio: entrar en una sala por IP.** El asistente ve su IP bajo el código de la sala, y en «Unirse» hay un bloque **«Entrar con IP»** (IP + código) para cuando la búsqueda automática no encuentra la sala, algo habitual porque el anuncio mDNS se pierde sin dar error. Con la zona WiFi de un iPhone la IP es `172.20.10.1`.
+
+### Corregido
+- **Radio: la voz no conectaba nunca con un Android («Conectando voz…» en los dos móviles).** El APK salía **sin permiso de micrófono**: el `AndroidManifest.xml` generado llevaba `RECORD_AUDIO` con `tools:node="remove"`, así que `getUserMedia` fallaba, el Android no enviaba su oferta WebRTC y el asistente esperaba para siempre. `plugins/withWebrtcPermissions.js` quita esa marca y declara el permiso.
+- **Radio: los botones «Vuelta», «Deshacer» y «Terminar» no hacían nada en un asistente remoto** (el asistente en un móvil distinto del que creó la sala). El hub recibía el `pulso`, pero el oyente de mensajes se registraba al crear la sala, antes de saber que era el hub, y se quedaba congelado con `esHub = false`: descartaba los pulsos. Ahora se suscribe un puente estable que llama siempre a la versión actual del manejador.
+
 ## [1.15.6] — 2026-10-17
 
 ### Corregido

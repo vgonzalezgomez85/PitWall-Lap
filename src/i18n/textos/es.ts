@@ -363,6 +363,14 @@ const es = {
     salaViva: 'Sala viva',
     pistaCronometrando: 'La pista está cronometrando',
     irAPista: 'Ir a la vista de pista',
+    tuIp: (ip: string) => `Tu IP: ${ip}`,
+    tuIpTexto: 'Si no encuentran la sala, que entren con esta IP y el código. Si tu iPhone es la zona WiFi, usa 172.20.10.1.',
+    entrarConIp: 'Entrar con IP',
+    entrarConIpTexto: '¿No aparece la sala? Pide al asistente su IP (sale bajo el código) y escríbela con el código.',
+    ipPh: 'IP del asistente',
+    codigoPh: 'Código',
+    usarSala: 'Usar esta sala',
+    datosManualesNoValidos: 'Revisa la IP (p. ej. 192.168.1.34) y el código de 6 caracteres.',
   },
 
   calendario: {

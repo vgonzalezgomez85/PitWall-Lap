@@ -18,6 +18,8 @@ import type { Textos } from '../i18n';
 import { useRadio } from '../radio/RadioContext';
 import type { Rol } from '../radio/mensajes';
 import type { SalaDescubierta } from '../radio/red';
+import { salaManual } from '../radio/salaManual';
+import { PUERTO_RADIO } from '../radio/tcp';
 import BackButton from '../ui/BackButton';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
@@ -59,6 +61,19 @@ export default function RadioScreen({ navigation }: Props) {
   useEffect(() => {
     return () => { detenerBusqueda(); };
   }, [detenerBusqueda]);
+
+  const [ipManual, setIpManual] = useState('');
+  const [codigoManual, setCodigoManual] = useState('');
+
+  function usarSalaManual() {
+    const sala = salaManual(ipManual, codigoManual, PUERTO_RADIO);
+    if (!sala) {
+      Alert.alert(t.comun.error, t.radio.datosManualesNoValidos);
+      return;
+    }
+    setSalaElegida(sala);
+    setPapel(null);
+  }
 
   const puedeEntrar = !!nombre.trim() && !!papel && !!salaElegida && !ocupado;
   const puedeCrear = !!nombre.trim() && !ocupado;
@@ -185,6 +200,41 @@ export default function RadioScreen({ navigation }: Props) {
             );
           })}
 
+          {/* Entrada manual: si la búsqueda no encuentra la sala. */}
+          <View style={styles.manual}>
+            <Text style={type.label}>{t.radio.entrarConIp}</Text>
+            <Text style={styles.manualTexto}>{t.radio.entrarConIpTexto}</Text>
+            <View style={styles.manualFila}>
+              <TextInput
+                style={[styles.input, styles.manualIp]}
+                value={ipManual}
+                onChangeText={setIpManual}
+                placeholder={t.radio.ipPh}
+                placeholderTextColor={colors.textFaint}
+                keyboardType="numbers-and-punctuation"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TextInput
+                style={[styles.input, styles.manualCodigo]}
+                value={codigoManual}
+                onChangeText={setCodigoManual}
+                placeholder={t.radio.codigoPh}
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={7}
+              />
+            </View>
+            <Button
+              label={t.radio.usarSala}
+              variant="outline"
+              onPress={usarSalaManual}
+              disabled={!ipManual.trim() || !codigoManual.trim()}
+              style={styles.mt}
+            />
+          </View>
+
           {/* Papel dentro de la sala elegida. */}
           {!!salaElegida && (
             <View style={styles.papel}>
@@ -274,6 +324,15 @@ const styles = StyleSheet.create({
   salaNombre: { color: colors.text, fontSize: 16, fontWeight: '700' },
   salaCodigo: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   salaHost: { color: colors.textFaint, fontSize: 11, marginTop: 2, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }) },
+
+  manual: {
+    marginTop: spacing.xl, paddingTop: spacing.lg,
+    borderTopWidth: 1, borderTopColor: colors.borderSoft,
+  },
+  manualTexto: { color: colors.textFaint, fontSize: 13, marginTop: spacing.xs, lineHeight: 18 },
+  manualFila: { flexDirection: 'row', gap: spacing.sm },
+  manualIp: { flex: 3 },
+  manualCodigo: { flex: 2 },
 
   papel: { marginTop: spacing.lg },
   papelLabel: { marginBottom: spacing.sm },

@@ -364,6 +364,14 @@ const fr: Textos = {
     salaViva: 'Salle en direct',
     pistaCronometrando: 'La piste chronomètre',
     irAPista: 'Voir la vue piste',
+    tuIp: (ip: string) => `Ton IP : ${ip}`,
+    tuIpTexto: "S'ils ne trouvent pas la salle, ils peuvent entrer avec cette IP et le code. Si ton iPhone est le point d'accès, utilise 172.20.10.1.",
+    entrarConIp: "Entrer avec l'IP",
+    entrarConIpTexto: "La salle n'apparaît pas ? Demande à l'assistant son IP (affichée sous le code) et saisis-la avec le code.",
+    ipPh: "IP de l'assistant",
+    codigoPh: 'Code',
+    usarSala: 'Utiliser cette salle',
+    datosManualesNoValidos: "Vérifie l'IP (ex. 192.168.1.34) et le code à 6 caractères.",
   },
 
   calendario: {

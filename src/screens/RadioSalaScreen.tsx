@@ -7,9 +7,10 @@
 // salir hacia atrás solo navega y NO la deshace; únicamente el botón «Salir» (o
 // que el hub cierre la sala / se pierda la conexión) la libera.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Network from 'expo-network';
 
 import { useDataSource } from '../data/sourceContext';
 import { esFuentePista } from '../data/types';
@@ -56,6 +57,18 @@ export default function RadioSalaScreen({ navigation }: Props) {
 
   const esAsistente = rol === 'asistente';
 
+  // IP del hub en la red, para que entren a mano si la búsqueda no encuentra
+  // la sala (el anuncio mDNS se pierde a menudo sin dar error).
+  const [miIp, setMiIp] = useState('');
+  useEffect(() => {
+    if (!esHub) return;
+    let vivo = true;
+    Network.getIpAddressAsync()
+      .then(ip => { if (vivo && ip && ip !== '0.0.0.0') setMiIp(ip); })
+      .catch(() => { /* sin IP: solo se enseña el código */ });
+    return () => { vivo = false; };
+  }, [esHub]);
+
   // Estado de la tanda, coherente para el hub (cronómetro local) y para un
   // asistente remoto (lo ve reflejado en la fuente Asistente).
   const enMarcha = esHub ? tandaIniciada : state.status === 'my-turn';
@@ -91,6 +104,12 @@ export default function RadioSalaScreen({ navigation }: Props) {
         <Card style={styles.codigoCard}>
           <Text style={type.label}>{t.radio.comparteCodigo}</Text>
           <Text style={styles.codigo} numberOfLines={1} adjustsFontSizeToFit>{codigo}</Text>
+          {!!miIp && (
+            <>
+              <Text style={styles.ip}>{t.radio.tuIp(miIp)}</Text>
+              <Text style={styles.ipTexto}>{t.radio.tuIpTexto}</Text>
+            </>
+          )}
         </Card>
       )}
 
@@ -246,6 +265,12 @@ const styles = StyleSheet.create({
     color: colors.text, fontSize: 40, fontWeight: '800', letterSpacing: 3,
     marginTop: spacing.sm, fontVariant: ['tabular-nums'],
   },
+
+  ip: {
+    color: colors.textSoft, fontSize: 16, fontWeight: '700', marginTop: spacing.md,
+    fontVariant: ['tabular-nums'],
+  },
+  ipTexto: { color: colors.textFaint, fontSize: 12, marginTop: 2, textAlign: 'center' },
 
   rolCard: { marginTop: spacing.lg },
   roles: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },

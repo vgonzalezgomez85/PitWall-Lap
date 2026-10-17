@@ -364,6 +364,14 @@ const en: Textos = {
     salaViva: 'Live room',
     pistaCronometrando: 'The track is timing',
     irAPista: 'Go to track view',
+    tuIp: (ip: string) => `Your IP: ${ip}`,
+    tuIpTexto: "If they can't find the room, they can join with this IP and the code. If your iPhone is the hotspot, use 172.20.10.1.",
+    entrarConIp: 'Join by IP',
+    entrarConIpTexto: 'Room not showing up? Ask the assistant for their IP (shown under the code) and type it with the code.',
+    ipPh: "Assistant's IP",
+    codigoPh: 'Code',
+    usarSala: 'Use this room',
+    datosManualesNoValidos: 'Check the IP (e.g. 192.168.1.34) and the 6-character code.',
   },
 
   calendario: {
