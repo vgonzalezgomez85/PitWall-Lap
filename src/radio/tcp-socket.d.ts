@@ -9,7 +9,9 @@ declare module 'react-native-tcp-socket' {
     write(data: string | Uint8Array): void;
     end(): void;
     destroy(): void;
-    on(event: 'data', cb: (data: Uint8Array) => void): this;
+    /** Con 'utf8', el evento 'data' entrega strings en vez de bytes. */
+    setEncoding(encoding: 'utf8'): this;
+    on(event: 'data', cb: (data: string | Uint8Array) => void): this;
     on(event: 'close', cb: () => void): this;
     on(event: 'error', cb: (err: Error) => void): this;
     on(event: string, cb: (...args: unknown[]) => void): this;

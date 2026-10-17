@@ -16,21 +16,18 @@ export const PUERTO_RADIO = 7080;
 /** Tiempo máximo para establecer la conexión TCP antes de rendirse. */
 const CONEXION_TIMEOUT_MS = 8000;
 
-/** Convierte un fragmento de bytes en su texto UTF-8. */
-function aTexto(data: Uint8Array): string {
-  try {
-    return Buffer.from(data).toString('utf8');
-  } catch {
-    return '';
-  }
-}
-
 /**
  * Envuelve un socket TCP en un `Canal`, partiendo el flujo en líneas JSON.
  * Los fragmentos pueden llegar a trozos: se acumulan en `pendiente` y se
  * procesan solo las líneas completas.
+ *
+ * El socket entrega el texto ya decodificado (`setEncoding('utf8')`). No
+ * convertimos bytes con `Buffer`: en Hermes no es un global, y antes
+ * `Buffer.from` fallaba en silencio y cada mensaje llegaba vacío (el asistente
+ * aceptaba la conexión pero nunca veía el `unirse`).
  */
-function crearCanalTcp(socket: import('react-native-tcp-socket').TcpSocket): Canal {
+export function crearCanalTcp(socket: import('react-native-tcp-socket').TcpSocket): Canal {
+  socket.setEncoding('utf8');
   let pendiente = '';
   const oyentesMensaje = new Set<(t: string) => void>();
   const oyentesCierre = new Set<() => void>();
@@ -50,7 +47,9 @@ function crearCanalTcp(socket: import('react-native-tcp-socket').TcpSocket): Can
     for (const cb of [...oyentesCierre]) cb();
   };
 
-  socket.on('data', (data) => emitirMensajes(aTexto(data)));
+  socket.on('data', (data) => {
+    if (typeof data === 'string') emitirMensajes(data);
+  });
   socket.on('close', emitirCierre);
   socket.on('error', emitirCierre);
 

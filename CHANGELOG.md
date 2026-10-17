@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.15.5] — 2026-10-17
+
+### Corregido
+- **Radio: el participante no podía entrar en la sala (p. ej. Android uniéndose a un iPhone).** El canal TCP convertía los bytes recibidos con `Buffer`, que en Hermes no es un global: la conversión fallaba en silencio y **cada mensaje llegaba vacío**, así que el asistente nunca veía el `unirse` y el participante acababa en «timeout esperando la respuesta de la sala». Ahora el socket entrega texto UTF-8 (`setEncoding('utf8')`) y hay test del canal (`src/radio/tcp.test.ts`).
+
 ## [1.15.4] — 2026-10-17
 
 ### Corregido
