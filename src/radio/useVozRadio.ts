@@ -2,20 +2,22 @@
 // señalización ya enrutada por `RadioContext` (onSenalizacion/enviarSenalizacion),
 // gestiona:
 //
-//   • Asistente (hub, D6): un peer respondedor por participante, con su micro
-//     compartido entre todos (walkie PTT = mute global).
-//   • Piloto: un peer oferente hacia el asistente, micro abierto.
-//   • Seguidor: un peer oferente hacia el asistente, solo escucha.
+//   • Hub (quien creó la sala, D6): un peer respondedor por participante, con su
+//     micro compartido entre todos. Su papel solo cambia el modo de micro
+//     (walkie PTT, micro abierto o silencio), nunca la topología.
+//   • Piloto/asistente remotos: un peer oferente hacia el hub. Piloto con el
+//     micro abierto; asistente remoto con walkie (PTT); seguidor solo escucha.
 //
-// Devuelve los flujos remotos (para montar el `RTCView` que los reproduce), el
-// nivel de audio actual (medidor para calibrar la puerta de voz) y el control
-// PTT del asistente. No re-encodifica: el reenvío piloto→seguidor se aplaza.
+// La topología (respondedor vs oferente) depende de si somos el hub; el micro
+// depende de si el rol necesita enviar voz. Se separan en dos efectos para que
+// cambiar de rol en el hub no tumbe los peers. Devuelve los flujos remotos (para
+// montar el `RTCView` que los reproduce), el nivel de audio (medidor) y el
+// control PTT. No re-encodifica: el reenvío piloto→seguidor se aplaza.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MediaStream } from 'react-native-webrtc';
 
-import { useRadio } from './RadioContext';
-import type { MensajeSenalizacion } from './mensajes';
+import type { MensajeSenalizacion, Rol } from './mensajes';
 import { activarAudioVoz, restaurarAudio } from './audioSesion';
 import { crearPar, obtenerMicro, soltarMicro, type ParVoz } from './voz';
 
@@ -24,30 +26,49 @@ export interface EstadoVozRadio {
   pistas: MediaStream[];
   /** Nivel de audio actual (0..1), máximo de todos los pares. */
   nivel: number;
-  /** ¿Está enviando el micro ahora? (PTT del asistente; piloto siempre sí). */
+  /** ¿Está enviando el micro ahora? (micro abierto en piloto; PTT en asistente). */
   hablando: boolean;
-  /** Asistente: pulsar-para-hablar. En el resto de roles no hace nada. */
+  /** Asistente: pulsar-para-hablar. En el resto de roles solo activa/desactiva. */
   fijarMicro(activo: boolean): void;
   /** ¿Micro obtenido y al menos un peer levantado? */
   listo: boolean;
 }
 
+/** Configuración que `RadioContext` entrega al motor de voz. */
+export interface ConfigVozRadio {
+  rol: Rol | null;
+  tuId: string;
+  esHub: boolean;
+  onSenalizacion: (cb: (de: string, sig: MensajeSenalizacion) => void) => () => void;
+  enviarSenalizacion: (sig: MensajeSenalizacion) => void;
+  enviarSenalizacionA: (destinoId: string, sig: MensajeSenalizacion) => void;
+}
+
 /** Cuántas veces por segundo se refresca el medidor de nivel. */
 const MUESTREO_MS = 400;
 
-export function useVozRadio(): EstadoVozRadio {
-  const {
-    rol, tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
-  } = useRadio();
+/**
+ * Motor de voz parametrizado. Vive en el `RadioProvider` (no en las pantallas)
+ * para que la voz siga viva al salir hacia atrás de la sala; las pantallas leen
+ * el resultado vía contexto.
+ */
+export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
+  const { rol, tuId, esHub, onSenalizacion, enviarSenalizacion, enviarSenalizacionA } = config;
 
   const [pistas, setPistas] = useState<MediaStream[]>([]);
   const [nivel, setNivel] = useState(0);
-  const [hablando, setHablando] = useState(rol === 'piloto');
+  const [hablando, setHablando] = useState(false);
   const [listo, setListo] = useState(false);
 
   const microRef = useRef<MediaStream | null>(null);
   const paresRef = useRef<Map<string, ParVoz>>(new Map());
-  const hablandoRef = useRef(rol === 'piloto');
+  const hablandoRef = useRef(false);
+  const rolRef = useRef(rol);
+  rolRef.current = rol;
+
+  // El hub siempre tiene micro (compartido); el remoto lo necesita salvo que sea
+  // seguidor (solo escucha).
+  const necesitaMicro = esHub || (rol != null && rol !== 'seguidor');
 
   const cerrarTodo = useCallback(() => {
     for (const par of paresRef.current.values()) par.cerrar();
@@ -59,16 +80,24 @@ export function useVozRadio(): EstadoVozRadio {
     setNivel(0);
   }, []);
 
-  // ── Ciclo de vida principal (arranca al entrar en sala y cambia de rol) ──
+  /** Aplica el modo de micro del rol actual (micro abierto solo en piloto). */
+  const aplicarModoMicro = useCallback(() => {
+    const activo = rolRef.current === 'piloto';
+    const pista = microRef.current?.getAudioTracks()[0];
+    if (pista) pista.enabled = activo;
+    hablandoRef.current = activo;
+    setHablando(activo);
+  }, []);
+
+  // ── Topología: arranca al entrar en sala y si cambia quiénes somos ──
   useEffect(() => {
-    if (!rol) return;
+    if (!tuId) return;
     cerrarTodo();
     void activarAudioVoz();
 
-    const esAsistente = rol === 'asistente';
     let desechado = false;
     const flujosRemotos = new Set<MediaStream>();
-    // Ofertas que llegan antes de tener el micro listo (asistente): se guardan.
+    // Ofertas que llegan antes de tener el micro listo (hub): se guardan.
     const ofertasPendientes: { de: string; sig: MensajeSenalizacion }[] = [];
 
     const publicarPistas = () => {
@@ -85,14 +114,14 @@ export function useVozRadio(): EstadoVozRadio {
               modo === 'oferente'
                 ? { tipo: 'oferta', de: tuId || id, sdp }
                 : { tipo: 'respuesta', de: 'asistente', sdp };
-            if (esAsistente) enviarSenalizacionA(id, sig);
+            if (esHub) enviarSenalizacionA(id, sig);
             else enviarSenalizacion(sig);
           },
           onCandidato(candidate) {
             const sig: MensajeSenalizacion = {
-              tipo: 'candidato', de: esAsistente ? 'asistente' : tuId, candidate,
+              tipo: 'candidato', de: esHub ? 'asistente' : tuId, candidate,
             };
-            if (esAsistente) enviarSenalizacionA(id, sig);
+            if (esHub) enviarSenalizacionA(id, sig);
             else enviarSenalizacion(sig);
           },
           onPistaRemota(flujo) {
@@ -111,7 +140,7 @@ export function useVozRadio(): EstadoVozRadio {
 
     // Suscripción a la señalización entrante (se cancela al desmontar).
     const offSenal = onSenalizacion((de, sig) => {
-      if (esAsistente) {
+      if (esHub) {
         if (sig.tipo === 'oferta') {
           // Si el micro aún no está listo, guardamos la oferta y la procesamos
           // al terminar `obtenerMicro()`.
@@ -130,26 +159,26 @@ export function useVozRadio(): EstadoVozRadio {
       }
     });
 
-    // Arranque según el rol.
+    // Arranque según la topología (hub respondedor / remoto oferente).
     (async () => {
       try {
-        if (esAsistente) {
-          // El asistente adquiere el micro una vez y lo comparte entre peers.
+        if (esHub) {
+          // El hub adquiere el micro una vez y lo comparte entre peers.
           microRef.current = await obtenerMicro();
           // Procesa las ofertas que llegaron mientras esperábamos el permiso.
           for (const { de, sig } of ofertasPendientes.splice(0)) {
             const par = paresRef.current.get(de) ?? hacerPar(de, microRef.current, 'respondedor');
             await par.recibir(sig);
           }
+          aplicarModoMicro();
         } else {
-          const micro = rol === 'piloto' ? await obtenerMicro() : null;
-          if (rol === 'piloto') {
+          const micro = necesitaMicro ? await obtenerMicro() : null;
+          if (necesitaMicro) {
             microRef.current = micro;
-            hablandoRef.current = true;
-            if (!desechado) setHablando(true);
           }
           const par = hacerPar('asistente', micro, 'oferente');
           await par.iniciar();
+          if (necesitaMicro) aplicarModoMicro();
         }
       } catch {
         // Permiso de micro denegado o similar: la voz queda sin micro.
@@ -176,7 +205,16 @@ export function useVozRadio(): EstadoVozRadio {
       cerrarTodo();
       void restaurarAudio();
     };
-  }, [rol, tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA, cerrarTodo]);
+  }, [
+    tuId, esHub, necesitaMicro, onSenalizacion, enviarSenalizacion,
+    enviarSenalizacionA, cerrarTodo, aplicarModoMicro,
+  ]);
+
+  // ── Modo de micro: cambia con el rol sin tumbar los peers ──
+  useEffect(() => {
+    if (!tuId) return;
+    aplicarModoMicro();
+  }, [rol, tuId, aplicarModoMicro]);
 
   const fijarMicro = useCallback((activo: boolean) => {
     hablandoRef.current = activo;

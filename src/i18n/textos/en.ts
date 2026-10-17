@@ -360,6 +360,9 @@ const en: Textos = {
     nivelMicro: 'Mic level',
     vozLista: 'Voice ready',
     vozConectando: 'Connecting voice…',
+    salaViva: 'Live room',
+    pistaCronometrando: 'The track is timing',
+    irAPista: 'Go to track view',
   },
 
   calendario: {

@@ -1,7 +1,9 @@
 import {
+  cambiarRolSala,
   crearSala,
   decidirUnion,
   eliminarParticipante,
+  ID_ASISTENTE,
   MAX_SEGUIDORES,
   registrarParticipante,
 } from './sala';
@@ -26,16 +28,19 @@ describe('reglas de sala de Radio', () => {
     expect(r).toEqual({ ok: false, motivo: 'rol-ocupado' });
   });
 
-  it('reserva el papel de asistente (solo el móvil que crea la sala)', () => {
-    // Aunque la sala esté vacía, nadie puede entrar como asistente.
-    const r = decidirUnion(sala, { id: 'a', nombre: 'A', rol: 'asistente', codigo: 'K7M-4QX' });
-    expect(r).toEqual({ ok: false, motivo: 'rol-ocupado' });
-  });
+  it('el papel de asistente queda libre si el hub no lo ocupa', () => {
+    // El hub se registra como participante con rol 'asistente'; si cambia a
+    // otro papel, un remoto puede tomar el de asistente.
+    const hub = registrarParticipante(sala, { id: ID_ASISTENTE, nombre: 'Hub', rol: 'asistente' });
+    const ocupado = decidirUnion(hub, { id: 'b', nombre: 'Bea', rol: 'asistente', codigo: 'K7M-4QX' });
+    expect(ocupado).toEqual({ ok: false, motivo: 'rol-ocupado' });
 
-  it('no deja entrar a un segundo asistente', () => {
-    const conAsist = registrarParticipante(sala, { id: 'a', nombre: 'A', rol: 'asistente' });
-    const r = decidirUnion(conAsist, { id: 'b', nombre: 'B', rol: 'asistente', codigo: 'K7M-4QX' });
-    expect(r).toEqual({ ok: false, motivo: 'rol-ocupado' });
+    const hubComoPiloto = cambiarRolSala(hub, ID_ASISTENTE, 'piloto');
+    expect(hubComoPiloto.ok).toBe(true);
+    if (hubComoPiloto.ok) {
+      const libre = decidirUnion(hubComoPiloto.sala, { id: 'b', nombre: 'Bea', rol: 'asistente', codigo: 'K7M-4QX' });
+      expect(libre.ok).toBe(true);
+    }
   });
 
   it('limita el número de seguidores', () => {
@@ -50,5 +55,45 @@ describe('reglas de sala de Radio', () => {
   it('elimina un participante por id', () => {
     const s = registrarParticipante(sala, { id: 'p', nombre: 'Ana', rol: 'piloto' });
     expect(eliminarParticipante(s, 'p').participantes).toEqual([]);
+  });
+});
+
+describe('cambiarRolSala', () => {
+  const conHub = registrarParticipante(sala, { id: ID_ASISTENTE, nombre: 'Hub', rol: 'asistente' });
+
+  it('cambia el rol de un participante', () => {
+    const r = cambiarRolSala(conHub, ID_ASISTENTE, 'piloto');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.sala.participantes).toEqual([
+        { id: ID_ASISTENTE, nombre: 'Hub', rol: 'piloto' },
+      ]);
+    }
+  });
+
+  it('no cambia si el rol destino ya está ocupado por otro', () => {
+    const conPiloto = registrarParticipante(conHub, { id: 'p1', nombre: 'Ana', rol: 'piloto' });
+    const r = cambiarRolSala(conPiloto, ID_ASISTENTE, 'piloto');
+    expect(r).toEqual({ ok: false, motivo: 'rol-ocupado' });
+  });
+
+  it('mantiene la sala si se pide el mismo rol que ya tiene', () => {
+    const r = cambiarRolSala(conHub, ID_ASISTENTE, 'asistente');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.sala).toBe(conHub);
+  });
+
+  it('rechaza un id desconocido', () => {
+    const r = cambiarRolSala(conHub, 'nadie', 'piloto');
+    expect(r).toEqual({ ok: false, motivo: 'codigo' });
+  });
+
+  it('permite pasarse a seguidor aunque el rol piloto esté ocupado', () => {
+    const conPiloto = registrarParticipante(conHub, { id: 'p1', nombre: 'Ana', rol: 'piloto' });
+    const r = cambiarRolSala(conPiloto, ID_ASISTENTE, 'seguidor');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.sala.participantes.find(p => p.id === ID_ASISTENTE)!.rol).toBe('seguidor');
+    }
   });
 });

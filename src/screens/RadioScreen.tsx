@@ -49,11 +49,8 @@ export default function RadioScreen({ navigation }: Props) {
 
   // Si ya estamos dentro de una sala (volvimos sin salir), vamos a su pantalla.
   useEffect(() => {
-    if (!radio.conectado) return;
-    if (radio.rol === 'asistente') navigation.replace('RadioAsistente');
-    else if (radio.rol === 'piloto') navigation.replace('RadioPiloto');
-    else navigation.replace('RadioSeguidor');
-  }, [radio.conectado, radio.rol, navigation]);
+    if (radio.conectado) navigation.replace('RadioSala');
+  }, [radio.conectado, navigation]);
 
   // Al desmontar la pantalla, paramos la búsqueda mDNS si sigue activa.
   // `detenerBusqueda` es estable; no queremos re-ejecutar esto en cada render.

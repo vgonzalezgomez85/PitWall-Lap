@@ -360,6 +360,9 @@ const pt: Textos = {
     nivelMicro: 'Nível do micro',
     vozLista: 'Voz pronta',
     vozConectando: 'A ligar a voz…',
+    salaViva: 'Sala ao vivo',
+    pistaCronometrando: 'A pista está a cronometrar',
+    irAPista: 'Ir para a vista da pista',
   },
 
   calendario: {

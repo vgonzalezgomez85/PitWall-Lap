@@ -10,7 +10,7 @@
 
 import { deserializar, deserializarSenalizacion, serializar, serializarSenalizacion } from './mensajes';
 import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol } from './mensajes';
-import { decidirUnion, eliminarParticipante, listaDeParticipantes, registrarParticipante, crearSala, type EstadoSala } from './sala';
+import { cambiarRolSala, decidirUnion, eliminarParticipante, ID_ASISTENTE, listaDeParticipantes, registrarParticipante, crearSala, type EstadoSala } from './sala';
 import type { Canal, TransporteRadio } from './transporte';
 
 export interface ResultadoUnionCliente {
@@ -21,16 +21,20 @@ export interface ResultadoUnionCliente {
 }
 
 export interface ServidorRadio {
-  /** Empieza a escuchar. `onParticipantes` avisa cada vez que cambia la sala. */
+  /** Empieza a escuchar y registra el hub como participante (`ID_ASISTENTE`).
+   *  `onParticipantes` avisa cada vez que cambia la sala. */
   iniciar(
     transporte: TransporteRadio,
     codigo: string,
+    hub: { nombre: string },
     onParticipantes: (lista: Participante[]) => void,
   ): Promise<void>;
   /** Envía un mensaje de datos a todos los participantes. */
   enviarATodos(m: MensajeRadio): void;
-  /** Recibe los mensajes de datos que manda un participante (p. ej. `estado`).
-   *  Devuelve la función de cancelación. */
+  /** Cambia el rol del hub (id `ID_ASISTENTE`). Devuelve si se aplicó. */
+  cambiarRol(id: string, rol: Rol): boolean;
+  /** Recibe los mensajes de datos que manda un participante (p. ej. `estado`,
+   *  `pulso`). Devuelve la función de cancelación. */
   onMensaje(cb: (m: MensajeRadio) => void): () => void;
   /** Recibe la señalización WebRTC (oferta/respuesta/candidato) de un
    *  participante. `de` es el id del participante emisor. Devuelve la
@@ -73,14 +77,37 @@ export function crearServidorRadio(
   };
 
   const alMensajeDeDatos = (de: string, m: MensajeRadio) => {
-    // El asistente reenvía lo que manda un participante a todos (p. ej. el
-    // `estado` de habla del piloto). El emisor lo recibe también: su propio
-    // estado es correcto y simplifica la coordinación de voz.
-    for (const canal of canales.values()) {
-      try { canal.enviar(serializar(m)); } catch { /* canal roto: se cierra solo */ }
+    switch (m.tipo) {
+      // Cambio de rol: lo consume el servidor (valida + actualiza la sala y
+      // difunde `participantes`). No se reenvía el comando crudo.
+      case 'cambiarRol': {
+        const r = cambiarRolSala(sala, de, m.rol);
+        if (r.ok) {
+          sala = r.sala;
+          notificar();
+        }
+        return;
+      }
+      // Comandos de cronómetro del asistente remoto: se entregan solo al hub
+      // (que es quien tiene el cronómetro) y no se reenvían a los demás; el hub
+      // difunde el resultado (`inicio`/`vuelta`/`deshacer`/`fin`).
+      case 'pulso':
+      case 'deshacerPulso':
+      case 'terminarPulso': {
+        const emisor = sala.participantes.find(p => p.id === de);
+        if (emisor?.rol !== 'asistente') return;
+        for (const cb of [...oyentesDatos]) cb(m);
+        return;
+      }
+      default: {
+        // El resto (p. ej. el `estado` de habla del piloto) se reenvía a todos.
+        for (const canal of canales.values()) {
+          try { canal.enviar(serializar(m)); } catch { /* canal roto: se cierra solo */ }
+        }
+        // Y el asistente también lo recibe (para la coordinación locución ↔ voz).
+        for (const cb of [...oyentesDatos]) cb(m);
+      }
     }
-    // Y el asistente también lo recibe (para la coordinación locución ↔ voz).
-    for (const cb of [...oyentesDatos]) cb(m);
   };
 
   const presentar = (canal: Canal) => {
@@ -142,16 +169,30 @@ export function crearServidorRadio(
   };
 
   return {
-    async iniciar(t, codigo, cb) {
+    async iniciar(t, codigo, hub, cb) {
       transporte = t;
       onParticipantes = cb;
-      sala = crearSala(codigo);
+      // El hub (creador) entra como participante con id estable y rol asistente
+      // inicial; podrá cambiarlo después con `cambiarRol`.
+      sala = registrarParticipante(crearSala(codigo), {
+        id: ID_ASISTENTE, nombre: hub.nombre, rol: 'asistente',
+      });
+      notificar();
       await t.escuchar(presentar);
     },
     enviarATodos(m) {
       for (const canal of canales.values()) {
         try { canal.enviar(serializar(m)); } catch { /* ignore */ }
       }
+    },
+    cambiarRol(id, rol) {
+      const r = cambiarRolSala(sala, id, rol);
+      if (r.ok) {
+        sala = r.sala;
+        notificar();
+        return true;
+      }
+      return false;
     },
     onMensaje(cb) {
       oyentesDatos.add(cb);

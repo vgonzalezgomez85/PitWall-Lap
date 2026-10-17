@@ -250,7 +250,12 @@ function Row({ cells, head, total }: { cells: string[]; head?: boolean; total?: 
   return (
     <View style={[styles.row, total && styles.rowTotal]}>
       {cells.map((c, i) => (
-        <Text key={i} style={[styles.cell, i === 0 && styles.cellFirst, head && styles.cellHead, total && styles.cellTotal]}>
+        <Text
+          key={i}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          style={[styles.cell, i === 0 && styles.cellFirst, head && styles.cellHead, total && styles.cellTotal]}
+        >
           {c}
         </Text>
       ))}
@@ -279,7 +284,7 @@ const styles = StyleSheet.create({
 
   row: { flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#1f2633' },
   rowTotal: { borderBottomWidth: 0, borderTopWidth: 1, borderTopColor: '#3a4350' },
-  cell: { flex: 1, color: '#cfd5dc', fontSize: 14, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  cell: { flex: 1, minWidth: 0, color: '#cfd5dc', fontSize: 14, textAlign: 'right', fontVariant: ['tabular-nums'] },
   cellFirst: { textAlign: 'left' },
   cellHead: { color: '#9aa3ad', fontSize: 11, textTransform: 'uppercase' },
   cellTotal: { color: '#fff', fontWeight: '700' },

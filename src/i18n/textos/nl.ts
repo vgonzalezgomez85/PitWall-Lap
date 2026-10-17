@@ -360,6 +360,9 @@ const nl: Textos = {
     nivelMicro: 'Microniveau',
     vozLista: 'Stem klaar',
     vozConectando: 'Stem verbinden…',
+    salaViva: 'Sessie actief',
+    pistaCronometrando: 'De baan telt de tijd',
+    irAPista: 'Naar baanweergave',
   },
 
   calendario: {

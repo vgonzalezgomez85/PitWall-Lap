@@ -42,7 +42,16 @@ export type MensajeRadio =
   // El asistente empuja su configuración de audio (locutar tiempos sí/no).
   | { tipo: 'ajustes'; locutarTiempos: boolean }
   // La sala se ha cerrado; todos cuelgan.
-  | { tipo: 'salaCerrada' };
+  | { tipo: 'salaCerrada' }
+  // Un participante pide cambiar su propio rol (piloto/asistente/seguidor).
+  // Lo consume el servidor; el resultado llega por el broadcast `participantes`.
+  | { tipo: 'cambiarRol'; rol: Rol }
+  // El asistente remoto pulsa «Vuelta»: el hub lo convierte en `inicio`/`vuelta`.
+  | { tipo: 'pulso' }
+  // El asistente remoto deshace la última vuelta (hub lo convierte en `deshacer`).
+  | { tipo: 'deshacerPulso' }
+  // El asistente remoto termina la tanda (hub lo convierte en `fin`).
+  | { tipo: 'terminarPulso' };
 
 // ── Mensajes de señalización (sobre el socket TCP del asistente) ───────────
 
@@ -68,6 +77,10 @@ const TIPOS_MENSAJE: string[] = [
   'fin',
   'ajustes',
   'salaCerrada',
+  'cambiarRol',
+  'pulso',
+  'deshacerPulso',
+  'terminarPulso',
 ];
 
 const TIPOS_SENALIZACION: string[] = [
@@ -128,6 +141,14 @@ export function validarMensaje(v: unknown): MensajeRadio | null {
         : null;
     case 'salaCerrada':
       return { tipo: 'salaCerrada' };
+    case 'cambiarRol':
+      return esRol(o.rol) ? { tipo: 'cambiarRol', rol: o.rol } : null;
+    case 'pulso':
+      return { tipo: 'pulso' };
+    case 'deshacerPulso':
+      return { tipo: 'deshacerPulso' };
+    case 'terminarPulso':
+      return { tipo: 'terminarPulso' };
     default:
       return null;
   }

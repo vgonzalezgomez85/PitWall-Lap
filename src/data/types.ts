@@ -13,6 +13,11 @@
 
 export type SourceKind = 'pitwall' | 'infolap' | 'asistente';
 
+/** ¿Es una fuente de pista (PitWall o TicTac), en vez de la fuente asistente de Radio? */
+export function esFuentePista(kind: SourceKind | null | undefined): boolean {
+  return kind === 'pitwall' || kind === 'infolap';
+}
+
 export interface Participant {
   /** PitWall: team.id o driver.id; Infolap: el código `#001..#999`. */
   id: string;

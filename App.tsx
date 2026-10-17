@@ -36,11 +36,11 @@ import AjustesScreen from './src/screens/AjustesScreen';
 import TrainingScreen     from './src/screens/TrainingScreen';
 import StintDetailScreen  from './src/screens/StintDetailScreen';
 import RadioScreen        from './src/screens/RadioScreen';
-import RadioAsistenteScreen from './src/screens/RadioAsistenteScreen';
-import RadioPilotoScreen  from './src/screens/RadioPilotoScreen';
-import RadioSeguidorScreen from './src/screens/RadioSeguidorScreen';
+import RadioSalaScreen    from './src/screens/RadioSalaScreen';
 import { RadioProvider } from './src/radio/RadioContext';
+import { OverlayRadio } from './src/radio/OverlayRadio';
 import type { RootStackParamList } from './src/navigation';
+import { navigationRef } from './src/navigationRef';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -49,45 +49,46 @@ function AppInner() {
   // Tiene que ir DENTRO de SourceProvider para acceder al subscribe.
   useAutoSaveHistory();
   return (
-    <NavigationContainer>
-      <StatusBar style="light" />
-      <Stack.Navigator
-        initialRouteName="Home"
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#0a0d13' },
-          animation: 'slide_from_right',
-        }}
-      >
-        <Stack.Screen name="Home"          component={HomeScreen} />
-        <Stack.Screen name="Calendario"    component={CalendarioScreen} />
-        <Stack.Screen name="Evento"        component={EventoScreen} />
-        <Stack.Screen name="CarrerasWeb"   component={CarrerasWebScreen} />
-        <Stack.Screen name="ArchivoResultado" component={ArchivoResultadoScreen} />
-        <Stack.Screen name="EntrenosCompeticion" component={EntrenosCompeticionScreen} />
-        <Stack.Screen name="EntrenoCompeticion"  component={EntrenoCompeticionScreen} />
-        <Stack.Screen name="Discovery"     component={DiscoveryScreen} />
-        <Stack.Screen name="RacePicker"    component={RacePickerScreen} />
-        <Stack.Screen name="TandaPicker"   component={TandaPickerScreen} />
-        <Stack.Screen name="TrainingLanePicker" component={TrainingLanePickerScreen} />
-        <Stack.Screen name="Pole"          component={PoleScreen} />
-        <Stack.Screen name="Select"        component={SelectScreen} />
-        <Stack.Screen name="MyTurn"        component={MyTurnScreen} />
-        <Stack.Screen name="Strategy"      component={StrategyScreen} />
-        <Stack.Screen name="Tracking"      component={TrackingScreen} />
-        <Stack.Screen name="History"       component={HistoryScreen} />
-        <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
-        <Stack.Screen name="Changelog"     component={ChangelogScreen} />
-        <Stack.Screen name="Idioma"        component={IdiomaScreen} />
-        <Stack.Screen name="Ajustes"       component={AjustesScreen} />
-        <Stack.Screen name="Training"      component={TrainingScreen} />
-        <Stack.Screen name="StintDetail"   component={StintDetailScreen} />
-        <Stack.Screen name="Radio"          component={RadioScreen} />
-        <Stack.Screen name="RadioAsistente" component={RadioAsistenteScreen} />
-        <Stack.Screen name="RadioPiloto"    component={RadioPilotoScreen} />
-        <Stack.Screen name="RadioSeguidor"  component={RadioSeguidorScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <>
+      <NavigationContainer ref={navigationRef}>
+        <StatusBar style="light" />
+        <Stack.Navigator
+          initialRouteName="Home"
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: '#0a0d13' },
+            animation: 'slide_from_right',
+          }}
+        >
+          <Stack.Screen name="Home"          component={HomeScreen} />
+          <Stack.Screen name="Calendario"    component={CalendarioScreen} />
+          <Stack.Screen name="Evento"        component={EventoScreen} />
+          <Stack.Screen name="CarrerasWeb"   component={CarrerasWebScreen} />
+          <Stack.Screen name="ArchivoResultado" component={ArchivoResultadoScreen} />
+          <Stack.Screen name="EntrenosCompeticion" component={EntrenosCompeticionScreen} />
+          <Stack.Screen name="EntrenoCompeticion"  component={EntrenoCompeticionScreen} />
+          <Stack.Screen name="Discovery"     component={DiscoveryScreen} />
+          <Stack.Screen name="RacePicker"    component={RacePickerScreen} />
+          <Stack.Screen name="TandaPicker"   component={TandaPickerScreen} />
+          <Stack.Screen name="TrainingLanePicker" component={TrainingLanePickerScreen} />
+          <Stack.Screen name="Pole"          component={PoleScreen} />
+          <Stack.Screen name="Select"        component={SelectScreen} />
+          <Stack.Screen name="MyTurn"        component={MyTurnScreen} />
+          <Stack.Screen name="Strategy"      component={StrategyScreen} />
+          <Stack.Screen name="Tracking"      component={TrackingScreen} />
+          <Stack.Screen name="History"       component={HistoryScreen} />
+          <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
+          <Stack.Screen name="Changelog"     component={ChangelogScreen} />
+          <Stack.Screen name="Idioma"        component={IdiomaScreen} />
+          <Stack.Screen name="Ajustes"       component={AjustesScreen} />
+          <Stack.Screen name="Training"      component={TrainingScreen} />
+          <Stack.Screen name="StintDetail"   component={StintDetailScreen} />
+          <Stack.Screen name="Radio"          component={RadioScreen} />
+          <Stack.Screen name="RadioSala"      component={RadioSalaScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+      <OverlayRadio />
+    </>
   );
 }
 

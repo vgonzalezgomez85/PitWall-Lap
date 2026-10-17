@@ -18,6 +18,23 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.15.0] — 2026-10-17
+
+### Añadido
+- **Radio y pista conviven: «la pista manda».** Si ya hay un cronómetro conectado (**PitWall** o **TicTac**), Radio deja de instalar su cronómetro propio y queda como **solo voz**: la sala muestra **«La pista está cronometrando»** con un botón para ir a **Mi turno**, y el botón «Vuelta» del asistente solo aparece cuando no hay pista. La voz (escuchar y el walkie del asistente) sigue activa en cualquier pantalla.
+- **Chip flotante «sala viva»** visible en toda la app mientras haya una sala de Radio abierta: muestra el código y, al tocarlo, vuelve a la sala. El **asistente** tiene además un **walkie flotante (pulsar-para-hablar)** para hablar sin volver a la sala.
+- **La voz entrante ya no se corta al salir de la sala.** El `RTCView` que reproduce la voz se monta a nivel de app (`src/radio/OverlayRadio.tsx`) en vez de dentro de `RadioSalaScreen`, así se sigue oyendo al equipo desde cualquier pantalla.
+
+## [1.14.0] — 2026-10-17
+
+### Añadido
+- **Radio: cambio de rol en vivo para cualquiera de la sala.** El papel ya no se fija al entrar: cada persona (el creador incluido) puede pasar entre **piloto** (micro abierto), **asistente** (walkie + botón «Vuelta») y **seguidor** (solo escucha) desde un selector en la propia sala, con **máximo un piloto y un asistente** a la vez. El **cronómetro sigue al rol asistente**: si el asistente es un remoto, manda `pulso`/`deshacerPulso`/`terminarPulso` y el creador (que siempre aloja el reloj) difunde el resultado a todos.
+- **El creador de la sala es un participante más** (`id asistente`, rol cambiable) en la lista de conectados, y la sala se refleja igual en todos los móviles (`cambiarRol`/`participantes` en `src/radio/`).
+
+### Corregido
+- **Salir hacia atrás de la sala ya no la deshace.** Antes el gesto atrás cerraba el servidor TCP y la voz; ahora la sala (servidor + WebRTC + participantes) vive en el `RadioProvider` global y solo la cierra el botón **«Salir»** (o que el creador la cierre / se pierda la conexión). Las tres pantallas de rol se unifican en una sola `RadioSalaScreen`.
+- **Tablas de tiempos sin desbordarse en iPhone.** En `Seguimiento` (hasta 5 columnas por carril), las cifras ahora se recortan y encogen (`numberOfLines` + `adjustsFontSizeToFit`) en vez de salirse por el lateral en pantallas estrechas.
+
 ## [1.13.0] — 2026-10-16
 
 ### Añadido

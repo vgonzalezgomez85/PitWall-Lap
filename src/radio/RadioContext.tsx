@@ -5,10 +5,13 @@
 // `AsistenteSource` y (en la fase de voz) la coordinación de audio los reciban.
 //
 // Perfiles:
-//   • Asistente: crea la sala (servidor TCP + anuncio mDNS), lleva el
-//     cronómetro manual y es la fuente de verdad de las vueltas.
-//   • Piloto / Seguidor: descubren la sala, se unen por TCP y reciben los
-//     mensajes que el asistente envía a todos.
+//   • Hub (quien crea la sala): servidor TCP + anuncio mDNS, lleva el cronómetro
+//     y es la fuente de verdad de las vueltas. Es un participante más (id
+//     `asistente`) con rol cambiable: puede ser piloto, asistente o seguidor.
+//   • Piloto / Asistente / Seguidor remotos: descubren la sala, se unen por TCP y
+//     reciben los mensajes que el hub envía a todos. El rol se puede cambiar en
+//     vivo (máx. 1 piloto + 1 asistente); el cronómetro siempre vive en el hub y
+//     un asistente remoto lo gobierna con `pulso`/`deshacerPulso`/`terminarPulso`.
 
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
@@ -21,12 +24,17 @@ import { crearCronometro, type Vuelta } from './cronometro';
 import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol } from './mensajes';
 import { crearClienteRadio, crearServidorRadio } from './protocolo';
 import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta } from './red';
+import { ID_ASISTENTE } from './sala';
 import { crearTransporteTcp } from './tcp';
+import { useVozRadioMotor, type EstadoVozRadio } from './useVozRadio';
 
 interface RadioContextValue {
   // Estado de la sala.
+  /** Nuestro rol actual (derivado de la lista de participantes que manda el hub). */
   rol: Rol | null;
-  /** ¿Hay una sala activa (asistente escuchando o participante dentro)? */
+  /** ¿Somos el hub (creador de la sala)? */
+  esHub: boolean;
+  /** ¿Hay una sala activa (hub escuchando o participante dentro)? */
   conectado: boolean;
   codigo: string;
   /** Nombre con el que entramos (lo muestra la pantalla y el resto de la sala). */
@@ -39,10 +47,13 @@ interface RadioContextValue {
   salas: SalaDescubierta[];
   descubriendo: boolean;
 
-  // Cronómetro del asistente.
+  // Cronómetro (solo el hub lo ejecuta; el resto lo recibe por la red).
   vueltas: Vuelta[];
   mejor: Vuelta | null;
   tandaIniciada: boolean;
+
+  // Voz (vive en el proveedor para que sobreviva a salir hacia atrás).
+  voz: EstadoVozRadio;
 
   // Acciones.
   crearSala: (nombre: string) => Promise<void>;
@@ -51,7 +62,11 @@ interface RadioContextValue {
   buscarSalas: () => void;
   detenerBusqueda: () => void;
 
-  // Asistente: cronómetro manual.
+  // Cambio de rol en vivo (máx. 1 piloto + 1 asistente). Funciona igual en el
+  // hub y en los remotos.
+  cambiarRol: (rol: Rol) => void;
+
+  // Cronómetro manual (el hub lo ejecuta; el asistente remoto manda el comando).
   pulsarVuelta: () => void;
   deshacerVuelta: () => void;
   terminarTanda: () => void;
@@ -60,7 +75,7 @@ interface RadioContextValue {
   onMensaje: (cb: (m: MensajeRadio) => void) => () => void;
 
   // Señalización WebRTC (voz, Fase 2).
-  /** Nuestro id en la sala: `asistente` en el asistente, `p1`/`p2`… en el resto. */
+  /** Nuestro id en la sala: `asistente` en el hub, `p1`/`p2`… en el resto. */
   tuId: string;
   /** Recibe la señalización entrante. `de` es el id del emisor. */
   onSenalizacion: (cb: (de: string, sig: MensajeSenalizacion) => void) => () => void;
@@ -73,7 +88,6 @@ interface RadioContextValue {
 const Context = createContext<RadioContextValue | null>(null);
 
 export function RadioProvider({ children }: { children: ReactNode }) {
-  const [rol, setRol] = useState<Rol | null>(null);
   const [conectado, setConectado] = useState(false);
   const [codigo, setCodigo] = useState('');
   const [nombre, setNombre] = useState('');
@@ -100,6 +114,14 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   const oyentesRef = useRef<Set<(m: MensajeRadio) => void>>(new Set());
   const oyentesSenalizacionRef = useRef<Set<(de: string, sig: MensajeSenalizacion) => void>>(new Set());
 
+  // El rol se deriva de la lista de participantes que el hub difunde (fuente
+  // única de verdad): así un cambio de rol en vivo fluye solo, sin setRol manual.
+  const rol = useMemo<Rol | null>(
+    () => participantes.find(p => p.id === tuId)?.rol ?? null,
+    [participantes, tuId],
+  );
+  const esHub = tuId === ID_ASISTENTE;
+
   /** Cierra todo lo abierto y deja el estado como al empezar (sin error). */
   const limpiar = useCallback(() => {
     try { offDatosRef.current?.(); } catch { /* ignore */ }
@@ -115,7 +137,6 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     transporteRef.current = null;
     anuncioRef.current = null;
     cronometro.reiniciar();
-    setRol(null);
     setConectado(false);
     setCodigo('');
     setParticipantes([]);
@@ -123,6 +144,51 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setTandaIniciada(false);
     setTuId('');
   }, [cronometro]);
+
+  /** Difunde un resultado a los remotos (TCP) y a nuestro propio bus local
+   *  (`AsistenteSource` del hub). Así el hub muestra tiempos como los demás. */
+  const difundir = useCallback((m: MensajeRadio) => {
+    servidorRef.current?.enviarATodos(m);
+    emitirMensajeRadio(m);
+  }, []);
+
+  // ── Cronómetro (siempre en el hub) ──────────────────────────────────────
+
+  const ejecutarPulso = useCallback(() => {
+    if (!tandaIniciada) {
+      // Primer cruce: reinicia la tanda y manda «inicio» (marca el arranque).
+      cronometro.reiniciar();
+      cronometro.pulsar();
+      setTandaIniciada(true);
+      setVueltas(cronometro.vueltas());
+      difundir({ tipo: 'inicio' });
+      return;
+    }
+    const v = cronometro.pulsar();
+    if (v) {
+      difundir({ tipo: 'vuelta', n: v.n, ms: v.ms, ts: v.ts });
+      setVueltas(cronometro.vueltas());
+    }
+  }, [cronometro, tandaIniciada, difundir]);
+
+  const ejecutarDeshacer = useCallback(() => {
+    const borrada = cronometro.deshacer();
+    if (borrada) {
+      difundir({ tipo: 'deshacer', n: borrada.n });
+      setVueltas(cronometro.vueltas());
+    } else {
+      // Se deshizo el marcador de inicio: la tanda vuelve a no estar empezada.
+      setTandaIniciada(false);
+    }
+  }, [cronometro, difundir]);
+
+  const ejecutarTerminar = useCallback(() => {
+    if (tandaIniciada || cronometro.vueltas().length > 0) {
+      difundir({ tipo: 'fin' });
+    }
+    // Dejamos las vueltas visibles en pantalla; el próximo «Vuelta» reinicia.
+    setTandaIniciada(false);
+  }, [cronometro, tandaIniciada, difundir]);
 
   /** Mensaje de datos entrante: lo publica en el bus y actualiza el estado. */
   const alMensaje = useCallback((m: MensajeRadio) => {
@@ -132,14 +198,25 @@ export function RadioProvider({ children }: { children: ReactNode }) {
         setParticipantes(m.lista);
         break;
       case 'salaCerrada':
-        // El asistente cerró la sala: nos salimos limpios.
+        // El hub cerró la sala: nos salimos limpios.
         limpiar();
         setError('salaCerrada');
+        break;
+      // Comandos de un asistente remoto: el hub ejecuta el cronómetro y difunde
+      // el resultado (el protocolo ya valida que vienen del asistente).
+      case 'pulso':
+        if (esHub) ejecutarPulso();
+        break;
+      case 'deshacerPulso':
+        if (esHub) ejecutarDeshacer();
+        break;
+      case 'terminarPulso':
+        if (esHub) ejecutarTerminar();
         break;
       default:
         break;
     }
-  }, [limpiar]);
+  }, [limpiar, esHub, ejecutarPulso, ejecutarDeshacer, ejecutarTerminar]);
 
   const onMensaje = useCallback((cb: (m: MensajeRadio) => void) => {
     oyentesRef.current.add(cb);
@@ -157,16 +234,18 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const enviarSenalizacionA = useCallback((destinoId: string, sig: MensajeSenalizacion) => {
-    // Lado asistente: unicast al participante concreto.
+    // Lado hub: unicast al participante concreto.
     servidorRef.current?.enviarSenalizacion(destinoId, sig);
   }, []);
 
-  const crearSala = useCallback(async (nombreAsistente: string) => {
+  const crearSala = useCallback(async (nombreHub: string) => {
     limpiar();
     const codigoNuevo = generarCodigo();
     const transporte = crearTransporteTcp();
     const servidor = crearServidorRadio();
-    await servidor.iniciar(transporte, codigoNuevo, lista => setParticipantes(lista));
+    // `iniciar` registra el hub como participante (rol asistente inicial) y
+    // notifica a `setParticipantes` con la lista ya completa.
+    await servidor.iniciar(transporte, codigoNuevo, { nombre: nombreHub }, lista => setParticipantes(lista));
     transporteRef.current = transporte;
     servidorRef.current = servidor;
     anuncioRef.current = publicarSala(codigoNuevo);
@@ -174,13 +253,11 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     servidor.onSenalizacion((de, sig) => {
       for (const cb of [...oyentesSenalizacionRef.current]) cb(de, sig);
     });
-    setRol('asistente');
-    setNombre(nombreAsistente);
+    setNombre(nombreHub);
     setCodigo(codigoNuevo);
-    setParticipantes([]);
     setVueltas([]);
     setTandaIniciada(false);
-    setTuId('asistente');
+    setTuId(ID_ASISTENTE);
     setError(null);
     setConectado(true);
   }, [limpiar, alMensaje]);
@@ -210,11 +287,10 @@ export function RadioProvider({ children }: { children: ReactNode }) {
       for (const cb of [...oyentesSenalizacionRef.current]) cb('asistente', sig);
     });
     offCierreRef.current = cliente.onCerrar(() => {
-      // Se perdió la conexión con el asistente (zona WiFi caída, etc.).
+      // Se perdió la conexión con el hub (zona WiFi caída, etc.).
       limpiar();
       setError('sinConexion');
     });
-    setRol(rolParticipante);
     setNombre(nombreParticipante);
     setCodigo(sala.codigo);
     setParticipantes(resultado.lista);
@@ -228,6 +304,31 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     limpiar();
     setError(null);
   }, [limpiar]);
+
+  const cambiarRol = useCallback((rolNuevo: Rol) => {
+    if (esHub) {
+      servidorRef.current?.cambiarRol(ID_ASISTENTE, rolNuevo);
+    } else {
+      clienteRef.current?.enviar({ tipo: 'cambiarRol', rol: rolNuevo });
+    }
+    // El rol se actualiza solo cuando el hub difunde la nueva lista de
+    // participantes (el servidor valida el cupo y descarta lo ocupado).
+  }, [esHub]);
+
+  const pulsarVuelta = useCallback(() => {
+    if (esHub) ejecutarPulso();
+    else clienteRef.current?.enviar({ tipo: 'pulso' });
+  }, [esHub, ejecutarPulso]);
+
+  const deshacerVuelta = useCallback(() => {
+    if (esHub) ejecutarDeshacer();
+    else clienteRef.current?.enviar({ tipo: 'deshacerPulso' });
+  }, [esHub, ejecutarDeshacer]);
+
+  const terminarTanda = useCallback(() => {
+    if (esHub) ejecutarTerminar();
+    else clienteRef.current?.enviar({ tipo: 'terminarPulso' });
+  }, [esHub, ejecutarTerminar]);
 
   const buscarSalas = useCallback(() => {
     setSalas([]);
@@ -247,47 +348,6 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setDescubriendo(false);
   }, []);
 
-  // ── Cronómetro del asistente ─────────────────────────────────────────────
-
-  const pulsarVuelta = useCallback(() => {
-    if (!servidorRef.current) return;
-    if (!tandaIniciada) {
-      // Primer cruce: reinicia la tanda y manda «inicio» (marca el arranque).
-      cronometro.reiniciar();
-      cronometro.pulsar();
-      setTandaIniciada(true);
-      setVueltas(cronometro.vueltas());
-      servidorRef.current.enviarATodos({ tipo: 'inicio' });
-      return;
-    }
-    const v = cronometro.pulsar();
-    if (v) {
-      servidorRef.current.enviarATodos({ tipo: 'vuelta', n: v.n, ms: v.ms, ts: v.ts });
-      setVueltas(cronometro.vueltas());
-    }
-  }, [cronometro, tandaIniciada]);
-
-  const deshacerVuelta = useCallback(() => {
-    if (!servidorRef.current) return;
-    const borrada = cronometro.deshacer();
-    if (borrada) {
-      servidorRef.current.enviarATodos({ tipo: 'deshacer', n: borrada.n });
-      setVueltas(cronometro.vueltas());
-    } else {
-      // Se deshizo el marcador de inicio: la tanda vuelve a no estar empezada.
-      setTandaIniciada(false);
-    }
-  }, [cronometro]);
-
-  const terminarTanda = useCallback(() => {
-    if (!servidorRef.current) return;
-    if (tandaIniciada || cronometro.vueltas().length > 0) {
-      servidorRef.current.enviarATodos({ tipo: 'fin' });
-    }
-    // Dejamos las vueltas visibles en pantalla; el próximo «Vuelta» reinicia.
-    setTandaIniciada(false);
-  }, [cronometro, tandaIniciada]);
-
   // La mejor vuelta se deriva de la lista de vueltas (el cronómetro es la
   // fuente, pero su estado interno no dispara re-renders).
   const mejor = useMemo<Vuelta | null>(() => {
@@ -298,6 +358,11 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     return m;
   }, [vueltas]);
 
+  // Voz: vive aquí (no en la pantalla) para que la sala siga viva al salir atrás.
+  const voz = useVozRadioMotor({
+    rol, tuId, esHub, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
+  });
+
   // Al desmontar (cierre de la app, recarga), liberamos la red.
   const limpiarRef = useRef(limpiar);
   limpiarRef.current = limpiar;
@@ -306,17 +371,21 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<RadioContextValue>(() => ({
-    rol, conectado, codigo, nombre, participantes, error,
+    rol, esHub, conectado, codigo, nombre, participantes, error,
     salas, descubriendo,
     vueltas, mejor, tandaIniciada,
+    voz,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
+    cambiarRol,
     pulsarVuelta, deshacerVuelta, terminarTanda,
     onMensaje,
     tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
   }), [
-    rol, conectado, codigo, nombre, participantes, error,
+    rol, esHub, conectado, codigo, nombre, participantes, error,
     salas, descubriendo, vueltas, mejor, tandaIniciada,
+    voz,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
+    cambiarRol,
     pulsarVuelta, deshacerVuelta, terminarTanda, onMensaje,
     tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
   ]);

@@ -12,6 +12,11 @@ import type { MotivoRechazo, Participante, Rol } from './mensajes';
 /** Límite de seguidores: la zona WiFi de un iPhone aguanta ~5 conectados. */
 export const MAX_SEGUIDORES = 6;
 
+/** Id estable del hub (el móvil que crea la sala) dentro de la lista de
+ *  participantes. En señalización WebRTC `de: 'asistente'` ya se usaba como
+ *  identidad del hub; aquí queda como participante más, con rol cambiable. */
+export const ID_ASISTENTE = 'asistente';
+
 export interface EstadoSala {
   /** Código corto (p. ej. `K7M-4QX`), ya normalizado. */
   codigo: string;
@@ -25,10 +30,8 @@ export function crearSala(codigo: string): EstadoSala {
 
 /** ¿Ese rol ya está ocupado en la sala? (solo uno de piloto/asistente). */
 export function rolOcupado(sala: EstadoSala, rol: Rol): boolean {
-  // El asistente es siempre el móvil que crea la sala (el servidor): ningún
-  // participante remoto puede entrar con ese papel.
-  if (rol === 'asistente') return true;
-  if (rol === 'seguidor') return false; // los seguidores no tienen cupo por rol
+  // Los seguidores no tienen cupo por rol (los limita `salaLlena`).
+  if (rol === 'seguidor') return false;
   return sala.participantes.some(p => p.rol === rol);
 }
 
@@ -71,6 +74,37 @@ export function eliminarParticipante(sala: EstadoSala, id: string): EstadoSala {
   return {
     ...sala,
     participantes: sala.participantes.filter(p => p.id !== id),
+  };
+}
+
+export type ResultadoCambioRol =
+  | { ok: true; sala: EstadoSala }
+  | { ok: false; motivo: MotivoRechazo };
+
+/**
+ * Cambia el rol de un participante (el hub o un remoto) respetando los cupos:
+ * un solo piloto y un solo asistente; los seguidores se limitan por
+ * `MAX_SEGUIDORES`. No muta la sala.
+ */
+export function cambiarRolSala(sala: EstadoSala, id: string, rol: Rol): ResultadoCambioRol {
+  const participante = sala.participantes.find(p => p.id === id);
+  if (!participante) return { ok: false, motivo: 'codigo' };
+  if (participante.rol === rol) return { ok: true, sala };
+
+  if (rol !== 'seguidor') {
+    const ocupado = sala.participantes.some(p => p.id !== id && p.rol === rol);
+    if (ocupado) return { ok: false, motivo: 'rol-ocupado' };
+  } else {
+    const seguidores = sala.participantes.filter(p => p.id !== id && p.rol === 'seguidor').length;
+    if (seguidores >= MAX_SEGUIDORES) return { ok: false, motivo: 'sala-llena' };
+  }
+
+  return {
+    ok: true,
+    sala: {
+      ...sala,
+      participantes: sala.participantes.map(p => (p.id === id ? { ...p, rol } : p)),
+    },
   };
 }
 

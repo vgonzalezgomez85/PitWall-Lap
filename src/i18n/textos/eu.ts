@@ -362,6 +362,9 @@ const eu: Textos = {
     nivelMicro: 'Mikro maila',
     vozLista: 'Ahotsa prest',
     vozConectando: 'Ahotsa konektatzen…',
+    salaViva: 'Gela bizirik',
+    pistaCronometrando: 'Pistak kronometratzen ari da',
+    irAPista: 'Joan pistaren ikuspegira',
   },
 
   calendario: {

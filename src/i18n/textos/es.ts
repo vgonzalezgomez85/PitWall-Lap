@@ -359,6 +359,9 @@ const es = {
     nivelMicro: 'Nivel de micro',
     vozLista: 'Voz lista',
     vozConectando: 'Conectando voz…',
+    salaViva: 'Sala viva',
+    pistaCronometrando: 'La pista está cronometrando',
+    irAPista: 'Ir a la vista de pista',
   },
 
   calendario: {

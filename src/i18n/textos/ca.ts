@@ -360,6 +360,9 @@ const ca: Textos = {
     nivelMicro: 'Nivell de micro',
     vozLista: 'Veu llesta',
     vozConectando: 'Connectant la veu…',
+    salaViva: 'Sala viva',
+    pistaCronometrando: 'La pista està cronometrant',
+    irAPista: 'Ves a la vista de pista',
   },
 
   calendario: {

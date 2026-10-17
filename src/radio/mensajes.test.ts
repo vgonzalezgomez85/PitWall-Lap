@@ -19,6 +19,11 @@ describe('mensajes de datos', () => {
     { tipo: 'fin' },
     { tipo: 'ajustes', locutarTiempos: false },
     { tipo: 'salaCerrada' },
+    { tipo: 'cambiarRol', rol: 'piloto' },
+    { tipo: 'cambiarRol', rol: 'asistente' },
+    { tipo: 'pulso' },
+    { tipo: 'deshacerPulso' },
+    { tipo: 'terminarPulso' },
   ];
 
   it('serializa y deserializa sin pérdida', () => {
@@ -41,6 +46,8 @@ describe('mensajes de datos', () => {
       validarMensaje({ tipo: 'participantes', lista: [{ id: 1, nombre: 2 }] }),
     ).toBeNull();
     expect(validarMensaje({ tipo: 'ajustes', locutarTiempos: 'no' })).toBeNull();
+    expect(validarMensaje({ tipo: 'cambiarRol', rol: 'entrenador' })).toBeNull();
+    expect(validarMensaje({ tipo: 'cambiarRol' })).toBeNull();
     expect(validarMensaje({ tipo: 'desconocido' })).toBeNull();
     expect(validarMensaje({})).toBeNull();
     expect(validarMensaje('vuelta')).toBeNull();
