@@ -20,7 +20,10 @@ import {
 } from 'react-native-webrtc';
 
 import type { MensajeSenalizacion } from './mensajes';
-import { deserializarCandidato, extraerNivelAudio, serializarCandidato } from './vozPura';
+import {
+  crearColaSenales, deserializarCandidato, extraerNivelAudio, serializarCandidato,
+  type CandidatoIce,
+} from './vozPura';
 
 export { deserializarCandidato, extraerNivelAudio, serializarCandidato } from './vozPura';
 export type { CandidatoIce } from './vozPura';
@@ -128,6 +131,20 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
     }
   };
 
+  const cola = crearColaSenales<CandidatoIce>({
+    async aplicarDescripcion({ tipo, sdp }) {
+      if (tipo === 'oferta') {
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
+        await crearYEnviarDescripcion();
+      } else {
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp }));
+      }
+    },
+    async aplicarCandidato(c) {
+      await pc.addIceCandidate(c);
+    },
+  });
+
   return {
     async iniciar() {
       if (modo !== 'oferente') return;
@@ -135,17 +152,14 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
     },
 
     async recibir(sig) {
-      try {
-        if (sig.tipo === 'oferta' && modo === 'respondedor') {
-          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sig.sdp }));
-          await crearYEnviarDescripcion();
-        } else if (sig.tipo === 'respuesta' && modo === 'oferente') {
-          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: sig.sdp }));
-        } else if (sig.tipo === 'candidato') {
-          const c = deserializarCandidato(sig.candidate);
-          if (c) await pc.addIceCandidate(c);
-        }
-      } catch { /* señal duplicada o peer cerrado: se ignora */ }
+      if (sig.tipo === 'oferta' && modo === 'respondedor') {
+        await cola.descripcion('oferta', sig.sdp);
+      } else if (sig.tipo === 'respuesta' && modo === 'oferente') {
+        await cola.descripcion('respuesta', sig.sdp);
+      } else if (sig.tipo === 'candidato') {
+        const c = deserializarCandidato(sig.candidate);
+        if (c) await cola.candidato(c);
+      }
     },
 
     fijarMicro(activo) {

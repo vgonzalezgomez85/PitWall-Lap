@@ -97,8 +97,10 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
 
     let desechado = false;
     const flujosRemotos = new Set<MediaStream>();
-    // Ofertas que llegan antes de tener el micro listo (hub): se guardan.
-    const ofertasPendientes: { de: string; sig: MensajeSenalizacion }[] = [];
+    // Señales (oferta y sus candidatos) que llegan al hub antes de tener el
+    // micro listo: se guardan en orden y se procesan al obtenerlo. Antes solo
+    // se guardaban las ofertas y los candidatos de esa ráfaga se perdían.
+    const senalesPendientes: { de: string; sig: MensajeSenalizacion }[] = [];
 
     const publicarPistas = () => {
       if (!desechado) setPistas([...flujosRemotos]);
@@ -141,18 +143,15 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     // Suscripción a la señalización entrante (se cancela al desmontar).
     const offSenal = onSenalizacion((de, sig) => {
       if (esHub) {
-        if (sig.tipo === 'oferta') {
-          // Si el micro aún no está listo, guardamos la oferta y la procesamos
-          // al terminar `obtenerMicro()`.
-          if (!microRef.current) {
-            ofertasPendientes.push({ de, sig });
-            return;
-          }
-          const par = paresRef.current.get(de) ?? hacerPar(de, microRef.current, 'respondedor');
-          void par.recibir(sig);
-        } else {
-          void paresRef.current.get(de)?.recibir(sig);
+        // Sin micro todavía (o con señales anteriores en espera): a la cola,
+        // para no adelantar un candidato a su oferta.
+        if (!microRef.current || senalesPendientes.length > 0) {
+          senalesPendientes.push({ de, sig });
+          return;
         }
+        const par = paresRef.current.get(de)
+          ?? (sig.tipo === 'oferta' ? hacerPar(de, microRef.current, 'respondedor') : undefined);
+        void par?.recibir(sig);
       } else if (de === 'asistente') {
         const par = [...paresRef.current.values()][0];
         void par?.recibir(sig);
@@ -165,10 +164,12 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
         if (esHub) {
           // El hub adquiere el micro una vez y lo comparte entre peers.
           microRef.current = await obtenerMicro();
-          // Procesa las ofertas que llegaron mientras esperábamos el permiso.
-          for (const { de, sig } of ofertasPendientes.splice(0)) {
-            const par = paresRef.current.get(de) ?? hacerPar(de, microRef.current, 'respondedor');
-            await par.recibir(sig);
+          // Procesa, en orden, lo que llegó mientras esperábamos el permiso.
+          while (senalesPendientes.length > 0) {
+            const { de, sig } = senalesPendientes.shift()!;
+            const par = paresRef.current.get(de)
+              ?? (sig.tipo === 'oferta' ? hacerPar(de, microRef.current, 'respondedor') : undefined);
+            await par?.recibir(sig);
           }
           aplicarModoMicro();
         } else {

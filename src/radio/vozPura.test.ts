@@ -1,4 +1,5 @@
 import {
+  crearColaSenales,
   deserializarCandidato,
   extraerNivelAudio,
   serializarCandidato,
@@ -35,5 +36,52 @@ describe('vozPura (sin react-native-webrtc)', () => {
       { type: 'inbound-rtp' }, // sin audioLevel: se ignora
     ])).toBe(0.55);
     expect(extraerNivelAudio([{ type: 'track', audioLevel: -1 }])).toBe(0);
+  });
+});
+
+describe('crearColaSenales', () => {
+  it('guarda los candidatos que llegan antes de la descripción y los aplica después', async () => {
+    const pasos: string[] = [];
+    let terminarDescripcion!: () => void;
+    const cola = crearColaSenales<string>({
+      aplicarDescripcion: (d) => new Promise<void>((resolve) => {
+        pasos.push(`descripcion:${d.tipo}`);
+        terminarDescripcion = resolve;
+      }),
+      aplicarCandidato: async (c) => { pasos.push(`candidato:${c}`); },
+    });
+
+    // Ráfaga típica: oferta y candidatos seguidos, sin esperar.
+    void cola.descripcion('oferta', 'sdp');
+    void cola.candidato('a');
+    const fin = cola.candidato('b');
+    await Promise.resolve();
+    expect(pasos).toEqual(['descripcion:oferta']);
+
+    terminarDescripcion();
+    await fin;
+    expect(pasos).toEqual(['descripcion:oferta', 'candidato:a', 'candidato:b']);
+  });
+
+  it('candidatos previos a cualquier descripción esperan a la respuesta', async () => {
+    const pasos: string[] = [];
+    const cola = crearColaSenales<string>({
+      aplicarDescripcion: async (d) => { pasos.push(`descripcion:${d.tipo}`); },
+      aplicarCandidato: async (c) => { pasos.push(`candidato:${c}`); },
+    });
+    void cola.candidato('x');
+    await cola.descripcion('respuesta', 'sdp');
+    expect(pasos).toEqual(['descripcion:respuesta', 'candidato:x']);
+  });
+
+  it('un fallo al aplicar una señal no bloquea las siguientes', async () => {
+    const pasos: string[] = [];
+    const cola = crearColaSenales<string>({
+      aplicarDescripcion: async () => { throw new Error('sdp inválido'); },
+      aplicarCandidato: async (c) => { pasos.push(c); },
+    });
+    void cola.descripcion('oferta', 'malo');
+    await cola.candidato('tras-fallo');
+    expect(pasos).toEqual([]); // sin descripción remota sigue guardado
   });
 });

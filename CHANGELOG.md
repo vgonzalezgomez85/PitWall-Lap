@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.15.6] — 2026-10-17
+
+### Corregido
+- **Radio: la voz se quedaba en «Conectando voz…» y no llegaba audio.** Los candidatos ICE (las direcciones con las que los dos móviles se encuentran) llegan en ráfaga justo detrás de la oferta/respuesta, y se aplicaban antes de que WebRTC terminara de fijar la descripción remota: se rechazaban en silencio y la conexión de audio nunca se establecía. En el asistente, además, los candidatos que llegaban mientras se pedía el permiso de micro se descartaban. Ahora cada peer procesa la señalización en orden y guarda los candidatos hasta tener la descripción remota (`crearColaSenales`, con tests).
+
 ## [1.15.5] — 2026-10-17
 
 ### Corregido
