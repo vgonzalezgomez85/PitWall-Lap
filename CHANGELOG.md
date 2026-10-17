@@ -18,6 +18,27 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.15.4] — 2026-10-17
+
+### Corregido
+- **El asistente (iPhone) aceptaba la conexión TCP de Radio pero no respondía al saludo `unirse`**: el participante se quedaba en «timeout esperando la respuesta de la sala» con ambos móviles en la misma WiFi. La sala escuchaba en el puerto 7080 y se anunciaba por mDNS, pero los eventos asíncronos del servidor (`connection`/`data`) no llegaban al JS: `react-native-tcp-socket` es un módulo de arquitectura antigua y, con `newArchEnabled: true`, sus eventos de sockets entrantes se pierden. Se desactiva la Nueva Arquitectura (`newArchEnabled: false`), con la que funcionan de forma nativa los módulos nativos del proyecto (`tcp-socket`, `zeroconf`, `webrtc`, `udp`, `tts`).
+- **Al compilar con `newArchEnabled: false`, el build de iOS fallaba en `fmt`.** React Native pasa a compilar `folly`/`fmt`/`glog` desde fuente, y `fmt` 11.0.2 activa una optimización `consteval` rota en el clang de Xcode 26/27 (`call to consteval function … is not a constant expression`). Se añade el config plugin `plugins/withFmtConstevalFix.js`, que fuerza `FMT_USE_CONSTEVAL 0` en el header de `fmt` tras cada `pod install`.
+
+## [1.15.3] — 2026-10-17
+
+### Mejorado
+- **Diagnóstico al fallar la entrada a una sala de Radio.** La lista de salas muestra ahora la **IP:puerto** resuelta y, si no se puede entrar, se muestra debajo del error el detalle técnico (destino, tu IP y la causa). Sirve para acotar problemas de red (permiso de red local, aislamiento de clientes, subred distinta).
+
+## [1.15.2] — 2026-10-17
+
+### Corregido
+- **En Android, una sala de Radio se encontraba pero no se podía entrar** (error «No se pudo entrar en la sala» con los dos móviles en la misma WiFi). El descubrimiento usaba la implementación por defecto de Android (`NsdManager`), poco fiable: resuelve el anuncio con el host vacío o un hostname `.local` que no resuelve. Ahora Radio usa la implementación **DNSSD** embebida, que entrega la IPv4 numérica del asistente, igual que ya hace el descubrimiento de PitWall (`src/radio/red.ts`).
+
+## [1.15.1] — 2026-10-17
+
+### Corregido
+- **Al unirse a una sala de Radio, la app ya no se queda colgada en «Entrando…».** Si el móvil no puede conectarse al asistente (permiso de **red local** sin conceder, móviles en redes distintas o un fallo de red), ahora se muestra **«No se pudo entrar en la sala…»** en vez de quedarse esperando sin fin. Se añade un **timeout** a la conexión TCP y a la respuesta del asistente (`src/radio/tcp.ts`, `src/radio/protocolo.ts`).
+
 ## [1.15.0] — 2026-10-17
 
 ### Añadido

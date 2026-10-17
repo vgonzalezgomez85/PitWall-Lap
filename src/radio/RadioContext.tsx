@@ -18,11 +18,13 @@ import {
   type ReactNode,
 } from 'react';
 
+import * as Network from 'expo-network';
+
 import { emitirMensajeRadio } from './bus';
 import { generarCodigo } from './codigo';
 import { crearCronometro, type Vuelta } from './cronometro';
 import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol } from './mensajes';
-import { crearClienteRadio, crearServidorRadio } from './protocolo';
+import { crearClienteRadio, crearServidorRadio, type ResultadoUnionCliente } from './protocolo';
 import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta } from './red';
 import { ID_ASISTENTE } from './sala';
 import { crearTransporteTcp } from './tcp';
@@ -42,6 +44,8 @@ interface RadioContextValue {
   participantes: Participante[];
   /** Último error (rechazo al unirse, sala cerrada…). null = sin error. */
   error: string | null;
+  /** Detalle técnico del último fallo al unirse (host y causa), para depurar. */
+  diagnostico: string | null;
 
   // Descubrimiento (participante).
   salas: SalaDescubierta[];
@@ -57,7 +61,7 @@ interface RadioContextValue {
 
   // Acciones.
   crearSala: (nombre: string) => Promise<void>;
-  unirse: (sala: SalaDescubierta, rol: Rol, nombre: string) => Promise<MotivoRechazo | null>;
+  unirse: (sala: SalaDescubierta, rol: Rol, nombre: string) => Promise<MotivoRechazo | 'entradaFallida' | null>;
   salir: () => void;
   buscarSalas: () => void;
   detenerBusqueda: () => void;
@@ -93,6 +97,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   const [nombre, setNombre] = useState('');
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [diagnostico, setDiagnostico] = useState<string | null>(null);
 
   const [salas, setSalas] = useState<SalaDescubierta[]>([]);
   const [descubriendo, setDescubriendo] = useState(false);
@@ -143,6 +148,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setVueltas([]);
     setTandaIniciada(false);
     setTuId('');
+    setDiagnostico(null);
   }, [cronometro]);
 
   /** Difunde un resultado a los remotos (TCP) y a nuestro propio bus local
@@ -245,7 +251,14 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     const servidor = crearServidorRadio();
     // `iniciar` registra el hub como participante (rol asistente inicial) y
     // notifica a `setParticipantes` con la lista ya completa.
-    await servidor.iniciar(transporte, codigoNuevo, { nombre: nombreHub }, lista => setParticipantes(lista));
+    try {
+      await servidor.iniciar(transporte, codigoNuevo, { nombre: nombreHub }, lista => setParticipantes(lista));
+    } catch (e) {
+      // No se pudo abrir el servidor TCP (puerto ocupado, permiso de red…):
+      // liberamos lo abierto y dejamos que la UI muestre el error.
+      try { servidor.cerrar(); } catch { /* ignore */ }
+      throw e;
+    }
     transporteRef.current = transporte;
     servidorRef.current = servidor;
     anuncioRef.current = publicarSala(codigoNuevo);
@@ -270,11 +283,25 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     limpiar();
     const transporte = crearTransporteTcp();
     const cliente = crearClienteRadio();
-    const resultado = await cliente.unirse(transporte, sala.host, sala.puerto, {
-      nombre: nombreParticipante,
-      rol: rolParticipante,
-      codigo: sala.codigo,
-    });
+    let resultado: ResultadoUnionCliente;
+    try {
+      resultado = await cliente.unirse(transporte, sala.host, sala.puerto, {
+        nombre: nombreParticipante,
+        rol: rolParticipante,
+        codigo: sala.codigo,
+      });
+    } catch (e) {
+      // Conexión fallida o timeout: no hay sala a la que entrar. Guardamos el
+      // detalle (host al que íbamos y la causa) para poder depurar a distancia.
+      try { transporte.cerrar(); } catch { /* ignore */ }
+      setError('entradaFallida');
+      let miIp = '';
+      try { miIp = await Network.getIpAddressAsync(); } catch { /* ignore */ }
+      setDiagnostico(
+        `destino ${sala.host}:${sala.puerto} · mi IP ${miIp || '?'} · ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return 'entradaFallida';
+    }
     if (!resultado.ok) {
       try { transporte.cerrar(); } catch { /* ignore */ }
       setError(resultado.motivo ?? 'codigo');
@@ -371,7 +398,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<RadioContextValue>(() => ({
-    rol, esHub, conectado, codigo, nombre, participantes, error,
+    rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
     salas, descubriendo,
     vueltas, mejor, tandaIniciada,
     voz,
@@ -381,7 +408,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     onMensaje,
     tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
   }), [
-    rol, esHub, conectado, codigo, nombre, participantes, error,
+    rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
     salas, descubriendo, vueltas, mejor, tandaIniciada,
     voz,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,

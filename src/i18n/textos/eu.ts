@@ -355,6 +355,7 @@ const eu: Textos = {
     salaLlena: 'Gela beteta dago.',
     salaCerrada: 'Gela itxi da.',
     sinConexion: 'Laguntzailearekiko konexioa galdu da.',
+    entradaFallida: 'Ezin izan da gelan sartu. Egiaztatu bi mugikorrak WiFi sare berean daudela.',
     esperandoTiempos: 'Laguntzaileak oraindik ez du itzulirik erregistratu.',
     sala: (c: string) => `Gela ${c}`,
     conectadoComo: (papel: string) => ' gisa konektatuta' + papel,

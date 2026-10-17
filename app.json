@@ -2,11 +2,11 @@
   "expo": {
     "name": "PitWall Lap",
     "slug": "pitwall-lap",
-    "version": "1.15.0",
+    "version": "1.15.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -57,6 +57,7 @@
         }
       ],
       "./plugins/withScriptSandboxDisabled.js",
+      "./plugins/withFmtConstevalFix.js",
       "./plugins/withAndroidCleartextTraffic.js",
       "./plugins/withWebrtcPermissions.js",
       "./plugins/withSceneLifecycle.js",

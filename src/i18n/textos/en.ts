@@ -353,6 +353,7 @@ const en: Textos = {
     salaLlena: 'The room is full.',
     salaCerrada: 'The room has closed.',
     sinConexion: 'Connection to the assistant was lost.',
+    entradaFallida: "Couldn't join the room. Check that both phones are on the same Wi-Fi network.",
     esperandoTiempos: 'The assistant has not recorded any laps yet.',
     sala: (c: string) => `Room ${c}`,
     conectadoComo: (papel: string) => 'Connected as ' + papel,

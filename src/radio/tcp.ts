@@ -13,6 +13,9 @@ import type { Canal, TransporteRadio } from './transporte';
 /** Puerto por defecto del servidor del asistente. */
 export const PUERTO_RADIO = 7080;
 
+/** Tiempo máximo para establecer la conexión TCP antes de rendirse. */
+const CONEXION_TIMEOUT_MS = 8000;
+
 /** Convierte un fragmento de bytes en su texto UTF-8. */
 function aTexto(data: Uint8Array): string {
   try {
@@ -86,17 +89,40 @@ export function crearTransporteTcp(): TransporteRadio {
       server = TcpSocket.createServer((socket) => {
         onConexion(crearCanalTcp(socket));
       });
-      // 0.0.0.0 para aceptar conexiones por la red local (el móvil del
-      // asistente es el punto de acceso).
-      server.listen({ port: PUERTO_RADIO, host: '0.0.0.0' });
+      // Resolvemos cuando el servidor escucha de verdad, o rechazamos si no
+      // pudo abrirse (puerto ocupado, permiso de red local…). Así el creador
+      // de la sala no anuncia un servidor que en realidad no acepta conexiones.
+      await new Promise<void>((resolve, reject) => {
+        server!.once('listening', () => resolve());
+        server!.once('error', (err) => reject(err instanceof Error ? err : new Error(String(err))));
+        server!.listen({ port: PUERTO_RADIO, host: '0.0.0.0' });
+      });
     },
 
     async conectar(host, puerto) {
       return new Promise<Canal>((resolve, reject) => {
+        let asentado = false;
+        let temporizador: ReturnType<typeof setTimeout> | null = null;
+        const parar = () => { if (temporizador) clearTimeout(temporizador); };
+
         const socket = TcpSocket.createConnection({ port: puerto, host }, () => {
+          if (asentado) return;
+          asentado = true;
+          parar();
           resolve(crearCanalTcp(socket));
         });
-        socket.on('error', (err) => reject(err));
+        socket.on('error', (err) => {
+          if (asentado) return;
+          asentado = true;
+          parar();
+          reject(err);
+        });
+        temporizador = setTimeout(() => {
+          if (asentado) return;
+          asentado = true;
+          try { socket.destroy(); } catch { /* ignore */ }
+          reject(new Error('timeout de conexión TCP'));
+        }, CONEXION_TIMEOUT_MS);
       });
     },
 

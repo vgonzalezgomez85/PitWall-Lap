@@ -353,6 +353,7 @@ const nl: Textos = {
     salaLlena: 'De ruimte is vol.',
     salaCerrada: 'De ruimte is gesloten.',
     sinConexion: 'De verbinding met de assistent is verbroken.',
+    entradaFallida: 'Kan de ruimte niet binnengaan. Controleer of beide telefoons op hetzelfde wifi-netwerk zitten.',
     esperandoTiempos: 'De assistent heeft nog geen rondes opgeslagen.',
     sala: (c: string) => `Ruimte ${c}`,
     conectadoComo: (papel: string) => 'Verbonden als ' + papel,

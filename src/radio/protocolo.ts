@@ -13,6 +13,10 @@ import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Ro
 import { cambiarRolSala, decidirUnion, eliminarParticipante, ID_ASISTENTE, listaDeParticipantes, registrarParticipante, crearSala, type EstadoSala } from './sala';
 import type { Canal, TransporteRadio } from './transporte';
 
+/** Tiempo máximo que el participante espera la respuesta del asistente
+ *  (`bienvenido`/`rechazado`) tras presentarse. */
+const BIENVENIDA_TIMEOUT_MS = 8000;
+
 export interface ResultadoUnionCliente {
   ok: boolean;
   tuId: string;
@@ -285,15 +289,40 @@ export function crearClienteRadio(): ClienteRadio {
       });
       offs.push(offMensaje);
 
-      return new Promise<ResultadoUnionCliente>((resolve) => {
+      return new Promise<ResultadoUnionCliente>((resolve, reject) => {
+        let asentado = false;
+        const temporizador = setTimeout(() => {
+          if (asentado) return;
+          asentado = true;
+          try { c.cerrar(); } catch { /* ignore */ }
+          reject(new Error('timeout esperando la respuesta de la sala'));
+        }, BIENVENIDA_TIMEOUT_MS);
+
+        // Si la conexión cae durante la presentación, no hay respuesta que esperar.
+        const offCierreEntrada = c.onCerrar(() => {
+          if (asentado) return;
+          asentado = true;
+          clearTimeout(temporizador);
+          reject(new Error('conexión cerrada durante la entrada'));
+        });
+        offs.push(offCierreEntrada);
+
         const offRespuesta = c.onMensaje((texto) => {
           const sig = deserializarSenalizacion(texto);
           if (!sig) return;
           if (sig.tipo === 'bienvenido') {
-            tuId = sig.tuId;
+            if (asentado) return;
+            asentado = true;
+            clearTimeout(temporizador);
+            offCierreEntrada();
             offRespuesta();
+            tuId = sig.tuId;
             resolve({ ok: true, tuId: sig.tuId, lista: sig.lista });
           } else if (sig.tipo === 'rechazado') {
+            if (asentado) return;
+            asentado = true;
+            clearTimeout(temporizador);
+            offCierreEntrada();
             offRespuesta();
             resolve({ ok: false, tuId: '', lista: [], motivo: sig.motivo });
           }
@@ -303,6 +332,10 @@ export function crearClienteRadio(): ClienteRadio {
         try {
           c.enviar(serializarSenalizacion({ tipo: 'unirse', ...peticion }));
         } catch {
+          if (asentado) return;
+          asentado = true;
+          clearTimeout(temporizador);
+          offCierreEntrada();
           offRespuesta();
           resolve({ ok: false, tuId: '', lista: [], motivo: 'codigo' });
         }

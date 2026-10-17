@@ -353,6 +353,7 @@ const ca: Textos = {
     salaLlena: 'La sala està plena.',
     salaCerrada: "S'ha tancat la sala.",
     sinConexion: "S'ha perdut la connexió amb l'assistent.",
+    entradaFallida: "No s'ha pogut entrar a la sala. Comprova que els dos mòbils són a la mateixa xarxa WiFi.",
     esperandoTiempos: "L'assistent encara no ha registrat voltes.",
     sala: (c: string) => `Sala ${c}`,
     conectadoComo: (papel: string) => 'Connectat com a ' + papel,

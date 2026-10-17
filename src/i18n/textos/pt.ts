@@ -353,6 +353,7 @@ const pt: Textos = {
     salaLlena: 'A sala está cheia.',
     salaCerrada: 'A sala foi fechada.',
     sinConexion: 'Perdeste a ligação com o assistente.',
+    entradaFallida: 'Não foi possível entrar na sala. Verifica se os dois telemóveis estão na mesma rede Wi-Fi.',
     esperandoTiempos: 'O assistente ainda não registou voltas.',
     sala: (c: string) => `Sala ${c}`,
     conectadoComo: (papel: string) => 'Ligado como ' + papel,

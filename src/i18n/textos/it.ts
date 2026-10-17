@@ -353,6 +353,7 @@ const it: Textos = {
     salaLlena: 'La sala è piena.',
     salaCerrada: 'La sala è stata chiusa.',
     sinConexion: "Connessione con l'assistente persa.",
+    entradaFallida: "Impossibile entrare nella stanza. Controlla che i due telefoni siano sulla stessa rete Wi-Fi.",
     esperandoTiempos: "L'assistente non ha ancora registrato giri.",
     sala: (c: string) => `Sala ${c}`,
     conectadoComo: (papel: string) => 'Connesso come ' + papel,

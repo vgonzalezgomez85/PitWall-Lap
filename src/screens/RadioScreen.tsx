@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -35,6 +35,7 @@ function errorTexto(error: string | null, t: Textos): string | null {
     case 'sala-llena': return t.radio.salaLlena;
     case 'salaCerrada': return t.radio.salaCerrada;
     case 'sinConexion': return t.radio.sinConexion;
+    case 'entradaFallida': return t.radio.entradaFallida;
     default: return null;
   }
 }
@@ -76,14 +77,20 @@ export default function RadioScreen({ navigation }: Props) {
   async function entrar() {
     if (!salaElegida || !papel) return;
     setOcupado(true);
-    const motivo = await radio.unirse(salaElegida, papel, nombre.trim());
-    if (motivo) {
-      // El motivo ya está en radio.error y se muestra arriba; volvemos a dejar
-      // elegir papel sin perder lo tecleado.
+    try {
+      const motivo = await radio.unirse(salaElegida, papel, nombre.trim());
+      if (motivo) {
+        // El motivo ya está en radio.error y se muestra arriba; volvemos a dejar
+        // elegir papel sin perder lo tecleado.
+        setOcupado(false);
+        return;
+      }
+      // El estado `conectado` dispara el redirect hacia RadioPiloto/RadioSeguidor.
+    } catch {
+      // Red de seguridad: un error inesperado no debe dejar el botón
+      // colgado en «Entrando…».
       setOcupado(false);
-      return;
     }
-    // El estado `conectado` dispara el redirect hacia RadioPiloto/RadioSeguidor.
   }
 
   const err = errorTexto(radio.error, t);
@@ -101,6 +108,12 @@ export default function RadioScreen({ navigation }: Props) {
       {!!err && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{err}</Text>
+        </View>
+      )}
+
+      {!!radio.diagnostico && (
+        <View style={styles.diagBox}>
+          <Text style={styles.diagText}>{radio.diagnostico}</Text>
         </View>
       )}
 
@@ -167,6 +180,7 @@ export default function RadioScreen({ navigation }: Props) {
               >
                 <Text style={styles.salaNombre}>{sala.nombre}</Text>
                 <Text style={styles.salaCodigo}>{t.radio.sala(sala.codigo)}</Text>
+                <Text style={styles.salaHost}>{sala.host}:{sala.puerto}</Text>
               </Pressable>
             );
           })}
@@ -233,6 +247,12 @@ const styles = StyleSheet.create({
   },
   errorText: { color: colors.danger, fontSize: 14, fontWeight: '600' },
 
+  diagBox: {
+    marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.surface,
+  },
+  diagText: { color: colors.textFaint, fontSize: 12, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }) },
+
   nombre: { marginTop: spacing.xl },
   input: {
     marginTop: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.md,
@@ -253,6 +273,7 @@ const styles = StyleSheet.create({
   salaElegida: { borderColor: colors.accent },
   salaNombre: { color: colors.text, fontSize: 16, fontWeight: '700' },
   salaCodigo: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
+  salaHost: { color: colors.textFaint, fontSize: 11, marginTop: 2, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }) },
 
   papel: { marginTop: spacing.lg },
   papelLabel: { marginBottom: spacing.sm },

@@ -18,6 +18,8 @@ declare module 'react-native-tcp-socket' {
   export interface TcpServer {
     listen(opts: { port: number; host: string }, cb?: () => void): void;
     close(cb?: () => void): void;
+    on(event: 'listening' | 'error' | 'connection' | 'close', cb: (arg?: unknown) => void): this;
+    once(event: 'listening' | 'error' | 'connection' | 'close', cb: (arg?: unknown) => void): this;
   }
 
   const TcpSocket: {

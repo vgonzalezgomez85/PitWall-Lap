@@ -353,6 +353,7 @@ const es = {
     salaLlena: 'La sala está llena.',
     salaCerrada: 'La sala se ha cerrado.',
     sinConexion: 'Se perdió la conexión con el asistente.',
+    entradaFallida: 'No se pudo entrar en la sala. Comprueba que los dos móviles están en la misma red WiFi.',
     esperandoTiempos: 'El asistente aún no ha registrado vueltas.',
     conectadoComo: (papel: string) => `Conectado como ${papel}`,
     hablar: 'Hablar',
