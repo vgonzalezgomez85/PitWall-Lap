@@ -28,6 +28,8 @@ export class AsistenteSource implements DataSource {
   private active = false;
   private offBus: (() => void) | null = null;
   private startedAt = new Date();
+  /** Vuelta objetivo del asistente (ms), o null sin objetivo. */
+  private objetivoMs: number | null = null;
 
   private stateListeners: ((s: LiveState) => void)[] = [];
   private eventListeners: ((e: SourceEvent) => void)[] = [];
@@ -127,6 +129,17 @@ export class AsistenteSource implements DataSource {
           lapTimeMs: m.ms,
           lapCount: this.lapsMs.length,
         });
+        if (this.objetivoMs != null) {
+          this.emitEvent({ type: 'diferencia-objetivo', diffMs: m.ms - this.objetivoMs });
+        }
+        break;
+
+      case 'aviso':
+        this.emitEvent({ type: 'aviso-equipo', clave: m.clave });
+        break;
+
+      case 'objetivo':
+        this.objetivoMs = m.ms;
         break;
 
       case 'deshacer':

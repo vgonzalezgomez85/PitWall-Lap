@@ -12,6 +12,10 @@ describe('mensajes de datos', () => {
   const casos: MensajeRadio[] = [
     { tipo: 'vuelta', n: 3, ms: 7846, ts: 1_700_000_000_000 },
     { tipo: 'deshacer', n: 3 },
+    { tipo: 'aviso', clave: 'box' },
+    { tipo: 'aviso', clave: 'sigueAsi' },
+    { tipo: 'objetivo', ms: 7850 },
+    { tipo: 'objetivo', ms: null },
     { tipo: 'estado', hablando: 'piloto' },
     { tipo: 'estado', hablando: null },
     { tipo: 'participantes', lista: [{ id: 'a', nombre: 'Ana', rol: 'piloto' }] },
@@ -88,5 +92,13 @@ describe('mensajes de señalización', () => {
       validarSenalizacion({ tipo: 'unirse', nombre: 'A', rol: 'entrenador', codigo: 'X' }),
     ).toBeNull();
     expect(validarSenalizacion({ tipo: 'bienvenido', tuId: 'a' })).toBeNull();
+  });
+});
+
+describe('avisos y objetivo', () => {
+  it('rechaza claves de aviso desconocidas y objetivos absurdos', () => {
+    expect(deserializar('{"tipo":"aviso","clave":"bandera"}')).toBeNull();
+    expect(deserializar('{"tipo":"objetivo","ms":-5}')).toBeNull();
+    expect(deserializar('{"tipo":"objetivo","ms":"7.8"}')).toBeNull();
   });
 });

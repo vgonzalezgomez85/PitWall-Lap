@@ -64,6 +64,20 @@ export function decidirUnion(sala: EstadoSala, p: PeticionUnion): ResultadoUnion
   return { ok: true, participante: { id: p.id, nombre: p.nombre, rol: p.rol } };
 }
 
+/**
+ * Reconexión: si entra alguien con el mismo nombre y papel (piloto/asistente)
+ * que un participante remoto que sigue en la sala, es él mismo volviendo tras
+ * perder la conexión y el asistente aún no se ha enterado de que se cayó. Se
+ * devuelve el id de esa conexión vieja para descartarla; si no, `null`.
+ */
+export function participanteObsoleto(sala: EstadoSala, nombre: string, rol: Rol): string | null {
+  if (rol === 'seguidor') return null;
+  const viejo = sala.participantes.find(
+    p => p.id !== ID_ASISTENTE && p.rol === rol && p.nombre === nombre,
+  );
+  return viejo?.id ?? null;
+}
+
 /** Añade un participante ya aceptado. Devuelve la sala actualizada. */
 export function registrarParticipante(sala: EstadoSala, p: Participante): EstadoSala {
   return { ...sala, participantes: [...sala.participantes, p] };

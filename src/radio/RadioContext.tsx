@@ -23,7 +23,7 @@ import * as Network from 'expo-network';
 import { emitirMensajeRadio } from './bus';
 import { generarCodigo } from './codigo';
 import { crearCronometro, type Vuelta } from './cronometro';
-import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol } from './mensajes';
+import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol, ClaveAviso } from './mensajes';
 import { crearClienteRadio, crearServidorRadio, type ResultadoUnionCliente } from './protocolo';
 import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta, type DiagnosticoBusqueda, type EstadoAnuncio } from './red';
 import { ID_ASISTENTE } from './sala';
@@ -50,6 +50,8 @@ interface RadioContextValue {
   // Descubrimiento (participante).
   salas: SalaDescubierta[];
   descubriendo: boolean;
+  /** Se perdió la conexión con la sala y se está reintentando entrar. */
+  reconectando: boolean;
   /** Lo que va oyendo la búsqueda de salas (diagnóstico a distancia). */
   diagBusqueda: DiagnosticoBusqueda | null;
   /** Hub: ¿quedó la sala anunciada en la red? `null` mientras se publica. */
@@ -76,6 +78,12 @@ interface RadioContextValue {
 
   // Cronómetro manual (el hub lo ejecuta; el asistente remoto manda el comando).
   pulsarVuelta: () => void;
+  /** Asistente: mensaje rápido que todos locutan (Box, Push…). */
+  enviarAviso: (clave: ClaveAviso) => void;
+  /** Asistente: vuelta objetivo en ms (null la quita). */
+  fijarObjetivo: (ms: number | null) => void;
+  /** Vuelta objetivo vigente en la sala (ms) o null. */
+  objetivoMs: number | null;
   deshacerVuelta: () => void;
   terminarTanda: () => void;
 
@@ -92,6 +100,9 @@ interface RadioContextValue {
   /** Envía señalización a un participante concreto (lado asistente). */
   enviarSenalizacionA: (destinoId: string, sig: MensajeSenalizacion) => void;
 }
+
+/** Esperas entre reintentos de reconexión (≈ 1 min en total). */
+const ESPERAS_RECONEXION_MS = [1000, 2000, 3000, 5000, 8000, 12000, 15000, 15000];
 
 const Context = createContext<RadioContextValue | null>(null);
 
@@ -131,10 +142,24 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     () => participantes.find(p => p.id === tuId)?.rol ?? null,
     [participantes, tuId],
   );
+  const rolActualRef = useRef<Rol | null>(rol);
+  if (rol) rolActualRef.current = rol;
+
+  // ── Reconexión automática ──
+  /** Última sala a la que nos unimos, para volver a entrar si se cae. */
+  const ultimaUnionRef = useRef<{ sala: SalaDescubierta; nombre: string } | null>(null);
+  /** Reconexión en curso (para poder cancelarla al salir). */
+  const reconexionRef = useRef<{ cancelada: boolean } | null>(null);
+  const [reconectando, setReconectando] = useState(false);
+  const [objetivoMs, setObjetivoMs] = useState<number | null>(null);
+  const reconectarRef = useRef<() => void>(() => {});
   const esHub = tuId === ID_ASISTENTE;
 
   /** Cierra todo lo abierto y deja el estado como al empezar (sin error). */
   const limpiar = useCallback(() => {
+    if (reconexionRef.current) reconexionRef.current.cancelada = true;
+    reconexionRef.current = null;
+    setReconectando(false);
     try { offDatosRef.current?.(); } catch { /* ignore */ }
     try { offCierreRef.current?.(); } catch { /* ignore */ }
     offDatosRef.current = null;
@@ -155,6 +180,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setTandaIniciada(false);
     setTuId('');
     setDiagnostico(null);
+    setObjetivoMs(null);
   }, [cronometro]);
 
   /** Difunde un resultado a los remotos (TCP) y a nuestro propio bus local
@@ -208,6 +234,9 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     switch (m.tipo) {
       case 'participantes':
         setParticipantes(m.lista);
+        break;
+      case 'objetivo':
+        setObjetivoMs(m.ms);
         break;
       case 'salaCerrada':
         // El hub cerró la sala: nos salimos limpios.
@@ -291,6 +320,23 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setConectado(true);
   }, [limpiar, alMensajeActual]);
 
+  /** Deja enganchado un cliente ya aceptado por el hub (unirse o reconexión). */
+  const enlazarCliente = useCallback((
+    cliente: ReturnType<typeof crearClienteRadio>,
+    transporte: ReturnType<typeof crearTransporteTcp>,
+    resultado: ResultadoUnionCliente,
+  ) => {
+    transporteRef.current = transporte;
+    clienteRef.current = cliente;
+    offDatosRef.current = cliente.onMensaje(alMensajeActual);
+    cliente.onSenalizacion((sig) => {
+      for (const cb of [...oyentesSenalizacionRef.current]) cb('asistente', sig);
+    });
+    offCierreRef.current = cliente.onCerrar(() => reconectarRef.current());
+    setParticipantes(resultado.lista);
+    setTuId(resultado.tuId);
+  }, [alMensajeActual]);
+
   const unirse = useCallback(async (
     sala: SalaDescubierta,
     rolParticipante: Rol,
@@ -323,27 +369,74 @@ export function RadioProvider({ children }: { children: ReactNode }) {
       setError(resultado.motivo ?? 'codigo');
       return resultado.motivo ?? null;
     }
-    transporteRef.current = transporte;
-    clienteRef.current = cliente;
-    offDatosRef.current = cliente.onMensaje(alMensajeActual);
-    cliente.onSenalizacion((sig) => {
-      for (const cb of [...oyentesSenalizacionRef.current]) cb('asistente', sig);
-    });
-    offCierreRef.current = cliente.onCerrar(() => {
-      // Se perdió la conexión con el hub (zona WiFi caída, etc.).
-      limpiar();
-      setError('sinConexion');
-    });
+    enlazarCliente(cliente, transporte, resultado);
+    ultimaUnionRef.current = { sala, nombre: nombreParticipante };
     setNombre(nombreParticipante);
     setCodigo(sala.codigo);
-    setParticipantes(resultado.lista);
-    setTuId(resultado.tuId);
     setError(null);
     setConectado(true);
     return null;
-  }, [limpiar, alMensajeActual]);
+  }, [limpiar, enlazarCliente]);
+
+  // Se perdió la conexión con el hub (WiFi caída un momento, móvil del
+  // asistente que se bloqueó…): en vez de sacarnos de la sala, se reintenta
+  // entrar con el mismo nombre y papel. El hub reconoce que somos los mismos
+  // (`participanteObsoleto`) y nos devuelve el papel. Si tras ~1 min no hay
+  // forma, se sale con «Se perdió la conexión».
+  reconectarRef.current = () => {
+    const union = ultimaUnionRef.current;
+    if (!union) {
+      limpiar();
+      setError('sinConexion');
+      return;
+    }
+    try { offDatosRef.current?.(); } catch { /* ignore */ }
+    try { offCierreRef.current?.(); } catch { /* ignore */ }
+    offDatosRef.current = null;
+    offCierreRef.current = null;
+    try { transporteRef.current?.cerrar(); } catch { /* ignore */ }
+    clienteRef.current = null;
+    transporteRef.current = null;
+    const rolDeseado = rolActualRef.current ?? 'seguidor';
+    setTuId(''); // apaga la voz; vuelve con el id nuevo
+    setReconectando(true);
+    const estado = { cancelada: false };
+    reconexionRef.current = estado;
+
+    void (async () => {
+      for (const espera of ESPERAS_RECONEXION_MS) {
+        await new Promise(r => setTimeout(r, espera));
+        if (estado.cancelada) return;
+        const transporte = crearTransporteTcp();
+        const cliente = crearClienteRadio();
+        try {
+          const r = await cliente.unirse(transporte, union.sala.host, union.sala.puerto, {
+            nombre: union.nombre, rol: rolDeseado, codigo: union.sala.codigo,
+          });
+          if (estado.cancelada) {
+            try { transporte.cerrar(); } catch { /* ignore */ }
+            return;
+          }
+          if (r.ok) {
+            enlazarCliente(cliente, transporte, r);
+            reconexionRef.current = null;
+            setReconectando(false);
+            return;
+          }
+          try { transporte.cerrar(); } catch { /* ignore */ }
+        } catch {
+          try { transporte.cerrar(); } catch { /* ignore */ }
+        }
+      }
+      if (estado.cancelada) return;
+      reconexionRef.current = null;
+      limpiar();
+      setError('sinConexion');
+    })();
+  };
 
   const salir = useCallback(() => {
+    ultimaUnionRef.current = null;
     limpiar();
     setError(null);
   }, [limpiar]);
@@ -357,6 +450,22 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     // El rol se actualiza solo cuando el hub difunde la nueva lista de
     // participantes (el servidor valida el cupo y descarta lo ocupado).
   }, [esHub]);
+
+  /** Asistente → todos: el hub lo difunde; un asistente remoto lo manda al
+   *  hub, que lo reenvía a todos (incluido él). */
+  const enviarDatoAsistente = useCallback((m: MensajeRadio) => {
+    if (esHub) difundir(m);
+    else clienteRef.current?.enviar(m);
+  }, [esHub, difundir]);
+
+  const enviarAviso = useCallback((clave: ClaveAviso) => {
+    enviarDatoAsistente({ tipo: 'aviso', clave });
+  }, [enviarDatoAsistente]);
+
+  const fijarObjetivo = useCallback((ms: number | null) => {
+    setObjetivoMs(ms);
+    enviarDatoAsistente({ tipo: 'objetivo', ms });
+  }, [enviarDatoAsistente]);
 
   const pulsarVuelta = useCallback(() => {
     if (esHub) ejecutarPulso();
@@ -416,21 +525,21 @@ export function RadioProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<RadioContextValue>(() => ({
     rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
-    salas, descubriendo, diagBusqueda, anuncio,
+    salas, descubriendo, diagBusqueda, anuncio, reconectando,
     vueltas, mejor, tandaIniciada,
     voz,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
     cambiarRol,
-    pulsarVuelta, deshacerVuelta, terminarTanda,
+    pulsarVuelta, deshacerVuelta, terminarTanda, enviarAviso, fijarObjetivo, objetivoMs,
     onMensaje,
     tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
   }), [
     rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
-    salas, descubriendo, diagBusqueda, anuncio, vueltas, mejor, tandaIniciada,
+    salas, descubriendo, diagBusqueda, anuncio, reconectando, vueltas, mejor, tandaIniciada,
     voz,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
     cambiarRol,
-    pulsarVuelta, deshacerVuelta, terminarTanda, onMensaje,
+    pulsarVuelta, deshacerVuelta, terminarTanda, enviarAviso, fijarObjetivo, objetivoMs, onMensaje,
     tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
   ]);
 

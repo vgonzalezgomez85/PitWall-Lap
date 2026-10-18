@@ -6,17 +6,19 @@ import { decidirSalida } from './salidaAudio';
 const base = { modoAsistente: 'walkie' as const, cascos: false, altavozPedido: null };
 
 describe('decidirSalida', () => {
-  it('piloto: nunca altavoz y aviso si no lleva cascos', () => {
-    expect(decidirSalida({ ...base, rol: 'piloto', altavozPedido: true })).toEqual({
-      altavoz: false, permiteAltavoz: false, avisoCascos: true, semiduplex: false,
+  it('piloto: auricular por defecto, altavoz si lo elige, y aviso sin cascos', () => {
+    expect(decidirSalida({ ...base, rol: 'piloto' })).toEqual({
+      altavoz: false, permiteAltavoz: true, avisoCascos: true, semiduplex: false,
     });
+    expect(decidirSalida({ ...base, rol: 'piloto', altavozPedido: true }).altavoz).toBe(true);
     expect(decidirSalida({ ...base, rol: 'piloto', cascos: true }).avisoCascos).toBe(false);
   });
 
   it('asistente en micro abierto: igual que el piloto', () => {
     const d = decidirSalida({ ...base, rol: 'asistente', modoAsistente: 'abierto', altavozPedido: true });
-    expect(d.altavoz).toBe(false);
+    expect(d.altavoz).toBe(true);
     expect(d.avisoCascos).toBe(true);
+    expect(d.semiduplex).toBe(false);
   });
 
   it('asistente en walkie: altavoz si lo pide, con semidúplex sin cascos', () => {

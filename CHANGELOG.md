@@ -18,6 +18,18 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.19.0] — 2026-10-18
+
+### Añadido
+- **Radio: mensajes rápidos del asistente al piloto**: **Box, Cambio de gomas, Media manga, Último minuto, Push y Sigue así**. Se locutan con la voz de la app (más claros que la voz con ruido de pista) y se oyen también antes de la primera vuelta.
+- **Vuelta objetivo**: el asistente la escribe (p. ej. «7,85») o usa la mejor vuelta. Tras cada vuelta se locuta la diferencia («0 12 sobre objetivo» / «bajo objetivo»).
+- **Reconexión automática**: si se cae la conexión con la sala, el participante reintenta entrar durante ~1 min sin salir de la pantalla («Reconectando con la sala…»). El asistente reconoce que es el mismo (mismo nombre y papel) y le devuelve su papel aunque aún no hubiera notado la caída.
+- **Indicador de calidad de la conexión de voz** (buena, regular o mala) bajo la cabecera de la sala, a partir de la latencia, la pérdida de paquetes y el jitter.
+- **El piloto (y el asistente en micro abierto) puede elegir altavoz** sin cascos; el aviso de ponérselos sigue saliendo.
+
+### Mejorado
+- **Si el micrófono no se puede abrir** (permiso denegado o en uso por otra app), se avisa en pantalla en vez de quedarse en «Conectando voz…».
+
 ## [1.18.1] — 2026-10-18
 
 ### Corregido

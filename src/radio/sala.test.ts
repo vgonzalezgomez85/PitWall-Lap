@@ -1,12 +1,4 @@
-import {
-  cambiarRolSala,
-  crearSala,
-  decidirUnion,
-  eliminarParticipante,
-  ID_ASISTENTE,
-  MAX_SEGUIDORES,
-  registrarParticipante,
-} from './sala';
+import { cambiarRolSala, crearSala, decidirUnion, eliminarParticipante, ID_ASISTENTE, MAX_SEGUIDORES, registrarParticipante, participanteObsoleto } from './sala';
 
 const sala = crearSala('K7M-4QX');
 
@@ -95,5 +87,23 @@ describe('cambiarRolSala', () => {
     if (r.ok) {
       expect(r.sala.participantes.find(p => p.id === ID_ASISTENTE)!.rol).toBe('seguidor');
     }
+  });
+});
+
+describe('participanteObsoleto', () => {
+  const sala = [
+    { id: ID_ASISTENTE, nombre: 'Ana', rol: 'asistente' as const },
+    { id: 'p1', nombre: 'Luis', rol: 'piloto' as const },
+    { id: 'p2', nombre: 'Eva', rol: 'seguidor' as const },
+  ].reduce((s, p) => registrarParticipante(s, p), crearSala('K7M4QX'));
+
+  it('reconoce al mismo piloto que vuelve', () => {
+    expect(participanteObsoleto(sala, 'Luis', 'piloto')).toBe('p1');
+  });
+
+  it('no confunde a otro con el mismo papel ni toca al hub ni a seguidores', () => {
+    expect(participanteObsoleto(sala, 'Marta', 'piloto')).toBeNull();
+    expect(participanteObsoleto(sala, 'Ana', 'asistente')).toBeNull();
+    expect(participanteObsoleto(sala, 'Eva', 'seguidor')).toBeNull();
   });
 });

@@ -1,5 +1,7 @@
 import {
   ajustarOpus,
+  calidadConexion,
+  peorCalidad,
   crearColaSenales,
   crearPuertaVoz,
   extraerNivelLocal,
@@ -158,5 +160,39 @@ describe('crearPuertaVoz', () => {
     expect(p.actualizar(0, 0)).toBe(true);
     p.fijarUmbral(UMBRAL_PUERTA.estricta);
     expect(p.actualizar(0, 10_000)).toBe(false);  // al activarla, sin voz reciente, cierra
+  });
+});
+
+describe('calidadConexion', () => {
+  const par = (rtt: number) => ({ type: 'candidate-pair', state: 'succeeded', nominated: true, currentRoundTripTime: rtt });
+  const audio = (recibidos: number, perdidos: number, jitter = 0.005) =>
+    ({ type: 'inbound-rtp', kind: 'audio', packetsReceived: recibidos, packetsLost: perdidos, jitter });
+
+  it('sin datos devuelve null', () => {
+    expect(calidadConexion([], null).calidad).toBeNull();
+  });
+
+  it('red local limpia: buena', () => {
+    expect(calidadConexion([par(0.01), audio(500, 0)], null).calidad).toBe('buena');
+  });
+
+  it('mide la pérdida en la ventana, no en el acumulado', () => {
+    // Muchas pérdidas antiguas, ninguna nueva desde la medida anterior.
+    const r = calidadConexion([par(0.02), audio(1100, 100)], { recibidos: 1000, perdidos: 100 });
+    expect(r.calidad).toBe('buena');
+    expect(r.contadores).toEqual({ recibidos: 1100, perdidos: 100 });
+    // 10 % perdido en la última ventana: mala.
+    expect(calidadConexion([par(0.02), audio(1190, 110)], r.contadores).calidad).toBe('mala');
+  });
+
+  it('latencia o jitter altos degradan la calidad', () => {
+    expect(calidadConexion([par(0.2), audio(10, 0)], null).calidad).toBe('regular');
+    expect(calidadConexion([par(0.5)], null).calidad).toBe('mala');
+    expect(calidadConexion([par(0.01), audio(10, 0, 0.05)], null).calidad).toBe('regular');
+  });
+
+  it('peorCalidad se queda con la peor', () => {
+    expect(peorCalidad(['buena', 'regular', null])).toBe('regular');
+    expect(peorCalidad([null])).toBeNull();
   });
 });

@@ -22,7 +22,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { activarAudioVoz, restaurarAudio } from './audioSesion';
 import { crearPar, obtenerMicro, soltarMicro, type ParVoz } from './voz';
-import { crearPuertaVoz, UMBRAL_PUERTA, type SensibilidadPuerta } from './vozPura';
+import {
+  crearPuertaVoz, peorCalidad, UMBRAL_PUERTA, type CalidadConexion, type SensibilidadPuerta,
+} from './vozPura';
 import { estaLocutando, onLocucion } from '../voice/locucion';
 import {
   diagnosticoAudio, fijarAltavoz as fijarAltavozNativo, onRuta, rutaSalida, type RutaSalida,
@@ -59,6 +61,10 @@ export interface EstadoVozRadio {
   fijarAltavoz(activo: boolean): void;
   /** Rehace micro y conexiones de voz (también se pide a los demás). */
   reiniciarVoz(): void;
+  /** Calidad de la peor conexión de voz; null sin datos. */
+  calidad: CalidadConexion | null;
+  /** No se pudo abrir el micrófono (permiso denegado o en uso). */
+  errorMicro: boolean;
   /** Diagnóstico de voz en pantalla (sesión de audio + WebRTC). */
   verDiagnostico: boolean;
   fijarVerDiagnostico(v: boolean): void;
@@ -101,6 +107,8 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
   const [nivel, setNivel] = useState(0);
   const [hablando, setHablando] = useState(false);
   const [listo, setListo] = useState(false);
+  const [calidad, setCalidad] = useState<CalidadConexion | null>(null);
+  const [errorMicro, setErrorMicro] = useState(false);
 
   const microRef = useRef<MediaStream | null>(null);
   const paresRef = useRef<Map<string, ParVoz>>(new Map());
@@ -251,6 +259,7 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
         if (esHub) {
           // El hub adquiere el micro una vez y lo comparte entre peers.
           microRef.current = await obtenerMicro();
+          setErrorMicro(false);
           // Procesa, en orden, lo que llegó mientras esperábamos el permiso.
           while (senalesPendientes.length > 0) {
             const { de, sig } = senalesPendientes.shift()!;
@@ -268,14 +277,19 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
           const micro = necesitaMicro ? await obtenerMicro() : null;
           if (necesitaMicro) {
             microRef.current = micro;
+            setErrorMicro(false);
           }
           const par = hacerPar('asistente', micro, 'oferente');
           await par.iniciar();
           if (necesitaMicro) aplicarModoMicro();
         }
       } catch {
-        // Permiso de micro denegado o similar: la voz queda sin micro.
-        if (!desechado) setListo(false);
+        // Permiso de micro denegado o micro en uso por otra app: se avisa en
+        // pantalla en vez de quedarse en «Conectando voz…» para siempre.
+        if (!desechado) {
+          setListo(false);
+          setErrorMicro(true);
+        }
       }
     })();
 
@@ -291,10 +305,20 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
       })();
     }, MUESTREO_MS);
 
+    // Calidad de la conexión: cada 2 s, la peor de todas.
+    const relojCalidad = setInterval(() => {
+      void (async () => {
+        const calidades = await Promise.all([...paresRef.current.values()].map(p => p.calidad()));
+        if (!desechado) setCalidad(peorCalidad(calidades));
+      })();
+    }, 2000);
+
     return () => {
       desechado = true;
       offSenal();
       clearInterval(reloj);
+      clearInterval(relojCalidad);
+      setCalidad(null);
       cerrarTodo();
       void restaurarAudio();
     };
@@ -502,5 +526,6 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     modoAsistente, fijarModoAsistente,
     ruta, salida, fijarAltavoz,
     reiniciarVoz, verDiagnostico, fijarVerDiagnostico: setVerDiagnostico, diagnostico,
+    calidad, errorMicro,
   };
 }

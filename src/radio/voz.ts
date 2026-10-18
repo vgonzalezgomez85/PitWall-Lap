@@ -21,8 +21,9 @@ import {
 
 import type { MensajeSenalizacion } from './mensajes';
 import {
-  ajustarOpus, crearColaSenales, deserializarCandidato, extraerNivelAudio, extraerNivelLocal,
-  serializarCandidato, type CandidatoIce,
+  ajustarOpus, calidadConexion, crearColaSenales, deserializarCandidato, extraerNivelAudio,
+  extraerNivelLocal, serializarCandidato, type CalidadConexion, type CandidatoIce,
+  type ContadoresPaquetes,
 } from './vozPura';
 
 export { deserializarCandidato, extraerNivelAudio, serializarCandidato } from './vozPura';
@@ -95,6 +96,8 @@ export interface ParVoz {
   nivelLocal(): Promise<number | null>;
   /** Línea de diagnóstico: estado, bytes enviados/recibidos y niveles. */
   diagnostico(): Promise<string>;
+  /** Calidad de la conexión (latencia, pérdidas, jitter); null sin datos. */
+  calidad(): Promise<CalidadConexion | null>;
   /** Cierra el peer. */
   cerrar(): void;
 }
@@ -153,6 +156,8 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
   };
 
 
+  let contadoresAnteriores: ContadoresPaquetes | null = null;
+
   const cola = crearColaSenales<CandidatoIce>({
     async aplicarDescripcion({ tipo, sdp }) {
       if (tipo === 'oferta') {
@@ -196,6 +201,17 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
         ));
       } catch {
         return 0;
+      }
+    },
+
+    async calidad() {
+      try {
+        const stats = [...((await pc.getStats())?.values() ?? [])];
+        const r = calidadConexion(stats, contadoresAnteriores);
+        contadoresAnteriores = r.contadores;
+        return r.calidad;
+      } catch {
+        return null;
       }
     },
 

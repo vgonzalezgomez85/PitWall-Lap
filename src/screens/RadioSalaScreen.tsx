@@ -8,7 +8,7 @@
 // que el hub cierre la sala / se pierda la conexión) la libera.
 
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Network from 'expo-network';
 
@@ -18,17 +18,18 @@ import { useIdioma } from '../i18n/IdiomaContext';
 import type { Textos } from '../i18n';
 import { mostrarModosMicro } from '../../modules/backgroundtts';
 import { MedidorNivel } from '../radio/MedidorNivel';
-import { UMBRAL_PUERTA, type SensibilidadPuerta } from '../radio/vozPura';
+import { UMBRAL_PUERTA, type CalidadConexion, type SensibilidadPuerta } from '../radio/vozPura';
 import { useRadio } from '../radio/RadioContext';
 import type { EstadoVozRadio, ModoMicroAsistente } from '../radio/useVozRadio';
 import { useAsistenteSource } from '../radio/useAsistenteSource';
-import type { Rol } from '../radio/mensajes';
+import { CLAVES_AVISO, type ClaveAviso, type Rol } from '../radio/mensajes';
+import { parsearObjetivo } from '../radio/objetivo';
 import Button from '../ui/Button';
 import BackButton from '../ui/BackButton';
 import Card from '../ui/Card';
 import Stat from '../ui/Stat';
 import { colors, radius, spacing, type } from '../ui/theme';
-import { useVoice } from '../voice/useVoice';
+import { textoAviso, useVoice } from '../voice/useVoice';
 import { fmtTime } from '../voice/speak';
 import type { RootStackParamList } from '../navigation';
 
@@ -46,6 +47,18 @@ const ROLES: Rol[] = ['piloto', 'asistente', 'seguidor'];
 const SENSIBILIDADES: SensibilidadPuerta[] = ['apagada', 'normal', 'estricta'];
 const MODOS_ASISTENTE: ModoMicroAsistente[] = ['walkie', 'abierto'];
 
+const COLOR_CALIDAD: Record<CalidadConexion, string> = {
+  buena: colors.good,
+  regular: colors.slow,
+  mala: colors.danger,
+};
+
+function textoCalidad(c: CalidadConexion, t: Textos): string {
+  if (c === 'buena') return t.radio.calidadBuena;
+  if (c === 'regular') return t.radio.calidadRegular;
+  return t.radio.calidadMala;
+}
+
 function textoSensibilidad(s: SensibilidadPuerta, t: Textos): string {
   if (s === 'apagada') return t.radio.puertaApagada;
   if (s === 'estricta') return t.radio.puertaEstricta;
@@ -57,7 +70,8 @@ export default function RadioSalaScreen({ navigation }: Props) {
   const {
     rol, esHub, codigo, nombre, participantes, conectado, salir,
     cambiarRol, pulsarVuelta, deshacerVuelta, terminarTanda,
-    tandaIniciada, vueltas, voz, tuId, anuncio,
+    tandaIniciada, vueltas, voz, tuId, anuncio, reconectando,
+    enviarAviso, fijarObjetivo, objetivoMs,
   } = useRadio();
   const { source, state } = useDataSource();
   const hayPista = esFuentePista(source?.kind);
@@ -109,7 +123,20 @@ export default function RadioSalaScreen({ navigation }: Props) {
         <Text style={styles.conectadoComo}>
           {rol ? t.radio.conectadoComo(papelTexto(rol, t)) : ''} · {nombre}
         </Text>
+        {!!voz.calidad && !reconectando && (
+          <View style={styles.calidadFila}>
+            <View style={[styles.calidadPunto, { backgroundColor: COLOR_CALIDAD[voz.calidad] }]} />
+            <Text style={styles.calidadTexto}>{textoCalidad(voz.calidad, t)}</Text>
+          </View>
+        )}
       </View>
+
+      {/* Conexión caída: se reintenta entrar solo, sin sacarnos de la sala. */}
+      {reconectando && (
+        <View style={styles.reconectando}>
+          <Text style={styles.reconectandoTexto}>{t.radio.reconectando}</Text>
+        </View>
+      )}
 
       {/* Código para compartir (solo lo enseña el hub). */}
       {esHub && (
@@ -199,6 +226,15 @@ export default function RadioSalaScreen({ navigation }: Props) {
             </>
           )}
 
+          {/* Mensajes rápidos y vuelta objetivo: se locutan al piloto. */}
+          <AvisosEquipo
+            t={t}
+            onAviso={enviarAviso}
+            objetivoMs={objetivoMs}
+            onObjetivo={fijarObjetivo}
+            mejorMs={state.bestLapMs}
+          />
+
           {/* Voz del asistente: walkie (pulsar para hablar) o micro abierto. */}
           <Card style={styles.vozCard}>
             <Text style={type.label}>{t.radio.tuMicro}</Text>
@@ -222,7 +258,9 @@ export default function RadioSalaScreen({ navigation }: Props) {
             {voz.modoAsistente === 'walkie' ? (
               <>
                 <Text style={[type.label, styles.puertaLabel]}>{t.radio.nivelMicro}</Text>
-                <Text style={styles.vozEstado}>{voz.listo ? t.radio.vozLista : t.radio.vozConectando}</Text>
+                <Text style={[styles.vozEstado, voz.errorMicro && styles.anuncioError]}>
+                  {voz.errorMicro ? t.radio.errorMicro : voz.listo ? t.radio.vozLista : t.radio.vozConectando}
+                </Text>
                 <MedidorNivel nivel={voz.nivel} />
                 <Pressable
                   onPressIn={() => voz.fijarMicro(true)}
@@ -298,6 +336,80 @@ export default function RadioSalaScreen({ navigation }: Props) {
 }
 
 /**
+ * Asistente: mensajes rápidos (se locutan a todos con la voz de la app, más
+ * claros que la voz con ruido de pista) y vuelta objetivo (tras cada vuelta
+ * se locuta la diferencia).
+ */
+function AvisosEquipo({ t, onAviso, objetivoMs, onObjetivo, mejorMs }: {
+  t: Textos;
+  onAviso: (c: ClaveAviso) => void;
+  objetivoMs: number | null;
+  onObjetivo: (ms: number | null) => void;
+  mejorMs: number | null;
+}) {
+  const [texto, setTexto] = useState('');
+  function fijar() {
+    const ms = parsearObjetivo(texto);
+    if (ms == null) {
+      Alert.alert(t.comun.error, t.radio.objetivoNoValido);
+      return;
+    }
+    onObjetivo(ms);
+    setTexto('');
+  }
+  return (
+    <Card style={styles.vozCard}>
+      <Text style={type.label}>{t.radio.avisosEquipo}</Text>
+      <View style={styles.avisos}>
+        {CLAVES_AVISO.map(c => (
+          <Pressable
+            key={c}
+            onPress={() => onAviso(c)}
+            style={({ pressed }) => [styles.aviso, pressed && styles.avisoPulsado]}
+          >
+            <Text style={styles.avisoTexto} numberOfLines={2}>{textoAviso(c, t.voz)}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={[type.label, styles.puertaLabel]}>{t.radio.vueltaObjetivo}</Text>
+      <Text style={styles.vozEstado}>
+        {objetivoMs == null ? t.radio.sinObjetivo : t.radio.objetivoActual(fmtTime(objetivoMs))}
+      </Text>
+      <View style={[styles.roles, styles.objetivoFila]}>
+        <TextInput
+          style={styles.objetivoInput}
+          value={texto}
+          onChangeText={setTexto}
+          placeholder={t.radio.objetivoPh}
+          placeholderTextColor={colors.textFaint}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          onSubmitEditing={fijar}
+        />
+        <Button label={t.radio.fijar} variant="outline" onPress={fijar} disabled={!texto.trim()} />
+      </View>
+      <View style={[styles.roles, styles.objetivoFila]}>
+        <Button
+          label={t.radio.usarMejorVuelta}
+          variant="ghost"
+          onPress={() => mejorMs != null && onObjetivo(mejorMs)}
+          disabled={mejorMs == null}
+          style={styles.flex}
+        />
+        <Button
+          label={t.radio.quitarObjetivo}
+          variant="ghost"
+          onPress={() => onObjetivo(null)}
+          disabled={objetivoMs == null}
+          style={styles.flex}
+        />
+      </View>
+    </Card>
+  );
+}
+
+/**
  * Salida del sonido (fase B, evitar acoples): por dónde sale ahora, el
  * interruptor de altavoz cuando el papel lo permite y el aviso de cascos con
  * el micro abierto.
@@ -365,9 +477,9 @@ function ControlesMicroAbierto({ voz, t }: { voz: EstadoVozRadio; t: Textos }) {
   return (
     <>
       <Text style={type.label}>{t.radio.nivelMicro}</Text>
-      <Text style={styles.vozEstado}>
-        {voz.listo ? t.radio.vozLista : t.radio.vozConectando}
-        {voz.listo && ` · ${voz.transmitiendo ? t.radio.transmitiendo : t.radio.enEspera}`}
+      <Text style={[styles.vozEstado, voz.errorMicro && styles.anuncioError]}>
+        {voz.errorMicro ? t.radio.errorMicro : voz.listo ? t.radio.vozLista : t.radio.vozConectando}
+        {voz.listo && !voz.errorMicro && ` · ${voz.transmitiendo ? t.radio.transmitiendo : t.radio.enEspera}`}
       </Text>
       <MedidorNivel nivel={voz.nivelMicro} umbral={UMBRAL_PUERTA[voz.puerta]} />
 
@@ -424,6 +536,26 @@ const styles = StyleSheet.create({
   },
   ipTexto: { color: colors.textFaint, fontSize: 12, marginTop: 2, textAlign: 'center' },
   anuncioError: { color: colors.danger },
+  calidadFila: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  calidadPunto: { width: 8, height: 8, borderRadius: radius.pill },
+  calidadTexto: { color: colors.textMuted, fontSize: 13 },
+  reconectando: {
+    marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.slow, backgroundColor: colors.surface,
+  },
+  reconectandoTexto: { color: colors.slow, fontSize: 14, fontWeight: '600' },
+  avisos: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  aviso: {
+    width: '31%', minHeight: 56, borderRadius: radius.md, justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: spacing.xs, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border,
+  },
+  avisoPulsado: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  avisoTexto: { color: colors.text, fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  objetivoFila: { alignItems: 'center' },
+  objetivoInput: {
+    flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+    color: colors.text, fontSize: 17, paddingHorizontal: 14, paddingVertical: 10,
+  },
   diagnostico: {
     color: colors.textFaint, fontSize: 11, marginTop: spacing.md, lineHeight: 16,
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),

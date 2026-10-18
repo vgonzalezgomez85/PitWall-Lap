@@ -18,7 +18,8 @@ import { speak, speakTime, shutUp } from './speak';
 import { useVoiceSettings, type VoiceSettings } from './settings';
 import { cuentaParaMedia, mediaAnunciable } from './avisos';
 import { useIdioma } from '../i18n/IdiomaContext';
-import { ordinalHablado } from '../i18n';
+import { ordinalHablado, type TextosVoz } from '../i18n';
+import type { ClaveAviso } from '../radio/mensajes';
 
 export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSettings) => void; update: (p: Partial<VoiceSettings>) => void; ready: boolean } {
   const { state, raceInfo } = useDataSource();
@@ -41,7 +42,9 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
     if (!s.enabled) return;
 
     // Si estoy descansando, sólo dejamos pasar 'manga-changed'.
-    if (stateRef.current.status !== 'my-turn' && e.type !== 'manga-changed') return;
+    // Los avisos del equipo (Radio) se dicen siempre: el asistente puede
+    // mandar «box» antes de la primera vuelta.
+    if (stateRef.current.status !== 'my-turn' && e.type !== 'manga-changed' && e.type !== 'aviso-equipo') return;
 
     switch (e.type) {
       case 'lap-completed': {
@@ -70,6 +73,15 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
           (poleLeaderMs == null || ms < poleLeaderMs);
         console.log('[Voice] speak lap:', e.lapCount, tiempo, isFastest ? '(rápida)' : '', isPoleLeader ? '(líder pole)' : '');
         speak(isPoleLeader ? v.vueltaRapidaPrimero(tiempo) : isFastest ? v.vueltaRapida(tiempo) : tiempo);
+        break;
+      }
+      case 'aviso-equipo':
+        speak(textoAviso(e.clave, v));
+        break;
+      case 'diferencia-objetivo': {
+        if (!s.sayLaps) return;
+        const t = speakTime(Math.abs(e.diffMs), v);
+        speak(e.diffMs > 0 ? v.sobreObjetivo(t) : v.bajoObjetivo(t));
         break;
       }
       case 'position-changed': {
@@ -231,3 +243,16 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
 
 // Solo avisamos del rival si está a esta diferencia de vueltas o menos.
 const GAP_LAPS_THRESHOLD = 2;
+
+/** Frase que se locuta para cada mensaje rápido del asistente (Radio). */
+export function textoAviso(clave: ClaveAviso, v: TextosVoz): string {
+  switch (clave) {
+    case 'box': return v.avisoBox;
+    case 'gomas': return v.avisoGomas;
+    case 'mediaManga': return v.mitadManga;
+    case 'ultimoMinuto': return v.ultimoMinuto;
+    case 'push': return v.avisoPush;
+    case 'sigueAsi': return v.avisoSigueAsi;
+    default: return '';
+  }
+}

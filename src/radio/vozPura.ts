@@ -179,3 +179,68 @@ export function crearPuertaVoz(opciones: { umbral: number; retencionMs?: number 
     get abierta() { return abierta; },
   };
 }
+
+// ── Calidad de la conexión de voz ───────────────────────────────────────────
+
+export type CalidadConexion = 'buena' | 'regular' | 'mala';
+
+/** Contadores de paquetes de la medida anterior, para medir pérdidas en la
+ *  ventana entre medidas y no en el acumulado de toda la sesión. */
+export interface ContadoresPaquetes {
+  recibidos: number;
+  perdidos: number;
+}
+
+/**
+ * Calidad de una conexión a partir de `getStats()`: tiempo de ida y vuelta
+ * (par de candidatos activo), pérdida de paquetes desde la medida anterior y
+ * jitter del audio recibido. Devuelve también los contadores para la próxima
+ * medida. `calidad: null` si aún no hay datos.
+ */
+export function calidadConexion(
+  estadisticas: Iterable<{
+    type?: string; kind?: string; state?: string; nominated?: boolean;
+    currentRoundTripTime?: number; packetsReceived?: number; packetsLost?: number; jitter?: number;
+  }>,
+  anterior: ContadoresPaquetes | null,
+): { calidad: CalidadConexion | null; contadores: ContadoresPaquetes | null } {
+  let rtt: number | null = null;
+  let recibidos = 0;
+  let perdidos = 0;
+  let jitter = 0;
+  let hayAudio = false;
+  for (const r of estadisticas) {
+    if (r.type === 'candidate-pair' && r.state === 'succeeded' && typeof r.currentRoundTripTime === 'number') {
+      if (r.nominated !== false) rtt = Math.max(rtt ?? 0, r.currentRoundTripTime);
+    }
+    if (r.type === 'inbound-rtp' && (r.kind === undefined || r.kind === 'audio')) {
+      hayAudio = true;
+      recibidos += r.packetsReceived ?? 0;
+      perdidos += Math.max(0, r.packetsLost ?? 0);
+      jitter = Math.max(jitter, r.jitter ?? 0);
+    }
+  }
+  const contadores = hayAudio ? { recibidos, perdidos } : null;
+  if (rtt == null && !hayAudio) return { calidad: null, contadores };
+
+  let perdida = 0;
+  if (hayAudio) {
+    const dRecibidos = recibidos - (anterior?.recibidos ?? 0);
+    const dPerdidos = perdidos - (anterior?.perdidos ?? 0);
+    const total = dRecibidos + dPerdidos;
+    perdida = total > 0 ? dPerdidos / total : 0;
+  }
+  const r = rtt ?? 0;
+  const calidad: CalidadConexion =
+    r > 0.4 || perdida > 0.08 || jitter > 0.08 ? 'mala'
+    : r > 0.15 || perdida > 0.02 || jitter > 0.03 ? 'regular'
+    : 'buena';
+  return { calidad, contadores };
+}
+
+/** La peor de varias calidades (la sala va tan bien como su peor conexión). */
+export function peorCalidad(calidades: (CalidadConexion | null)[]): CalidadConexion | null {
+  const orden: CalidadConexion[] = ['mala', 'regular', 'buena'];
+  for (const c of orden) if (calidades.includes(c)) return c;
+  return null;
+}

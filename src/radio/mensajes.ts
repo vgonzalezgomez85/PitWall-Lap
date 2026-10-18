@@ -18,6 +18,12 @@ export interface Participante {
 /** Quién está hablando ahora (para las reglas de prioridad locución ↔ voz). */
 export type Hablando = 'piloto' | 'asistente' | null;
 
+/** Mensajes rápidos del asistente al piloto (se locutan con la voz de la app,
+ *  más claros que la voz con ruido de pista). */
+export type ClaveAviso = 'box' | 'gomas' | 'mediaManga' | 'ultimoMinuto' | 'push' | 'sigueAsi';
+
+export const CLAVES_AVISO: ClaveAviso[] = ['box', 'gomas', 'mediaManga', 'ultimoMinuto', 'push', 'sigueAsi'];
+
 /** Motivos por los que el asistente rechaza a un participante al unirse. */
 export type MotivoRechazo = 'codigo' | 'rol-ocupado' | 'sala-llena';
 
@@ -51,7 +57,12 @@ export type MensajeRadio =
   // El asistente remoto deshace la última vuelta (hub lo convierte en `deshacer`).
   | { tipo: 'deshacerPulso' }
   // El asistente remoto termina la tanda (hub lo convierte en `fin`).
-  | { tipo: 'terminarPulso' };
+  | { tipo: 'terminarPulso' }
+  // Mensaje rápido del asistente (Box, Push…): todos lo locutan.
+  | { tipo: 'aviso'; clave: ClaveAviso }
+  // Vuelta objetivo fijada por el asistente (ms; null = sin objetivo). Tras
+  // cada vuelta se locuta la diferencia con el objetivo.
+  | { tipo: 'objetivo'; ms: number | null };
 
 // ── Mensajes de señalización (sobre el socket TCP del asistente) ───────────
 
@@ -84,6 +95,8 @@ const TIPOS_MENSAJE: string[] = [
   'pulso',
   'deshacerPulso',
   'terminarPulso',
+  'aviso',
+  'objetivo',
 ];
 
 const TIPOS_SENALIZACION: string[] = [
@@ -152,6 +165,14 @@ export function validarMensaje(v: unknown): MensajeRadio | null {
       return { tipo: 'deshacerPulso' };
     case 'terminarPulso':
       return { tipo: 'terminarPulso' };
+    case 'aviso':
+      return (CLAVES_AVISO as unknown[]).includes(o.clave)
+        ? { tipo: 'aviso', clave: o.clave as ClaveAviso }
+        : null;
+    case 'objetivo':
+      return o.ms === null || (typeof o.ms === 'number' && o.ms > 0 && o.ms < 600_000)
+        ? { tipo: 'objetivo', ms: o.ms as number | null }
+        : null;
     default:
       return null;
   }

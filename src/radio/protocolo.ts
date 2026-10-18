@@ -10,7 +10,7 @@
 
 import { deserializar, deserializarSenalizacion, serializar, serializarSenalizacion } from './mensajes';
 import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol } from './mensajes';
-import { cambiarRolSala, decidirUnion, eliminarParticipante, ID_ASISTENTE, listaDeParticipantes, registrarParticipante, crearSala, type EstadoSala } from './sala';
+import { cambiarRolSala, decidirUnion, eliminarParticipante, ID_ASISTENTE, listaDeParticipantes, registrarParticipante, crearSala, type EstadoSala, participanteObsoleto } from './sala';
 import type { Canal, TransporteRadio } from './transporte';
 
 /** Tiempo máximo que el participante espera la respuesta del asistente
@@ -122,6 +122,14 @@ export function crearServidorRadio(
       const sig = deserializarSenalizacion(texto);
 
       if (sig?.tipo === 'unirse' && id === null) {
+        // Él mismo reconectando: se descarta su conexión vieja (medio muerta)
+        // para que su papel quede libre.
+        const viejo = participanteObsoleto(sala, sig.nombre, sig.rol);
+        if (viejo) {
+          const canalViejo = canales.get(viejo);
+          alCerrar(viejo);
+          try { canalViejo?.cerrar(); } catch { /* ignore */ }
+        }
         id = generarId();
         const resultado = decidirUnion(sala, {
           id, nombre: sig.nombre, rol: sig.rol, codigo: sig.codigo,

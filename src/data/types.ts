@@ -11,6 +11,8 @@
 // La capacidad de cada fuente difiere; ver `SourceCapabilities` y la
 // matriz documentada en project_slottime_mobile.md.
 
+import type { ClaveAviso } from '../radio/mensajes';
+
 export type SourceKind = 'pitwall' | 'infolap' | 'asistente';
 
 /** ¿Es una fuente de pista (PitWall o TicTac), en vez de la fuente asistente de Radio? */
@@ -208,7 +210,12 @@ export type SourceEvent =
   // Si `toLane === myLane` mi propio contador acaba de incrementarse.
   | { type: 'lap-reassigned';    fromLane: number; toLane: number; lapTimeMs: number; toName?: string | null }
   | { type: 'connection-lost' }
-  | { type: 'connection-restored' };
+  | { type: 'connection-restored' }
+  // Sólo Radio (fuente Asistente): mensaje rápido del asistente (Box, Push…).
+  | { type: 'aviso-equipo'; clave: ClaveAviso }
+  // Sólo Radio: diferencia de la última vuelta con la vuelta objetivo
+  // (positiva = más lenta que el objetivo).
+  | { type: 'diferencia-objetivo'; diffMs: number };
 
 /**
  * Dossier completo de estadísticas que el servidor PitWall empuja al cliente
