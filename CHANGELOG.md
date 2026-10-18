@@ -18,6 +18,19 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.17.0] — 2026-10-18
+
+### Añadido
+- **Radio: el asistente elige cómo habla: «Walkie» o «Micro abierto»** (se recuerda). En walkie, como hasta ahora, mantiene «Hablar». En micro abierto funciona como el piloto: puerta de voz con su sensibilidad, micro silenciado mientras la app locuta, medidor con la marca y, en iPhone, el acceso al Aislamiento de voz.
+
+### Corregido
+- **Radio: con la puerta de voz en Normal o Estricta, el piloto no se oía nunca (iPhone).** Para cerrar la puerta se detenía el envío del audio, y el nivel del micro que la abre sale de ese envío: dejaba de actualizarse y la puerta se quedaba cerrada para siempre («En espera» aunque se hablara). Ahora se silencia la pista, que sigue midiendo el nivel, y si la medida se congela más de 3 s la puerta se abre sola.
+
+### Mejorado
+- **Radio: el Android no encontraba las salas creadas en un iPhone** (en el mismo router; al revés sí funcionaba). Ahora Android busca con las **dos implementaciones de mDNS a la vez** (NSD del sistema y DNSSD embebido), porque con algunos routers una no ve los anuncios del iPhone.
+- **Quien crea la sala ve si quedó anunciada en la red** («Sala visible en la red ✓» o el error del sistema). Antes, si el anuncio fallaba, no se avisaba.
+- **Diagnóstico en la búsqueda**: salas oídas y cuántas con IP, más el último error. Distingue «no se oye nada» de «se oye pero sin IP» y, en ese caso, recomienda «Entrar con IP».
+
 ## [1.16.0] — 2026-10-18
 
 ### Añadido

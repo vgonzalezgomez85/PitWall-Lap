@@ -44,7 +44,15 @@ export interface EstadoVozRadio {
   /** Micro abierto: ¿está transmitiendo ahora mismo? (puerta abierta y sin
    *  locución sonando). En walkie siempre coincide con `hablando`. */
   transmitiendo: boolean;
+  /** Asistente: walkie (pulsar para hablar) o micro abierto (se guarda). */
+  modoAsistente: ModoMicroAsistente;
+  fijarModoAsistente(m: ModoMicroAsistente): void;
 }
+
+/** Cómo habla el asistente: walkie o micro abierto, como el piloto. */
+export type ModoMicroAsistente = 'walkie' | 'abierto';
+
+const CLAVE_MODO_ASISTENTE = 'radio.modoAsistente';
 
 const CLAVE_PUERTA = 'radio.puertaVoz';
 /** Cada cuánto se evalúa la puerta de voz (ms). Corto para no comerse el
@@ -83,6 +91,21 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
   const rolRef = useRef(rol);
   rolRef.current = rol;
 
+  const [modoAsistente, setModoAsistente] = useState<ModoMicroAsistente>('walkie');
+  const modoAsistenteRef = useRef(modoAsistente);
+  modoAsistenteRef.current = modoAsistente;
+
+  useEffect(() => {
+    AsyncStorage.getItem(CLAVE_MODO_ASISTENTE).then(v => {
+      if (v === 'walkie' || v === 'abierto') setModoAsistente(v);
+    }).catch(() => { /* ignore */ });
+  }, []);
+
+  const fijarModoAsistente = useCallback((m: ModoMicroAsistente) => {
+    setModoAsistente(m);
+    AsyncStorage.setItem(CLAVE_MODO_ASISTENTE, m).catch(() => { /* ignore */ });
+  }, []);
+
   // El hub siempre tiene micro (compartido); el remoto lo necesita salvo que sea
   // seguidor (solo escucha).
   const necesitaMicro = esHub || (rol != null && rol !== 'seguidor');
@@ -99,7 +122,8 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
 
   /** Aplica el modo de micro del rol actual (micro abierto solo en piloto). */
   const aplicarModoMicro = useCallback(() => {
-    const activo = rolRef.current === 'piloto';
+    const r = rolRef.current;
+    const activo = r === 'piloto' || (r === 'asistente' && modoAsistenteRef.current === 'abierto');
     const pista = microRef.current?.getAudioTracks()[0];
     if (pista) pista.enabled = activo;
     hablandoRef.current = activo;
@@ -232,13 +256,12 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
   useEffect(() => {
     if (!tuId) return;
     aplicarModoMicro();
-  }, [rol, tuId, aplicarModoMicro]);
+  }, [rol, tuId, modoAsistente, aplicarModoMicro]);
 
   // ── Micro abierto: puerta de voz + silencio mientras locuta la app ──
   //
-  // Solo con micro abierto (rol piloto). En walkie manda el botón. El envío se
-  // corta con `fijarEnvio` (no apagando el micro) para seguir midiendo el
-  // nivel y reabrir en cuanto se hable.
+  // Solo con micro abierto (piloto, o asistente en modo abierto). En walkie
+  // manda el botón.
   const [puerta, setPuerta] = useState<SensibilidadPuerta>('normal');
   const [nivelMicro, setNivelMicro] = useState(0);
   const [transmitiendo, setTransmitiendo] = useState(false);
@@ -259,17 +282,29 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     AsyncStorage.setItem(CLAVE_PUERTA, s).catch(() => { /* ignore */ });
   }, []);
 
-  const microAbierto = rol === 'piloto';
+  const microAbierto = rol === 'piloto' || (rol === 'asistente' && modoAsistente === 'abierto');
   useEffect(() => {
+    // Se silencia la PISTA (`enabled`), no se detiene el envío: WebRTC sigue
+    // procesando el micro y midiendo su nivel antes de aplicar el silencio
+    // (y con DTX, en silencio casi no se envía nada). Con `encodings.active =
+    // false` el envío se paraba, el nivel dejaba de actualizarse y la puerta
+    // no volvía a abrirse nunca (iPhone: «En espera» aunque se hablara).
     const aplicarEnvio = (activo: boolean) => {
-      for (const par of paresRef.current.values()) par.fijarEnvio(activo);
+      const pista = microRef.current?.getAudioTracks()[0];
+      if (pista && pista.enabled !== activo) pista.enabled = activo;
       setTransmitiendo(prev => (prev === activo ? prev : activo));
     };
     if (!tuId || !microAbierto) {
-      aplicarEnvio(true);
+      // Walkie u otros roles: manda el botón (`aplicarModoMicro`/`fijarMicro`).
+      setTransmitiendo(false);
       setNivelMicro(0);
       return;
     }
+    // Seguro: si el nivel no cambia nada en este tiempo, la medida está
+    // congelada y se deja la puerta abierta antes que dejar al piloto mudo.
+    const CONGELADO_MS = 3000;
+    let ultimoNivel = -1;
+    let desdeCambio = Date.now();
     let vivo = true;
     let locutando = estaLocutando();
     const offLocucion = onLocucion(v => {
@@ -286,7 +321,13 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
         if (!vivo) return;
         // Sin medida del micro (plataforma o peer aún sin stats): no se cierra
         // la puerta, solo se silencia durante la locución.
-        const abierta = n == null ? true : puertaRef.current.actualizar(n, Date.now());
+        const ahora = Date.now();
+        if (n != null && Math.abs(n - ultimoNivel) > 0.0005) {
+          ultimoNivel = n;
+          desdeCambio = ahora;
+        }
+        const congelado = n != null && ahora - desdeCambio >= CONGELADO_MS;
+        const abierta = n == null || congelado ? true : puertaRef.current.actualizar(n, ahora);
         n = n ?? 0;
         aplicarEnvio(abierta && !locutando);
         setNivelMicro(prev => (Math.abs(prev - n) < 0.01 ? prev : n));
@@ -312,5 +353,6 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     pistas, nivel, hablando, fijarMicro, listo,
     nivelMicro, puerta, fijarPuerta,
     transmitiendo: microAbierto ? transmitiendo : hablando,
+    modoAsistente, fijarModoAsistente,
   };
 }

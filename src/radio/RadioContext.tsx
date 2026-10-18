@@ -25,7 +25,7 @@ import { generarCodigo } from './codigo';
 import { crearCronometro, type Vuelta } from './cronometro';
 import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol } from './mensajes';
 import { crearClienteRadio, crearServidorRadio, type ResultadoUnionCliente } from './protocolo';
-import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta } from './red';
+import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta, type DiagnosticoBusqueda, type EstadoAnuncio } from './red';
 import { ID_ASISTENTE } from './sala';
 import { crearTransporteTcp } from './tcp';
 import { useVozRadioMotor, type EstadoVozRadio } from './useVozRadio';
@@ -50,6 +50,10 @@ interface RadioContextValue {
   // Descubrimiento (participante).
   salas: SalaDescubierta[];
   descubriendo: boolean;
+  /** Lo que va oyendo la búsqueda de salas (diagnóstico a distancia). */
+  diagBusqueda: DiagnosticoBusqueda | null;
+  /** Hub: ¿quedó la sala anunciada en la red? `null` mientras se publica. */
+  anuncio: EstadoAnuncio;
 
   // Cronómetro (solo el hub lo ejecuta; el resto lo recibe por la red).
   vueltas: Vuelta[];
@@ -105,6 +109,8 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   const [vueltas, setVueltas] = useState<Vuelta[]>([]);
   const [tandaIniciada, setTandaIniciada] = useState(false);
   const [tuId, setTuId] = useState('');
+  const [diagBusqueda, setDiagBusqueda] = useState<DiagnosticoBusqueda | null>(null);
+  const [anuncio, setAnuncio] = useState<EstadoAnuncio>(null);
 
   // Recursos vivos de la conexión actual (se cierran al salir o al crear otra).
   const servidorRef = useRef<ReturnType<typeof crearServidorRadio> | null>(null);
@@ -270,7 +276,8 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     }
     transporteRef.current = transporte;
     servidorRef.current = servidor;
-    anuncioRef.current = publicarSala(codigoNuevo);
+    setAnuncio(null);
+    anuncioRef.current = publicarSala(codigoNuevo, setAnuncio);
     offDatosRef.current = servidor.onMensaje(alMensajeActual);
     servidor.onSenalizacion((de, sig) => {
       for (const cb of [...oyentesSenalizacionRef.current]) cb(de, sig);
@@ -370,12 +377,13 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setSalas([]);
     setDescubriendo(true);
     try { busquedaRef.current?.detener(); } catch { /* ignore */ }
+    setDiagBusqueda({ oidos: 0, resueltos: 0, error: null });
     busquedaRef.current = buscarSalasEnRed(sala => {
       setSalas(prev => {
         if (prev.some(s => s.host === sala.host && s.codigo === sala.codigo)) return prev;
         return [...prev, sala];
       });
-    });
+    }, setDiagBusqueda);
   }, []);
 
   const detenerBusqueda = useCallback(() => {
@@ -408,7 +416,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<RadioContextValue>(() => ({
     rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
-    salas, descubriendo,
+    salas, descubriendo, diagBusqueda, anuncio,
     vueltas, mejor, tandaIniciada,
     voz,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
@@ -418,7 +426,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
   }), [
     rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
-    salas, descubriendo, vueltas, mejor, tandaIniciada,
+    salas, descubriendo, diagBusqueda, anuncio, vueltas, mejor, tandaIniciada,
     voz,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
     cambiarRol,

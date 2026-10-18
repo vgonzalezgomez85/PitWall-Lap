@@ -20,6 +20,7 @@ import { mostrarModosMicro } from '../../modules/backgroundtts';
 import { MedidorNivel } from '../radio/MedidorNivel';
 import { UMBRAL_PUERTA, type SensibilidadPuerta } from '../radio/vozPura';
 import { useRadio } from '../radio/RadioContext';
+import type { EstadoVozRadio, ModoMicroAsistente } from '../radio/useVozRadio';
 import { useAsistenteSource } from '../radio/useAsistenteSource';
 import type { Rol } from '../radio/mensajes';
 import Button from '../ui/Button';
@@ -43,6 +44,7 @@ function papelTexto(rol: Rol, t: Textos): string {
 const ROLES: Rol[] = ['piloto', 'asistente', 'seguidor'];
 
 const SENSIBILIDADES: SensibilidadPuerta[] = ['apagada', 'normal', 'estricta'];
+const MODOS_ASISTENTE: ModoMicroAsistente[] = ['walkie', 'abierto'];
 
 function textoSensibilidad(s: SensibilidadPuerta, t: Textos): string {
   if (s === 'apagada') return t.radio.puertaApagada;
@@ -55,7 +57,7 @@ export default function RadioSalaScreen({ navigation }: Props) {
   const {
     rol, esHub, codigo, nombre, participantes, conectado, salir,
     cambiarRol, pulsarVuelta, deshacerVuelta, terminarTanda,
-    tandaIniciada, vueltas, voz, tuId,
+    tandaIniciada, vueltas, voz, tuId, anuncio,
   } = useRadio();
   const { source, state } = useDataSource();
   const hayPista = esFuentePista(source?.kind);
@@ -120,6 +122,11 @@ export default function RadioSalaScreen({ navigation }: Props) {
               <Text style={styles.ipTexto}>{t.radio.tuIpTexto}</Text>
             </>
           )}
+          <Text style={[styles.ipTexto, anuncio && !anuncio.ok && styles.anuncioError]}>
+            {anuncio == null
+              ? t.radio.anuncioPendiente
+              : anuncio.ok ? t.radio.anuncioOk : t.radio.anuncioError(anuncio.error)}
+          </Text>
         </Card>
       )}
 
@@ -192,21 +199,47 @@ export default function RadioSalaScreen({ navigation }: Props) {
             </>
           )}
 
-          {/* Voz: walkie (pulsar-para-hablar) + medidor de nivel. */}
+          {/* Voz del asistente: walkie (pulsar para hablar) o micro abierto. */}
           <Card style={styles.vozCard}>
-            <Text style={type.label}>{t.radio.nivelMicro}</Text>
-            <Text style={styles.vozEstado}>{voz.listo ? t.radio.vozLista : t.radio.vozConectando}</Text>
-            <MedidorNivel nivel={voz.nivel} />
-            <Pressable
-              onPressIn={() => voz.fijarMicro(true)}
-              onPressOut={() => voz.fijarMicro(false)}
-              style={({ pressed }) => [
-                styles.walkie,
-                (pressed || voz.hablando) && styles.walkieActivo,
-              ]}
-            >
-              <Text style={styles.walkieTexto}>{t.radio.hablar}</Text>
-            </Pressable>
+            <Text style={type.label}>{t.radio.tuMicro}</Text>
+            <View style={styles.roles}>
+              {MODOS_ASISTENTE.map(m => {
+                const activo = voz.modoAsistente === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => voz.fijarModoAsistente(m)}
+                    style={({ pressed }) => [styles.rol, activo && styles.rolActivo, pressed && styles.pressed]}
+                  >
+                    <Text style={[styles.rolTexto, activo && styles.rolTextoActivo]}>
+                      {m === 'walkie' ? t.radio.modoWalkie : t.radio.modoAbierto}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {voz.modoAsistente === 'walkie' ? (
+              <>
+                <Text style={[type.label, styles.puertaLabel]}>{t.radio.nivelMicro}</Text>
+                <Text style={styles.vozEstado}>{voz.listo ? t.radio.vozLista : t.radio.vozConectando}</Text>
+                <MedidorNivel nivel={voz.nivel} />
+                <Pressable
+                  onPressIn={() => voz.fijarMicro(true)}
+                  onPressOut={() => voz.fijarMicro(false)}
+                  style={({ pressed }) => [
+                    styles.walkie,
+                    (pressed || voz.hablando) && styles.walkieActivo,
+                  ]}
+                >
+                  <Text style={styles.walkieTexto}>{t.radio.hablar}</Text>
+                </Pressable>
+              </>
+            ) : (
+              <View style={styles.puertaLabel}>
+                <ControlesMicroAbierto voz={voz} t={t} />
+              </View>
+            )}
           </Card>
         </>
       )}
@@ -237,43 +270,7 @@ export default function RadioSalaScreen({ navigation }: Props) {
       {/* Piloto: micro abierto, con medidor para calibrar la puerta de voz. */}
       {rol === 'piloto' && (
         <Card style={styles.microCard}>
-          <Text style={type.label}>{t.radio.nivelMicro}</Text>
-          <Text style={styles.vozEstado}>
-            {voz.listo ? t.radio.vozLista : t.radio.vozConectando}
-            {voz.listo && ` · ${voz.transmitiendo ? t.radio.transmitiendo : t.radio.enEspera}`}
-          </Text>
-          <MedidorNivel nivel={voz.nivelMicro} umbral={UMBRAL_PUERTA[voz.puerta]} />
-
-          <Text style={[type.label, styles.puertaLabel]}>{t.radio.puertaVoz}</Text>
-          <View style={styles.roles}>
-            {SENSIBILIDADES.map(s => {
-              const activa = voz.puerta === s;
-              return (
-                <Pressable
-                  key={s}
-                  onPress={() => voz.fijarPuerta(s)}
-                  style={({ pressed }) => [styles.rol, activa && styles.rolActivo, pressed && styles.pressed]}
-                >
-                  <Text style={[styles.rolTexto, activa && styles.rolTextoActivo]}>
-                    {textoSensibilidad(s, t)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={styles.puertaTexto}>{t.radio.puertaTexto}</Text>
-
-          {Platform.OS === 'ios' && (
-            <>
-              <Button
-                label={t.radio.aislamientoVoz}
-                variant="outline"
-                onPress={mostrarModosMicro}
-                style={styles.puertaLabel}
-              />
-              <Text style={styles.puertaTexto}>{t.radio.aislamientoVozTexto}</Text>
-            </>
-          )}
+          <ControlesMicroAbierto voz={voz} t={t} />
         </Card>
       )}
 
@@ -297,6 +294,55 @@ export default function RadioSalaScreen({ navigation }: Props) {
   );
 }
 
+/**
+ * Micro abierto (piloto, o asistente en modo abierto): estado, medidor con la
+ * marca de la puerta de voz, su sensibilidad y, en iPhone, el acceso al
+ * Aislamiento de voz.
+ */
+function ControlesMicroAbierto({ voz, t }: { voz: EstadoVozRadio; t: Textos }) {
+  return (
+    <>
+      <Text style={type.label}>{t.radio.nivelMicro}</Text>
+      <Text style={styles.vozEstado}>
+        {voz.listo ? t.radio.vozLista : t.radio.vozConectando}
+        {voz.listo && ` · ${voz.transmitiendo ? t.radio.transmitiendo : t.radio.enEspera}`}
+      </Text>
+      <MedidorNivel nivel={voz.nivelMicro} umbral={UMBRAL_PUERTA[voz.puerta]} />
+
+      <Text style={[type.label, styles.puertaLabel]}>{t.radio.puertaVoz}</Text>
+      <View style={styles.roles}>
+        {SENSIBILIDADES.map(s => {
+          const activa = voz.puerta === s;
+          return (
+            <Pressable
+              key={s}
+              onPress={() => voz.fijarPuerta(s)}
+              style={({ pressed }) => [styles.rol, activa && styles.rolActivo, pressed && styles.pressed]}
+            >
+              <Text style={[styles.rolTexto, activa && styles.rolTextoActivo]}>
+                {textoSensibilidad(s, t)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={styles.puertaTexto}>{t.radio.puertaTexto}</Text>
+
+      {Platform.OS === 'ios' && (
+        <>
+          <Button
+            label={t.radio.aislamientoVoz}
+            variant="outline"
+            onPress={mostrarModosMicro}
+            style={styles.puertaLabel}
+          />
+          <Text style={styles.puertaTexto}>{t.radio.aislamientoVozTexto}</Text>
+        </>
+      )}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.xl, paddingBottom: 40 },
@@ -315,6 +361,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   ipTexto: { color: colors.textFaint, fontSize: 12, marginTop: 2, textAlign: 'center' },
+  anuncioError: { color: colors.danger },
 
   rolCard: { marginTop: spacing.lg },
   roles: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },

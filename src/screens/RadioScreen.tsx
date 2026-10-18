@@ -176,6 +176,15 @@ export default function RadioScreen({ navigation }: Props) {
             </View>
           )}
 
+          {/* Diagnóstico: distingue «no se oye nada» de «se oye pero sin IP». */}
+          {!!radio.diagBusqueda && (
+            <Text style={styles.diagBusqueda}>
+              {t.radio.diagBusqueda(radio.diagBusqueda.oidos, radio.diagBusqueda.resueltos)}
+              {radio.diagBusqueda.oidos > radio.diagBusqueda.resueltos && `\n${t.radio.oidaSinIp}`}
+              {!!radio.diagBusqueda.error && `\n${radio.diagBusqueda.error}`}
+            </Text>
+          )}
+
           {!radio.descubriendo && radio.salas.length === 0 && !salaElegida && (
             <Text style={styles.sinSalas}>
               {t.radio.sinSalas}{'\n'}
@@ -315,6 +324,7 @@ const styles = StyleSheet.create({
   buscando: { alignItems: 'center', paddingVertical: spacing.lg },
   sinSalas: { color: colors.textMuted, fontSize: 14, marginTop: spacing.lg, lineHeight: 20 },
   sinSalasTexto: { color: colors.textFaint, fontSize: 13 },
+  diagBusqueda: { color: colors.textFaint, fontSize: 12, marginTop: spacing.md, lineHeight: 17 },
 
   sala: {
     marginTop: spacing.md, padding: spacing.lg, borderRadius: radius.md,

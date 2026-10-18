@@ -88,9 +88,6 @@ export interface ParVoz {
   recibir(sig: MensajeSenalizacion): Promise<void>;
   /** Activa/desactiva el envío del micro (PTT / micro abierto). */
   fijarMicro(activo: boolean): void;
-  /** Puerta de voz / locución: deja de ENVIAR sin apagar el micro, para que
-   *  se pueda seguir midiendo su nivel y reabrir al hablar. */
-  fijarEnvio(activo: boolean): void;
   /** Nivel de audio recibido (0..1), para el medidor. */
   nivel(): Promise<number>;
   /** Nivel del micro local (0..1), para la puerta de voz; `null` si la
@@ -121,9 +118,8 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
 
   // El micro local se añade como pista de audio. El seguidor (sin micro) abre
   // un transceiver de solo recepción para negociar el audio entrante.
-  let emisor: ReturnType<RTCPeerConnection['addTrack']> | null = null;
   if (pistaMicro && micro) {
-    emisor = pc.addTrack(pistaMicro, micro);
+    pc.addTrack(pistaMicro, micro);
   } else {
     pc.addTransceiver('audio', { direction: 'recvonly' });
   }
@@ -154,7 +150,6 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
     cb.onSdp(sdp);
   };
 
-  let envioActivo = true;
 
   const cola = crearColaSenales<CandidatoIce>({
     async aplicarDescripcion({ tipo, sdp }) {
@@ -189,18 +184,6 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
 
     fijarMicro(activo) {
       if (pistaMicro) pistaMicro.enabled = activo;
-    },
-
-    fijarEnvio(activo) {
-      if (!emisor || activo === envioActivo) return;
-      envioActivo = activo;
-      try {
-        const params = emisor.getParameters();
-        for (const e of params.encodings) e.active = activo;
-        void emisor.setParameters(params).catch(() => { envioActivo = !activo; });
-      } catch {
-        envioActivo = !activo;
-      }
     },
 
     async nivel() {

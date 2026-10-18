@@ -18,6 +18,24 @@ export const RADIO_SERVICIO = 'pitwall-radio';
 // así que dejamos el default (undefined).
 const IMPL_MDNS = Platform.OS === 'android' ? 'DNSSD' : undefined;
 
+/** En Android se busca con las DOS implementaciones a la vez (NSD del sistema
+ *  y DNSSD embebido): con algunos routers una no ve los anuncios de un iPhone
+ *  y la otra sí. La librería las mantiene separadas, así que pueden convivir. */
+const IMPLS_BUSQUEDA: (string | undefined)[] = Platform.OS === 'android' ? ['DNSSD', 'NSD'] : [undefined];
+
+/** Lo que va viendo la búsqueda, para diagnosticar a distancia. */
+export interface DiagnosticoBusqueda {
+  /** Anuncios de sala oídos (aunque aún no se sepa su IP). */
+  oidos: number;
+  /** Anuncios resueltos con dirección. */
+  resueltos: number;
+  /** Último error de la librería, si lo hubo. */
+  error: string | null;
+}
+
+/** Estado del anuncio de la sala propia: `null` mientras se publica. */
+export type EstadoAnuncio = { ok: true } | { ok: false; error: string } | null;
+
 export interface SalaDescubierta {
   host: string;
   puerto: number;
@@ -25,9 +43,16 @@ export interface SalaDescubierta {
   nombre: string;
 }
 
-/** Publica una sala (lado asistente). Devuelve el modo de detenerlo. */
-export function publicarSala(codigo: string): { detener: () => void } {
+/** Publica una sala (lado asistente). `onEstado` avisa de si el anuncio
+ *  quedó visible en la red o falló (antes fallaba en silencio). Devuelve el
+ *  modo de detenerlo. */
+export function publicarSala(
+  codigo: string,
+  onEstado: (e: EstadoAnuncio) => void = () => {},
+): { detener: () => void } {
   const zc = new Zeroconf();
+  zc.on('published' as never, () => onEstado({ ok: true }));
+  zc.on('error', (err) => onEstado({ ok: false, error: err instanceof Error ? err.message : String(err) }));
   try {
     // Cast: el .d.ts va por detrás del runtime (no tipa implType). En iOS
     // publishService ignora el 7.º argumento.
@@ -41,8 +66,9 @@ export function publicarSala(codigo: string): { detener: () => void } {
         { codigo },
         IMPL_MDNS,
       );
-  } catch {
-    /* la sala funciona igual; solo se pierde el descubrimiento */
+  } catch (e) {
+    // La sala funciona igual; solo se pierde el descubrimiento.
+    onEstado({ ok: false, error: e instanceof Error ? e.message : String(e) });
   }
   return {
     detener() {
@@ -58,12 +84,30 @@ export function publicarSala(codigo: string): { detener: () => void } {
 
 /**
  * Busca salas en la red (lado participante). `onSala` se llama por cada sala
- * resuelta (puede repetirse al refrescar el anuncio). Devuelve el modo de
- * detener la búsqueda.
+ * resuelta (puede repetirse al refrescar el anuncio); `onDiagnostico`, con lo
+ * que se va oyendo. Devuelve el modo de detener la búsqueda.
  */
-export function buscarSalas(onSala: (sala: SalaDescubierta) => void): { detener: () => void } {
+export function buscarSalas(
+  onSala: (sala: SalaDescubierta) => void,
+  onDiagnostico: (d: DiagnosticoBusqueda) => void = () => {},
+): { detener: () => void } {
   const zc = new Zeroconf();
   const vistos = new Set<string>();
+  const oidos = new Set<string>();
+  const diag: DiagnosticoBusqueda = { oidos: 0, resueltos: 0, error: null };
+  const avisar = () => onDiagnostico({ ...diag });
+
+  zc.on('found', (nombre) => {
+    if (oidos.has(nombre)) return;
+    oidos.add(nombre);
+    diag.oidos = oidos.size;
+    avisar();
+  });
+
+  zc.on('error', (err) => {
+    diag.error = err instanceof Error ? err.message : String(err);
+    avisar();
+  });
 
   zc.on('resolved', (servicio) => {
     // El anuncio trae la IP del asistente; el puerto es el fijo de Radio.
@@ -76,6 +120,10 @@ export function buscarSalas(onSala: (sala: SalaDescubierta) => void): { detener:
     const clave = `${host}:${codigo}`;
     if (vistos.has(clave)) return;
     vistos.add(clave);
+    if (servicio.name) oidos.add(servicio.name);
+    diag.oidos = oidos.size;
+    diag.resueltos = vistos.size;
+    avisar();
     onSala({
       host,
       puerto: PUERTO_RADIO,
@@ -84,21 +132,25 @@ export function buscarSalas(onSala: (sala: SalaDescubierta) => void): { detener:
     });
   });
 
-  try {
-    (zc as unknown as { scan: (t: string, p: string, d: string, i?: string) => void })
-      .scan(RADIO_SERVICIO, 'tcp', 'local.', IMPL_MDNS);
-  } catch {
-    /* ignore */
+  const z = zc as unknown as {
+    scan: (t: string, p: string, d: string, i?: string) => void;
+    stop: (i?: string) => void;
+  };
+  for (const impl of IMPLS_BUSQUEDA) {
+    try {
+      z.scan(RADIO_SERVICIO, 'tcp', 'local.', impl);
+    } catch (e) {
+      diag.error = e instanceof Error ? e.message : String(e);
+      avisar();
+    }
   }
 
   return {
     detener() {
-      try {
-        (zc as unknown as { stop: (i?: string) => void }).stop(IMPL_MDNS);
-        zc.removeDeviceListeners();
-      } catch {
-        /* ignore */
+      for (const impl of IMPLS_BUSQUEDA) {
+        try { z.stop(impl); } catch { /* ignore */ }
       }
+      try { zc.removeDeviceListeners(); } catch { /* ignore */ }
     },
   };
 }
