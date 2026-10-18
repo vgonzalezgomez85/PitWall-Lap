@@ -24,6 +24,10 @@ import { activarAudioVoz, restaurarAudio } from './audioSesion';
 import { crearPar, obtenerMicro, soltarMicro, type ParVoz } from './voz';
 import { crearPuertaVoz, UMBRAL_PUERTA, type SensibilidadPuerta } from './vozPura';
 import { estaLocutando, onLocucion } from '../voice/locucion';
+import {
+  fijarAltavoz as fijarAltavozNativo, onRuta, rutaSalida, type RutaSalida,
+} from '../../modules/backgroundtts';
+import { decidirSalida, type DecisionSalida } from './salidaAudio';
 
 export interface EstadoVozRadio {
   /** Flujos de audio remotos a reproducir (RTCView). */
@@ -47,12 +51,19 @@ export interface EstadoVozRadio {
   /** Asistente: walkie (pulsar para hablar) o micro abierto (se guarda). */
   modoAsistente: ModoMicroAsistente;
   fijarModoAsistente(m: ModoMicroAsistente): void;
+  /** Por dónde sale ahora el sonido (cascos, auricular, altavoz). */
+  ruta: RutaSalida;
+  /** Qué toca según el papel: altavoz, aviso de cascos, semidúplex… */
+  salida: DecisionSalida;
+  /** Preferencia de altavoz del papel actual (se guarda por papel). */
+  fijarAltavoz(activo: boolean): void;
 }
 
 /** Cómo habla el asistente: walkie o micro abierto, como el piloto. */
 export type ModoMicroAsistente = 'walkie' | 'abierto';
 
 const CLAVE_MODO_ASISTENTE = 'radio.modoAsistente';
+const CLAVE_ALTAVOZ = 'radio.altavozPorRol';
 
 const CLAVE_PUERTA = 'radio.puertaVoz';
 /** Cada cuánto se evalúa la puerta de voz (ms). Corto para no comerse el
@@ -340,7 +351,69 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     };
   }, [tuId, microAbierto]);
 
+  // ── Salida del sonido (fase B: evitar acoples) ──
+  const [ruta, setRuta] = useState<RutaSalida>('');
+  const [altavozPorRol, setAltavozPorRol] = useState<Partial<Record<Rol, boolean>>>({});
+
+  useEffect(() => {
+    AsyncStorage.getItem(CLAVE_ALTAVOZ).then(v => {
+      if (v) setAltavozPorRol(JSON.parse(v) as Partial<Record<Rol, boolean>>);
+    }).catch(() => { /* ignore */ });
+  }, []);
+
+  useEffect(() => {
+    if (!tuId) return;
+    setRuta(rutaSalida());
+    return onRuta(setRuta);
+  }, [tuId]);
+
+  const salida = decidirSalida({
+    rol,
+    modoAsistente,
+    cascos: ruta === 'cascos',
+    altavozPedido: rol ? altavozPorRol[rol] ?? null : null,
+  });
+  const salidaRef = useRef(salida);
+  salidaRef.current = salida;
+
+  useEffect(() => {
+    if (!tuId) return;
+    fijarAltavozNativo(salida.altavoz);
+    // Tras cambiar de altavoz/auricular, la ruta real puede tardar un poco.
+    const t = setTimeout(() => setRuta(rutaSalida()), 300);
+    return () => clearTimeout(t);
+  }, [tuId, salida.altavoz]);
+
+  const fijarAltavoz = useCallback((activo: boolean) => {
+    if (!rolRef.current) return;
+    const r = rolRef.current;
+    setAltavozPorRol(prev => {
+      const nuevo = { ...prev, [r]: activo };
+      AsyncStorage.setItem(CLAVE_ALTAVOZ, JSON.stringify(nuevo)).catch(() => { /* ignore */ });
+      return nuevo;
+    });
+  }, []);
+
+  const pistasRef = useRef<MediaStream[]>([]);
+  pistasRef.current = pistas;
+
+  // Si deja de haber semidúplex (cascos conectados, otro papel…), el audio
+  // entrante no puede quedarse silenciado.
+  useEffect(() => {
+    if (salida.semiduplex) return;
+    for (const flujo of pistas) {
+      for (const p of flujo.getAudioTracks()) if (!p.enabled) p.enabled = true;
+    }
+  }, [salida.semiduplex, pistas]);
+
   const fijarMicro = useCallback((activo: boolean) => {
+    // Semidúplex: walkie con altavoz y sin cascos. Mientras se habla se
+    // silencia lo que llega, o el micro captaría el altavoz (acople).
+    if (salidaRef.current.semiduplex) {
+      for (const flujo of pistasRef.current) {
+        for (const p of flujo.getAudioTracks()) p.enabled = !activo;
+      }
+    }
     hablandoRef.current = activo;
     setHablando(activo);
     // El micro es compartido entre todos los peers: mutea/desmutea la pista
@@ -354,5 +427,6 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     nivelMicro, puerta, fijarPuerta,
     transmitiendo: microAbierto ? transmitiendo : hablando,
     modoAsistente, fijarModoAsistente,
+    ruta, salida, fijarAltavoz,
   };
 }

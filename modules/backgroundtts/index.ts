@@ -1,6 +1,6 @@
-// Wrapper TS del módulo nativo iOS `BackgroundTts`. Sólo iOS por ahora;
-// en Android el TTS nativo del sistema ya funciona en background sin
-// gestión especial de audio session.
+// Wrapper TS del módulo nativo `BackgroundTts`. La locución es solo de iOS
+// (en Android el TTS del sistema ya funciona en background); la salida de
+// audio de Radio (modo voz, altavoz, cascos) existe en las dos plataformas.
 
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { Platform } from 'react-native';
@@ -12,20 +12,44 @@ interface BackgroundTtsNative {
   shutUp(): void;
   getStatus(): string;
   modoVoz?(activo: boolean): void;
+  altavoz?(activo: boolean): void;
+  rutaSalida?(): string;
   mostrarModosMicro?(): Promise<void>;
   modoMicro?(): string;
-  addListener?(evento: 'onLocucion', cb: (e: { hablando: boolean }) => void): { remove(): void };
+  addListener?(evento: 'onLocucion' | 'onRuta', cb: (e: { hablando?: boolean; ruta?: string }) => void): { remove(): void };
 }
 
 const native = requireOptionalNativeModule<BackgroundTtsNative>('BackgroundTts');
 
 /**
- * Radio con voz activa (iOS): la sesión de audio pasa a playAndRecord +
- * voiceChat para que la locución no corte el micro de WebRTC.
+ * Radio con voz activa. iOS: la sesión pasa a playAndRecord + voiceChat para
+ * que la locución no corte el micro de WebRTC. Android: modo comunicación
+ * (cancelador de eco del hardware; la voz sale por el auricular).
  */
 export function fijarModoVoz(activo: boolean): void {
-  if (Platform.OS !== 'ios' || !native?.modoVoz) return;
+  if (!native?.modoVoz) return;
   try { native.modoVoz(activo); } catch (e) { console.log('[BackgroundTts] modoVoz err:', e); }
+}
+
+/** Por dónde sale el sonido de Radio. */
+export type RutaSalida = 'cascos' | 'auricular' | 'altavoz' | '';
+
+/** Radio: sacar el sonido por el altavoz (sin efecto con cascos). */
+export function fijarAltavoz(activo: boolean): void {
+  if (!native?.altavoz) return;
+  try { native.altavoz(activo); } catch (e) { console.log('[BackgroundTts] altavoz err:', e); }
+}
+
+export function rutaSalida(): RutaSalida {
+  if (!native?.rutaSalida) return '';
+  try { return native.rutaSalida() as RutaSalida; } catch { return ''; }
+}
+
+/** Avisa cuando cambia la salida (cascos conectados o desconectados). */
+export function onRuta(cb: (ruta: RutaSalida) => void): () => void {
+  if (!native?.addListener) return () => {};
+  const sub = native.addListener('onRuta', e => cb((e.ruta ?? '') as RutaSalida));
+  return () => sub.remove();
 }
 
 /** Abre el selector del sistema de modo de micro (Aislamiento de voz). iOS 15+. */

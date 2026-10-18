@@ -36,17 +36,45 @@ public class BackgroundTtsModule: Module {
   /// voiceChat). Antes cada locución la devolvía a `.playback` y cortaba la
   /// captura del micro de WebRTC en el iPhone.
   private var modoVoz = false
+  /// Radio: sacar el sonido por el altavoz (solo roles sin micro abierto). Va
+  /// como opción de categoría (`.defaultToSpeaker`) y no como override, porque
+  /// cada `setCategory` borra el override. Con cascos, iOS los prefiere igual.
+  private var altavoz = false
+  private var observadorRuta: NSObjectProtocol?
 
   public func definition() -> ModuleDefinition {
     Name("BackgroundTts")
 
-    Events("onLocucion")
+    Events("onLocucion", "onRuta")
 
     OnCreate {
       self.delegado.alCambiar = { [weak self] hablando in
         self?.sendEvent("onLocucion", ["hablando": hablando])
       }
       self.synth.delegate = self.delegado
+      // Cascos que se conectan o desconectan: se avisa a JS para recalcular
+      // la salida (y el aviso de «ponte cascos»).
+      self.observadorRuta = NotificationCenter.default.addObserver(
+        forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+      ) { [weak self] _ in
+        guard let self = self else { return }
+        self.sendEvent("onRuta", ["ruta": self.rutaSalida()])
+      }
+    }
+
+    OnDestroy {
+      if let o = self.observadorRuta { NotificationCenter.default.removeObserver(o) }
+    }
+
+    // Radio: altavoz sí/no. Solo tiene efecto con la voz activa (modoVoz).
+    Function("altavoz") { (activo: Bool) -> Void in
+      self.altavoz = activo
+      if self.modoVoz { _ = self.configureAudioSession() }
+    }
+
+    // Por dónde sale ahora el sonido: "cascos", "auricular" o "altavoz".
+    Function("rutaSalida") { () -> String in
+      return self.rutaSalida()
     }
 
     // Radio entra/sale de voz: la sesión pasa a playAndRecord + voiceChat
@@ -131,6 +159,16 @@ public class BackgroundTtsModule: Module {
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
+  private func rutaSalida() -> String {
+    let cascos: [AVAudioSession.Port] = [
+      .headphones, .bluetoothHFP, .bluetoothA2DP, .bluetoothLE, .usbAudio, .carAudio,
+    ]
+    let salidas = AVAudioSession.sharedInstance().currentRoute.outputs.map { $0.portType }
+    if salidas.contains(where: { cascos.contains($0) }) { return "cascos" }
+    if salidas.contains(.builtInSpeaker) { return "altavoz" }
+    return "auricular"
+  }
+
   // Voz del idioma pedido; si el sistema no la tiene, otra del mismo idioma
   // (p. ej. pt-BR por pt-PT) y, en último caso, castellano. iOS no trae voz
   // en euskera: sin esta reserva hablaría con la voz del idioma del sistema.
@@ -152,10 +190,12 @@ public class BackgroundTtsModule: Module {
         // .defaultToSpeaker: sin cascos el audio sale por el auricular del
         // móvil, no por el altavoz, y así no hay acople con el micro abierto.
 #if compiler(>=6.2)
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.mixWithOthers, .allowBluetoothHFP])
+        var opciones: AVAudioSession.CategoryOptions = [.mixWithOthers, .allowBluetoothHFP]
 #else
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.mixWithOthers, .allowBluetooth])
+        var opciones: AVAudioSession.CategoryOptions = [.mixWithOthers, .allowBluetooth]
 #endif
+        if altavoz { opciones.insert(.defaultToSpeaker) }
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: opciones)
         try session.setActive(true, options: [])
         return true
       }

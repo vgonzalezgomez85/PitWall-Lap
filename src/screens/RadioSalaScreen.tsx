@@ -274,6 +274,9 @@ export default function RadioSalaScreen({ navigation }: Props) {
         </Card>
       )}
 
+      {/* Sonido: por dónde sale y, si el papel lo permite, el altavoz. */}
+      {!!rol && <SalidaSonido voz={voz} t={t} />}
+
       {/* Conectados. */}
       <Card>
         <Text style={type.label}>{t.radio.conectados}</Text>
@@ -291,6 +294,53 @@ export default function RadioSalaScreen({ navigation }: Props) {
 
       <Button label={t.radio.salir} variant="danger" onPress={confirmarSalir} style={styles.salir} />
     </ScrollView>
+  );
+}
+
+/**
+ * Salida del sonido (fase B, evitar acoples): por dónde sale ahora, el
+ * interruptor de altavoz cuando el papel lo permite y el aviso de cascos con
+ * el micro abierto.
+ */
+function SalidaSonido({ voz, t }: { voz: EstadoVozRadio; t: Textos }) {
+  const { salida, ruta } = voz;
+  const textoRuta = ruta === 'cascos' ? t.radio.rutaCascos
+    : ruta === 'altavoz' ? t.radio.rutaAltavoz
+    : ruta === 'auricular' ? t.radio.rutaAuricular : null;
+  return (
+    <Card style={styles.vozCard}>
+      <Text style={type.label}>{t.radio.sonido}</Text>
+      {!!textoRuta && <Text style={styles.vozEstado}>{t.radio.saleSonido(textoRuta)}</Text>}
+
+      {salida.avisoCascos && (
+        <View style={styles.avisoCascos}>
+          <Text style={styles.avisoCascosTexto}>{t.radio.avisoCascos}</Text>
+        </View>
+      )}
+
+      {salida.permiteAltavoz && (
+        <>
+          <View style={[styles.roles, styles.puertaLabel]}>
+            {[false, true].map(alt => {
+              const activo = salida.altavoz === alt;
+              return (
+                <Pressable
+                  key={String(alt)}
+                  onPress={() => voz.fijarAltavoz(alt)}
+                  style={({ pressed }) => [styles.rol, activo && styles.rolActivo, pressed && styles.pressed]}
+                >
+                  <Text style={[styles.rolTexto, activo && styles.rolTextoActivo]}>
+                    {alt ? t.radio.botonAltavoz : t.radio.botonAuricular}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {ruta === 'cascos' && <Text style={styles.puertaTexto}>{t.radio.conCascosManda}</Text>}
+          {salida.semiduplex && <Text style={styles.puertaTexto}>{t.radio.semiduplexTexto}</Text>}
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -362,6 +412,11 @@ const styles = StyleSheet.create({
   },
   ipTexto: { color: colors.textFaint, fontSize: 12, marginTop: 2, textAlign: 'center' },
   anuncioError: { color: colors.danger },
+  avisoCascos: {
+    marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.slow, backgroundColor: colors.surface,
+  },
+  avisoCascosTexto: { color: colors.slow, fontSize: 14, fontWeight: '600', lineHeight: 19 },
 
   rolCard: { marginTop: spacing.lg },
   roles: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },

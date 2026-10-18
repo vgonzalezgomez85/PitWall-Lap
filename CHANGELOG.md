@@ -18,6 +18,15 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.18.0] — 2026-10-18
+
+### Añadido
+- **Radio: control de acoples y de por dónde sale el sonido (fase B).** Nueva tarjeta **«Sonido»** con la salida actual (cascos, auricular o altavoz), según el papel:
+  - **Micro abierto** (piloto, o asistente en modo abierto): **nunca por el altavoz**. Sin cascos sale por el auricular del móvil y aparece el aviso **«Ponte cascos»**.
+  - **Asistente en walkie**: elige **Auricular / Altavoz** (se guarda por papel). Con altavoz y sin cascos, **mientras pulsa «Hablar» se silencia lo que llega** (semidúplex), para que su micro no capte el altavoz.
+  - **Seguidor**: altavoz por defecto (no tiene micro, no hay acople posible).
+- El módulo nativo `backgroundtts` gana **parte Android** (Kotlin): modo comunicación de Android (cancelador de eco del hardware), altavoz sí/no y aviso al conectar o desconectar cascos. En iOS, las mismas funciones sobre la sesión de audio de Radio.
+
 ## [1.17.0] — 2026-10-18
 
 ### Añadido

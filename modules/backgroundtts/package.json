@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "description": "Background-friendly TTS for SlotTime mobile (local Expo module).",
   "main": "index.ts",
-  "platforms": ["ios"],
+  "platforms": [
+    "ios",
+    "android"
+  ],
   "scripts": {},
-  "keywords": ["expo-modules"],
+  "keywords": [
+    "expo-modules"
+  ],
   "license": "MIT"
 }
