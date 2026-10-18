@@ -7,8 +7,20 @@ import Tts from 'react-native-tts';
 import * as Bg from '../../modules/backgroundtts';
 import { textosDe, type TextosVoz } from '../i18n';
 import { VOZ_RESERVA } from '../i18n/idiomas';
+import { notificarLocucion } from './locucion';
 
 const RATE = 0.5;
+
+// «Está locutando»: iOS lo avisa el módulo nativo; Android/fallback, los
+// eventos de react-native-tts. Radio lo usa para silenciar el micro abierto.
+try {
+  Bg.onLocucionNativa(notificarLocucion);
+} catch { /* módulo nativo ausente (tests, Expo Go) */ }
+try {
+  Tts.addEventListener('tts-start', () => notificarLocucion(true));
+  Tts.addEventListener('tts-finish', () => notificarLocucion(false));
+  Tts.addEventListener('tts-cancel', () => notificarLocucion(false));
+} catch { /* sin motor de TTS: no hay locución que vigilar */ }
 
 // Voz actual (BCP 47). La fija IdiomaProvider al arrancar y al cambiar idioma.
 let lang = 'es-ES';

@@ -14,13 +14,70 @@
 import ExpoModulesCore
 import AVFoundation
 
+/// Delegado del sintetizador: avisa a JS de cuándo empieza y acaba de hablar
+/// (Radio silencia el micro abierto mientras suena la locución).
+private final class DelegadoLocucion: NSObject, AVSpeechSynthesizerDelegate {
+  var alCambiar: ((Bool) -> Void)?
+  func speechSynthesizer(_ s: AVSpeechSynthesizer, didStart u: AVSpeechUtterance) { alCambiar?(true) }
+  func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) {
+    if !s.isSpeaking { alCambiar?(false) }
+  }
+  func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) {
+    if !s.isSpeaking { alCambiar?(false) }
+  }
+}
+
 public class BackgroundTtsModule: Module {
   private let synth = AVSpeechSynthesizer()
+  private let delegado = DelegadoLocucion()
   private var keepAlivePlayer: AVAudioPlayer?
   private var started = false
+  /// Radio con voz activa: la sesión debe permitir el micro (playAndRecord +
+  /// voiceChat). Antes cada locución la devolvía a `.playback` y cortaba la
+  /// captura del micro de WebRTC en el iPhone.
+  private var modoVoz = false
 
   public func definition() -> ModuleDefinition {
     Name("BackgroundTts")
+
+    Events("onLocucion")
+
+    OnCreate {
+      self.delegado.alCambiar = { [weak self] hablando in
+        self?.sendEvent("onLocucion", ["hablando": hablando])
+      }
+      self.synth.delegate = self.delegado
+    }
+
+    // Radio entra/sale de voz: la sesión pasa a playAndRecord + voiceChat
+    // (procesado de voz del sistema: cancelación de eco, supresión de ruido)
+    // o vuelve a solo reproducción.
+    Function("modoVoz") { (activo: Bool) -> Void in
+      self.modoVoz = activo
+      _ = self.configureAudioSession()
+    }
+
+    // Abre el panel del sistema para elegir el modo de micro (Aislamiento de
+    // voz, Estándar, Espectro amplio). iOS no deja a la app activarlo por su
+    // cuenta; sí mostrar el selector. iOS 15+.
+    AsyncFunction("mostrarModosMicro") { () -> Void in
+      if #available(iOS 15.0, *) {
+        AVCaptureDevice.showSystemUserInterface(.microphoneModes)
+      }
+    }.runOnQueue(.main)
+
+    // Modo de micro activo: "aislamiento", "estandar", "amplio" o "".
+    Function("modoMicro") { () -> String in
+      if #available(iOS 15.0, *) {
+        switch AVCaptureDevice.activeMicrophoneMode {
+        case .voiceIsolation: return "aislamiento"
+        case .wideSpectrum: return "amplio"
+        case .standard: return "estandar"
+        @unknown default: return ""
+        }
+      }
+      return ""
+    }
 
     // El keep-alive ya NO arranca en OnCreate. La capa JS lo activa con
     // `start()` solo cuando hay una fuente conectada y lo para con `stop()`
@@ -89,6 +146,19 @@ public class BackgroundTtsModule: Module {
   private func configureAudioSession() -> Bool {
     let session = AVAudioSession.sharedInstance()
     do {
+      if modoVoz {
+        // Radio con voz: micro + altavoz en la misma sesión, con el
+        // procesado de voz del sistema (modo voiceChat). Sin
+        // .defaultToSpeaker: sin cascos el audio sale por el auricular del
+        // móvil, no por el altavoz, y así no hay acople con el micro abierto.
+#if compiler(>=6.2)
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.mixWithOthers, .allowBluetoothHFP])
+#else
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.mixWithOthers, .allowBluetooth])
+#endif
+        try session.setActive(true, options: [])
+        return true
+      }
       // .playback + .default (sin .spokenAudio que es transient).
       // Sin .duckOthers para evitar que iOS lo trate como audio efímero.
       try session.setCategory(.playback, mode: .default, options: [])

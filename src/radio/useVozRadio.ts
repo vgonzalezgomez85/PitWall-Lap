@@ -18,8 +18,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MediaStream } from 'react-native-webrtc';
 
 import type { MensajeSenalizacion, Rol } from './mensajes';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { activarAudioVoz, restaurarAudio } from './audioSesion';
 import { crearPar, obtenerMicro, soltarMicro, type ParVoz } from './voz';
+import { crearPuertaVoz, UMBRAL_PUERTA, type SensibilidadPuerta } from './vozPura';
+import { estaLocutando, onLocucion } from '../voice/locucion';
 
 export interface EstadoVozRadio {
   /** Flujos de audio remotos a reproducir (RTCView). */
@@ -32,7 +36,20 @@ export interface EstadoVozRadio {
   fijarMicro(activo: boolean): void;
   /** ¿Micro obtenido y al menos un peer levantado? */
   listo: boolean;
+  /** Nivel del micro propio (0..1), para calibrar la puerta de voz. */
+  nivelMicro: number;
+  /** Sensibilidad de la puerta de voz del micro abierto (se guarda). */
+  puerta: SensibilidadPuerta;
+  fijarPuerta(s: SensibilidadPuerta): void;
+  /** Micro abierto: ¿está transmitiendo ahora mismo? (puerta abierta y sin
+   *  locución sonando). En walkie siempre coincide con `hablando`. */
+  transmitiendo: boolean;
 }
+
+const CLAVE_PUERTA = 'radio.puertaVoz';
+/** Cada cuánto se evalúa la puerta de voz (ms). Corto para no comerse el
+ *  arranque de las frases. */
+const MUESTREO_PUERTA_MS = 80;
 
 /** Configuración que `RadioContext` entrega al motor de voz. */
 export interface ConfigVozRadio {
@@ -217,6 +234,71 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     aplicarModoMicro();
   }, [rol, tuId, aplicarModoMicro]);
 
+  // ── Micro abierto: puerta de voz + silencio mientras locuta la app ──
+  //
+  // Solo con micro abierto (rol piloto). En walkie manda el botón. El envío se
+  // corta con `fijarEnvio` (no apagando el micro) para seguir midiendo el
+  // nivel y reabrir en cuanto se hable.
+  const [puerta, setPuerta] = useState<SensibilidadPuerta>('normal');
+  const [nivelMicro, setNivelMicro] = useState(0);
+  const [transmitiendo, setTransmitiendo] = useState(false);
+  const puertaRef = useRef(crearPuertaVoz({ umbral: UMBRAL_PUERTA.normal }));
+
+  useEffect(() => {
+    AsyncStorage.getItem(CLAVE_PUERTA).then(v => {
+      if (v === 'apagada' || v === 'normal' || v === 'estricta') setPuerta(v);
+    }).catch(() => { /* ignore */ });
+  }, []);
+
+  useEffect(() => {
+    puertaRef.current.fijarUmbral(UMBRAL_PUERTA[puerta]);
+  }, [puerta]);
+
+  const fijarPuerta = useCallback((s: SensibilidadPuerta) => {
+    setPuerta(s);
+    AsyncStorage.setItem(CLAVE_PUERTA, s).catch(() => { /* ignore */ });
+  }, []);
+
+  const microAbierto = rol === 'piloto';
+  useEffect(() => {
+    const aplicarEnvio = (activo: boolean) => {
+      for (const par of paresRef.current.values()) par.fijarEnvio(activo);
+      setTransmitiendo(prev => (prev === activo ? prev : activo));
+    };
+    if (!tuId || !microAbierto) {
+      aplicarEnvio(true);
+      setNivelMicro(0);
+      return;
+    }
+    let vivo = true;
+    let locutando = estaLocutando();
+    const offLocucion = onLocucion(v => {
+      locutando = v;
+      if (v) aplicarEnvio(false); // corte inmediato al empezar la locución
+    });
+    const reloj = setInterval(() => {
+      void (async () => {
+        let n: number | null = null;
+        for (const par of paresRef.current.values()) {
+          const v = await par.nivelLocal();
+          if (v != null) n = Math.max(n ?? 0, v);
+        }
+        if (!vivo) return;
+        // Sin medida del micro (plataforma o peer aún sin stats): no se cierra
+        // la puerta, solo se silencia durante la locución.
+        const abierta = n == null ? true : puertaRef.current.actualizar(n, Date.now());
+        n = n ?? 0;
+        aplicarEnvio(abierta && !locutando);
+        setNivelMicro(prev => (Math.abs(prev - n) < 0.01 ? prev : n));
+      })();
+    }, MUESTREO_PUERTA_MS);
+    return () => {
+      vivo = false;
+      offLocucion();
+      clearInterval(reloj);
+    };
+  }, [tuId, microAbierto]);
+
   const fijarMicro = useCallback((activo: boolean) => {
     hablandoRef.current = activo;
     setHablando(activo);
@@ -226,5 +308,9 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     if (pista) pista.enabled = activo;
   }, []);
 
-  return { pistas, nivel, hablando, fijarMicro, listo };
+  return {
+    pistas, nivel, hablando, fijarMicro, listo,
+    nivelMicro, puerta, fijarPuerta,
+    transmitiendo: microAbierto ? transmitiendo : hablando,
+  };
 }

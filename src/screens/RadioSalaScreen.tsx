@@ -8,7 +8,7 @@
 // que el hub cierre la sala / se pierda la conexión) la libera.
 
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Network from 'expo-network';
 
@@ -16,7 +16,9 @@ import { useDataSource } from '../data/sourceContext';
 import { esFuentePista } from '../data/types';
 import { useIdioma } from '../i18n/IdiomaContext';
 import type { Textos } from '../i18n';
+import { mostrarModosMicro } from '../../modules/backgroundtts';
 import { MedidorNivel } from '../radio/MedidorNivel';
+import { UMBRAL_PUERTA, type SensibilidadPuerta } from '../radio/vozPura';
 import { useRadio } from '../radio/RadioContext';
 import { useAsistenteSource } from '../radio/useAsistenteSource';
 import type { Rol } from '../radio/mensajes';
@@ -39,6 +41,14 @@ function papelTexto(rol: Rol, t: Textos): string {
 }
 
 const ROLES: Rol[] = ['piloto', 'asistente', 'seguidor'];
+
+const SENSIBILIDADES: SensibilidadPuerta[] = ['apagada', 'normal', 'estricta'];
+
+function textoSensibilidad(s: SensibilidadPuerta, t: Textos): string {
+  if (s === 'apagada') return t.radio.puertaApagada;
+  if (s === 'estricta') return t.radio.puertaEstricta;
+  return t.radio.puertaNormal;
+}
 
 export default function RadioSalaScreen({ navigation }: Props) {
   const { t } = useIdioma();
@@ -228,8 +238,42 @@ export default function RadioSalaScreen({ navigation }: Props) {
       {rol === 'piloto' && (
         <Card style={styles.microCard}>
           <Text style={type.label}>{t.radio.nivelMicro}</Text>
-          <Text style={styles.vozEstado}>{voz.listo ? t.radio.vozLista : t.radio.vozConectando}</Text>
-          <MedidorNivel nivel={voz.nivel} />
+          <Text style={styles.vozEstado}>
+            {voz.listo ? t.radio.vozLista : t.radio.vozConectando}
+            {voz.listo && ` · ${voz.transmitiendo ? t.radio.transmitiendo : t.radio.enEspera}`}
+          </Text>
+          <MedidorNivel nivel={voz.nivelMicro} umbral={UMBRAL_PUERTA[voz.puerta]} />
+
+          <Text style={[type.label, styles.puertaLabel]}>{t.radio.puertaVoz}</Text>
+          <View style={styles.roles}>
+            {SENSIBILIDADES.map(s => {
+              const activa = voz.puerta === s;
+              return (
+                <Pressable
+                  key={s}
+                  onPress={() => voz.fijarPuerta(s)}
+                  style={({ pressed }) => [styles.rol, activa && styles.rolActivo, pressed && styles.pressed]}
+                >
+                  <Text style={[styles.rolTexto, activa && styles.rolTextoActivo]}>
+                    {textoSensibilidad(s, t)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.puertaTexto}>{t.radio.puertaTexto}</Text>
+
+          {Platform.OS === 'ios' && (
+            <>
+              <Button
+                label={t.radio.aislamientoVoz}
+                variant="outline"
+                onPress={mostrarModosMicro}
+                style={styles.puertaLabel}
+              />
+              <Text style={styles.puertaTexto}>{t.radio.aislamientoVozTexto}</Text>
+            </>
+          )}
         </Card>
       )}
 
@@ -284,6 +328,8 @@ const styles = StyleSheet.create({
   rolTexto: { color: colors.textSoft, fontSize: 14, fontWeight: '600' },
   rolTextoActivo: { color: colors.accent },
   pressed: { opacity: 0.7 },
+  puertaLabel: { marginTop: spacing.lg },
+  puertaTexto: { color: colors.textFaint, fontSize: 12, marginTop: spacing.sm, lineHeight: 17 },
 
   vuelta: {
     marginTop: spacing.lg, paddingVertical: 28, borderRadius: radius.md,

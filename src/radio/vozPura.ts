@@ -88,3 +88,94 @@ export function extraerNivelAudio(
   }
   return nivel;
 }
+
+// ── Calidad de voz (fase A de control de ruido) ─────────────────────────────
+
+/**
+ * Ajusta los parámetros de Opus en un SDP local. En un SDP, los `fmtp` dicen
+ * cómo quiere RECIBIR el audio quien lo escribe, así que los dos extremos
+ * ajustan su SDP local y se benefician ambos sentidos:
+ *   • `usedtx=1` — en silencio no se envía audio (ni el ruido de fondo).
+ *   • `useinbandfec=1` — corrección de pérdidas: la voz no se entrecorta si el
+ *     WiFi pierde algún paquete.
+ *   • `stereo=0` / `sprop-stereo=0` — mono: la voz no necesita más.
+ *   • `maxaveragebitrate=32000` — suficiente para voz clara.
+ * Mantiene los parámetros que ya hubiera (p. ej. `minptime`).
+ */
+export function ajustarOpus(sdp: string): string {
+  const pt = /a=rtpmap:(\d+) opus\/48000/i.exec(sdp)?.[1];
+  if (!pt) return sdp;
+  const deseados: Record<string, string> = {
+    usedtx: '1', useinbandfec: '1', stereo: '0', 'sprop-stereo': '0', maxaveragebitrate: '32000',
+  };
+  const fmtp = new RegExp(`^a=fmtp:${pt} (.*)$`, 'm');
+  const m = fmtp.exec(sdp);
+  if (!m) {
+    const params = Object.entries(deseados).map(([k, v]) => `${k}=${v}`).join(';');
+    return sdp.replace(new RegExp(`^(a=rtpmap:${pt} opus/48000.*)$`, 'mi'), `$1\r\na=fmtp:${pt} ${params}`);
+  }
+  const actuales = new Map<string, string>();
+  for (const par of (m[1] ?? '').split(';')) {
+    const [k, v] = par.split('=');
+    if (k?.trim()) actuales.set(k.trim(), (v ?? '').trim());
+  }
+  for (const [k, v] of Object.entries(deseados)) actuales.set(k, v);
+  const linea = `a=fmtp:${pt} ${[...actuales].map(([k, v]) => `${k}=${v}`).join(';')}`;
+  return sdp.replace(fmtp, linea);
+}
+
+/** Nivel del micro LOCAL (0..1) desde `getStats()`: `media-source` de audio.
+ *  `null` si la plataforma no lo informa: la puerta de voz debe quedarse
+ *  abierta, o el piloto no se oiría nunca. */
+export function extraerNivelLocal(
+  estadisticas: Iterable<{ type?: string; kind?: string; audioLevel?: number }>,
+): number | null {
+  let nivel: number | null = null;
+  for (const r of estadisticas) {
+    if (r.type === 'media-source' && typeof r.audioLevel === 'number') {
+      nivel = Math.max(nivel ?? 0, r.audioLevel);
+    }
+  }
+  return nivel;
+}
+
+/** Sensibilidad de la puerta de voz: umbral de nivel (0..1) a superar. */
+export type SensibilidadPuerta = 'apagada' | 'normal' | 'estricta';
+
+export const UMBRAL_PUERTA: Record<SensibilidadPuerta, number> = {
+  apagada: 0,
+  normal: 0.04,
+  estricta: 0.1,
+};
+
+/**
+ * Puerta de voz: decide si el micro abierto debe transmitir. Abre en cuanto
+ * el nivel supera el umbral (sin cortar el arranque de la frase) y cierra solo
+ * tras `retencionMs` por debajo del 70 % del umbral (histéresis: no «tartamudea»
+ * entre palabras ni con el final de las frases).
+ */
+export function crearPuertaVoz(opciones: { umbral: number; retencionMs?: number }) {
+  const retencion = opciones.retencionMs ?? 700;
+  let umbral = opciones.umbral;
+  let abierta = umbral <= 0;
+  let ultimaVoz = -Infinity;
+  return {
+    actualizar(nivel: number, ahora: number): boolean {
+      if (umbral <= 0) return (abierta = true);
+      if (nivel >= umbral) {
+        ultimaVoz = ahora;
+        abierta = true;
+      } else if (abierta && nivel < umbral * 0.7 && ahora - ultimaVoz >= retencion) {
+        abierta = false;
+      } else if (abierta && nivel >= umbral * 0.7) {
+        ultimaVoz = ahora;
+      }
+      return abierta;
+    },
+    fijarUmbral(nuevo: number) {
+      umbral = nuevo;
+      if (umbral <= 0) abierta = true;
+    },
+    get abierta() { return abierta; },
+  };
+}

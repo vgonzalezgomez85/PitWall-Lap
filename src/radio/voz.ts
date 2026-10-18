@@ -21,8 +21,8 @@ import {
 
 import type { MensajeSenalizacion } from './mensajes';
 import {
-  crearColaSenales, deserializarCandidato, extraerNivelAudio, serializarCandidato,
-  type CandidatoIce,
+  ajustarOpus, crearColaSenales, deserializarCandidato, extraerNivelAudio, extraerNivelLocal,
+  serializarCandidato, type CandidatoIce,
 } from './vozPura';
 
 export { deserializarCandidato, extraerNivelAudio, serializarCandidato } from './vozPura';
@@ -34,9 +34,28 @@ const CONFIGURACION_PAR = {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 };
 
+/**
+ * Filtros de audio de WebRTC, forzados. En Android se pasan tal cual como
+ * restricciones del motor (`goog*`): algunos móviles los traen apagados o
+ * usan solo los del fabricante. En iOS los aplica siempre el procesado de voz
+ * del sistema (la sesión en modo voiceChat), y estas claves se ignoran.
+ *   • cancelación de eco · supresión de ruido · control automático de
+ *     ganancia · filtro de graves (quita el retumbar de motores y golpes).
+ */
+const FILTROS_AUDIO = {
+  googEchoCancellation: 'true',
+  googNoiseSuppression: 'true',
+  googAutoGainControl: 'true',
+  googHighpassFilter: 'true',
+};
+
 /** Solicita el micro local (solo audio). Pide permiso si aún no se ha dado. */
 export function obtenerMicro(): Promise<MediaStream> {
-  return mediaDevices.getUserMedia({ audio: true, video: false });
+  return mediaDevices.getUserMedia({
+    // Cast: el tipo de react-native-webrtc no conoce las claves `goog*`.
+    audio: FILTROS_AUDIO as unknown as boolean,
+    video: false,
+  });
 }
 
 /** Cierra (suavemente) un flujo local y sus pistas. */
@@ -69,8 +88,14 @@ export interface ParVoz {
   recibir(sig: MensajeSenalizacion): Promise<void>;
   /** Activa/desactiva el envío del micro (PTT / micro abierto). */
   fijarMicro(activo: boolean): void;
-  /** Nivel de audio actual (0..1), para calibrar la puerta de voz. */
+  /** Puerta de voz / locución: deja de ENVIAR sin apagar el micro, para que
+   *  se pueda seguir midiendo su nivel y reabrir al hablar. */
+  fijarEnvio(activo: boolean): void;
+  /** Nivel de audio recibido (0..1), para el medidor. */
   nivel(): Promise<number>;
+  /** Nivel del micro local (0..1), para la puerta de voz; `null` si la
+   *  plataforma no lo informa. */
+  nivelLocal(): Promise<number | null>;
   /** Cierra el peer. */
   cerrar(): void;
 }
@@ -96,8 +121,9 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
 
   // El micro local se añade como pista de audio. El seguidor (sin micro) abre
   // un transceiver de solo recepción para negociar el audio entrante.
+  let emisor: ReturnType<RTCPeerConnection['addTrack']> | null = null;
   if (pistaMicro && micro) {
-    pc.addTrack(pistaMicro, micro);
+    emisor = pc.addTrack(pistaMicro, micro);
   } else {
     pc.addTransceiver('audio', { direction: 'recvonly' });
   }
@@ -119,17 +145,16 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
 
   pc.onconnectionstatechange = () => cb.onEstado(pc.connectionState);
 
+  // El SDP local lleva Opus ajustado (DTX, FEC, mono): ver `ajustarOpus`.
   const crearYEnviarDescripcion = async () => {
-    if (modo === 'oferente') {
-      const oferta = await pc.createOffer();
-      await pc.setLocalDescription(oferta);
-      cb.onSdp(oferta.sdp);
-    } else {
-      const respuesta = await pc.createAnswer();
-      await pc.setLocalDescription(respuesta);
-      cb.onSdp(respuesta.sdp);
-    }
+    const tipo = modo === 'oferente' ? 'offer' : 'answer';
+    const base = modo === 'oferente' ? await pc.createOffer() : await pc.createAnswer();
+    const sdp = ajustarOpus(base.sdp ?? '');
+    await pc.setLocalDescription(new RTCSessionDescription({ type: tipo, sdp }));
+    cb.onSdp(sdp);
   };
+
+  let envioActivo = true;
 
   const cola = crearColaSenales<CandidatoIce>({
     async aplicarDescripcion({ tipo, sdp }) {
@@ -166,12 +191,35 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
       if (pistaMicro) pistaMicro.enabled = activo;
     },
 
+    fijarEnvio(activo) {
+      if (!emisor || activo === envioActivo) return;
+      envioActivo = activo;
+      try {
+        const params = emisor.getParameters();
+        for (const e of params.encodings) e.active = activo;
+        void emisor.setParameters(params).catch(() => { envioActivo = !activo; });
+      } catch {
+        envioActivo = !activo;
+      }
+    },
+
     async nivel() {
       try {
         const stats = await pc.getStats();
-        return extraerNivelAudio(stats?.values() ?? []);
+        return extraerNivelAudio([...(stats?.values() ?? [])].filter(
+          (r: { type?: string }) => r.type !== 'media-source',
+        ));
       } catch {
         return 0;
+      }
+    },
+
+    async nivelLocal() {
+      try {
+        const stats = await pc.getStats();
+        return extraerNivelLocal(stats?.values() ?? []);
+      } catch {
+        return null;
       }
     },
 

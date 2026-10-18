@@ -11,9 +11,41 @@ interface BackgroundTtsNative {
   stop(): void;
   shutUp(): void;
   getStatus(): string;
+  modoVoz?(activo: boolean): void;
+  mostrarModosMicro?(): Promise<void>;
+  modoMicro?(): string;
+  addListener?(evento: 'onLocucion', cb: (e: { hablando: boolean }) => void): { remove(): void };
 }
 
 const native = requireOptionalNativeModule<BackgroundTtsNative>('BackgroundTts');
+
+/**
+ * Radio con voz activa (iOS): la sesión de audio pasa a playAndRecord +
+ * voiceChat para que la locución no corte el micro de WebRTC.
+ */
+export function fijarModoVoz(activo: boolean): void {
+  if (Platform.OS !== 'ios' || !native?.modoVoz) return;
+  try { native.modoVoz(activo); } catch (e) { console.log('[BackgroundTts] modoVoz err:', e); }
+}
+
+/** Abre el selector del sistema de modo de micro (Aislamiento de voz). iOS 15+. */
+export function mostrarModosMicro(): void {
+  if (Platform.OS !== 'ios' || !native?.mostrarModosMicro) return;
+  native.mostrarModosMicro().catch(() => { /* ignore */ });
+}
+
+/** Modo de micro activo en iOS: 'aislamiento' | 'estandar' | 'amplio' | ''. */
+export function modoMicro(): string {
+  if (Platform.OS !== 'ios' || !native?.modoMicro) return '';
+  try { return native.modoMicro(); } catch { return ''; }
+}
+
+/** Avisa cuando la locución nativa empieza/acaba. Devuelve la cancelación. */
+export function onLocucionNativa(cb: (hablando: boolean) => void): () => void {
+  if (Platform.OS !== 'ios' || !native?.addListener) return () => {};
+  const sub = native.addListener('onLocucion', e => cb(!!e.hablando));
+  return () => sub.remove();
+}
 
 /**
  * Activa el keep-alive de audio (loop silente) que mantiene viva la app en

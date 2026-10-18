@@ -18,6 +18,19 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.16.0] — 2026-10-18
+
+### Añadido
+- **Radio: control de ruido y eco (fase A).**
+  - **Puerta de voz** en el micro abierto del piloto: solo transmite cuando hablas por encima de la marca del medidor, con tres sensibilidades (*Apagada / Normal / Estricta*, se guarda) y un indicador «Transmitiendo / En espera». Cierra con retardo para no cortar el final de las frases.
+  - **El micro del piloto se silencia mientras la app locuta**: el asistente ya no oye de vuelta los tiempos que se le cantan al piloto (la locución no pasa por WebRTC y su cancelación de eco no la quitaba).
+  - **Filtros de WebRTC forzados** en Android: cancelación de eco, supresión de ruido, ganancia automática y filtro de graves.
+  - **Opus ajustado**: mono, sin envío en silencio (DTX) y corrección de pérdidas (FEC) para que la voz no se entrecorte en el WiFi.
+  - **iPhone: botón «Aislamiento de voz»**, que abre el selector de modo de micro de iOS.
+
+### Corregido
+- **iPhone: la primera locución con Radio activa cortaba el micro.** El módulo de voz devolvía la sesión de audio a solo reproducción (`.playback`) en cada tiempo. Con la radio activa ahora usa `playAndRecord` + `voiceChat` (procesado de voz del sistema) y, sin cascos, el sonido sale por el auricular del móvil y no por el altavoz, para evitar acoples.
+
 ## [1.15.7] — 2026-10-17
 
 ### Añadido
