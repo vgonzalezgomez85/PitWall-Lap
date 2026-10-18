@@ -340,6 +340,18 @@ function SalidaSonido({ voz, t }: { voz: EstadoVozRadio; t: Textos }) {
           {salida.semiduplex && <Text style={styles.puertaTexto}>{t.radio.semiduplexTexto}</Text>}
         </>
       )}
+
+      {/* Si la voz se queda muda: reiniciar y, para depurar, ver qué pasa. */}
+      <View style={[styles.roles, styles.puertaLabel]}>
+        <Button label={t.radio.reiniciarVoz} variant="outline" onPress={voz.reiniciarVoz} style={styles.flex} />
+        <Button
+          label={voz.verDiagnostico ? t.radio.ocultarDiagnostico : t.radio.verDiagnostico}
+          variant="ghost"
+          onPress={() => voz.fijarVerDiagnostico(!voz.verDiagnostico)}
+          style={styles.flex}
+        />
+      </View>
+      {voz.verDiagnostico && <Text style={styles.diagnostico} selectable>{voz.diagnostico}</Text>}
     </Card>
   );
 }
@@ -412,6 +424,10 @@ const styles = StyleSheet.create({
   },
   ipTexto: { color: colors.textFaint, fontSize: 12, marginTop: 2, textAlign: 'center' },
   anuncioError: { color: colors.danger },
+  diagnostico: {
+    color: colors.textFaint, fontSize: 11, marginTop: spacing.md, lineHeight: 16,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
+  },
   avisoCascos: {
     marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md,
     borderWidth: 1, borderColor: colors.slow, backgroundColor: colors.surface,

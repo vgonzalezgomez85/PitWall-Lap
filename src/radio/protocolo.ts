@@ -155,7 +155,7 @@ export function crearServidorRadio(
       // el peer 1:1 (nunca se reenvía a otros participantes).
       if (
         id !== null && sig !== null &&
-        (sig.tipo === 'oferta' || sig.tipo === 'respuesta' || sig.tipo === 'candidato')
+        (sig.tipo === 'oferta' || sig.tipo === 'respuesta' || sig.tipo === 'candidato' || sig.tipo === 'renegociar')
       ) {
         for (const cb of [...oyentesSenalizacion]) cb(id, sig);
         return;
@@ -282,7 +282,7 @@ export function crearClienteRadio(): ClienteRadio {
         const sig = deserializarSenalizacion(texto);
         if (
           sig !== null &&
-          (sig.tipo === 'oferta' || sig.tipo === 'respuesta' || sig.tipo === 'candidato')
+          (sig.tipo === 'oferta' || sig.tipo === 'respuesta' || sig.tipo === 'candidato' || sig.tipo === 'renegociar')
         ) {
           for (const cb of [...oyentesSenalizacion]) cb(sig);
         }

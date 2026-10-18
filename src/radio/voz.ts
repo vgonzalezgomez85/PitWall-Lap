@@ -93,6 +93,8 @@ export interface ParVoz {
   /** Nivel del micro local (0..1), para la puerta de voz; `null` si la
    *  plataforma no lo informa. */
   nivelLocal(): Promise<number | null>;
+  /** Línea de diagnóstico: estado, bytes enviados/recibidos y niveles. */
+  diagnostico(): Promise<string>;
   /** Cierra el peer. */
   cerrar(): void;
 }
@@ -194,6 +196,24 @@ export function crearPar(opciones: OpcionesPar): ParVoz {
         ));
       } catch {
         return 0;
+      }
+    },
+
+    async diagnostico() {
+      try {
+        const stats = [...((await pc.getStats())?.values() ?? [])] as {
+          type?: string; kind?: string; bytesSent?: number; bytesReceived?: number; audioLevel?: number;
+        }[];
+        const sumar = (tipo: string, campo: 'bytesSent' | 'bytesReceived') =>
+          stats.filter(r => r.type === tipo).reduce((t, r) => t + (r[campo] ?? 0), 0);
+        const kb = (b: number) => `${Math.round(b / 1024)}k`;
+        const local = extraerNivelLocal(stats);
+        const remoto = extraerNivelAudio(stats.filter(r => r.type !== 'media-source'));
+        return `${pc.connectionState}/${pc.iceConnectionState} tx=${kb(sumar('outbound-rtp', 'bytesSent'))} ` +
+          `rx=${kb(sumar('inbound-rtp', 'bytesReceived'))} micro=${local == null ? '-' : local.toFixed(3)} ` +
+          `entra=${remoto.toFixed(3)} pista=${pistaMicro ? (pistaMicro.enabled ? 'on' : 'off') : '-'}`;
+      } catch (e) {
+        return `sin stats: ${e instanceof Error ? e.message : String(e)}`;
       }
     },
 

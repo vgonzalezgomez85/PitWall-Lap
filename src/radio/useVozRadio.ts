@@ -25,7 +25,7 @@ import { crearPar, obtenerMicro, soltarMicro, type ParVoz } from './voz';
 import { crearPuertaVoz, UMBRAL_PUERTA, type SensibilidadPuerta } from './vozPura';
 import { estaLocutando, onLocucion } from '../voice/locucion';
 import {
-  fijarAltavoz as fijarAltavozNativo, onRuta, rutaSalida, type RutaSalida,
+  diagnosticoAudio, fijarAltavoz as fijarAltavozNativo, onRuta, rutaSalida, type RutaSalida,
 } from '../../modules/backgroundtts';
 import { decidirSalida, type DecisionSalida } from './salidaAudio';
 
@@ -57,6 +57,12 @@ export interface EstadoVozRadio {
   salida: DecisionSalida;
   /** Preferencia de altavoz del papel actual (se guarda por papel). */
   fijarAltavoz(activo: boolean): void;
+  /** Rehace micro y conexiones de voz (también se pide a los demás). */
+  reiniciarVoz(): void;
+  /** Diagnóstico de voz en pantalla (sesión de audio + WebRTC). */
+  verDiagnostico: boolean;
+  fijarVerDiagnostico(v: boolean): void;
+  diagnostico: string;
 }
 
 /** Cómo habla el asistente: walkie o micro abierto, como el piloto. */
@@ -98,6 +104,13 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
 
   const microRef = useRef<MediaStream | null>(null);
   const paresRef = useRef<Map<string, ParVoz>>(new Map());
+  /** Hub: ids de los participantes con voz. No se borra al reiniciar, para
+   *  poder pedirles que renegocien (`renegociar`). */
+  const idsConVozRef = useRef<Set<string>>(new Set());
+  /** Sube para reiniciar la voz (botón, cascos conectados/desconectados o
+   *  petición del asistente): fuerza micro y conexiones nuevos. */
+  const [reinicio, setReinicio] = useState(0);
+  const reiniciarVoz = useCallback(() => setReinicio(r => r + 1), []);
   const hablandoRef = useRef(false);
   const rolRef = useRef(rol);
   rolRef.current = rol;
@@ -143,19 +156,24 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
 
   // ── Topología: arranca al entrar en sala y si cambia quiénes somos ──
   useEffect(() => {
-    if (!tuId) return;
+    if (!tuId) {
+      idsConVozRef.current.clear();
+      return;
+    }
     cerrarTodo();
     void activarAudioVoz();
 
     let desechado = false;
-    const flujosRemotos = new Set<MediaStream>();
+    // Un flujo remoto por participante: al rehacer su conexión, el nuevo
+    // sustituye al viejo (antes se acumulaban flujos muertos).
+    const flujosRemotos = new Map<string, MediaStream>();
     // Señales (oferta y sus candidatos) que llegan al hub antes de tener el
     // micro listo: se guardan en orden y se procesan al obtenerlo. Antes solo
     // se guardaban las ofertas y los candidatos de esa ráfaga se perdían.
     const senalesPendientes: { de: string; sig: MensajeSenalizacion }[] = [];
 
     const publicarPistas = () => {
-      if (!desechado) setPistas([...flujosRemotos]);
+      if (!desechado) setPistas([...flujosRemotos.values()]);
     };
 
     const hacerPar = (id: string, micro: MediaStream | null, modo: 'oferente' | 'respondedor') => {
@@ -179,7 +197,7 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
             else enviarSenalizacion(sig);
           },
           onPistaRemota(flujo) {
-            flujosRemotos.add(flujo);
+            flujosRemotos.set(id, flujo);
             publicarPistas();
           },
           onEstado(estado) {
@@ -189,7 +207,22 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
         },
       });
       paresRef.current.set(id, par);
+      if (esHub) idsConVozRef.current.add(id);
       return par;
+    };
+
+    /** Hub: una oferta nueva de alguien que ya tenía conexión es que reinició
+     *  su voz: se descarta la conexión vieja (reusarla no se recuperaba). */
+    const parParaSenal = (de: string, sig: MensajeSenalizacion): ParVoz | undefined => {
+      const existente = paresRef.current.get(de);
+      if (sig.tipo !== 'oferta') return existente;
+      if (existente) {
+        existente.cerrar();
+        paresRef.current.delete(de);
+        flujosRemotos.delete(de);
+        publicarPistas();
+      }
+      return hacerPar(de, microRef.current, 'respondedor');
     };
 
     // Suscripción a la señalización entrante (se cancela al desmontar).
@@ -201,10 +234,12 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
           senalesPendientes.push({ de, sig });
           return;
         }
-        const par = paresRef.current.get(de)
-          ?? (sig.tipo === 'oferta' ? hacerPar(de, microRef.current, 'respondedor') : undefined);
-        void par?.recibir(sig);
+        void parParaSenal(de, sig)?.recibir(sig);
       } else if (de === 'asistente') {
+        if (sig.tipo === 'renegociar') {
+          reiniciarVoz();
+          return;
+        }
         const par = [...paresRef.current.values()][0];
         void par?.recibir(sig);
       }
@@ -219,11 +254,16 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
           // Procesa, en orden, lo que llegó mientras esperábamos el permiso.
           while (senalesPendientes.length > 0) {
             const { de, sig } = senalesPendientes.shift()!;
-            const par = paresRef.current.get(de)
-              ?? (sig.tipo === 'oferta' ? hacerPar(de, microRef.current, 'respondedor') : undefined);
-            await par?.recibir(sig);
+            await parParaSenal(de, sig)?.recibir(sig);
           }
           aplicarModoMicro();
+          // Si es un reinicio, los participantes siguen atados a conexiones
+          // que ya no existen: se les pide una oferta nueva.
+          if (reinicio > 0) {
+            for (const id of idsConVozRef.current) {
+              if (!paresRef.current.has(id)) enviarSenalizacionA(id, { tipo: 'renegociar', de: 'asistente' });
+            }
+          }
         } else {
           const micro = necesitaMicro ? await obtenerMicro() : null;
           if (necesitaMicro) {
@@ -260,7 +300,7 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     };
   }, [
     tuId, esHub, necesitaMicro, onSenalizacion, enviarSenalizacion,
-    enviarSenalizacionA, cerrarTodo, aplicarModoMicro,
+    enviarSenalizacionA, cerrarTodo, aplicarModoMicro, reinicio, reiniciarVoz,
   ]);
 
   // ── Modo de micro: cambia con el rol sin tumbar los peers ──
@@ -364,8 +404,23 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
   useEffect(() => {
     if (!tuId) return;
     setRuta(rutaSalida());
-    return onRuta(setRuta);
-  }, [tuId]);
+    // Cascos conectados o desconectados con la voz en marcha: el audio de
+    // WebRTC no siempre se recupera solo (iPhone), así que se reinicia la voz.
+    // Se ignoran los avisos del arranque (Android avisa de todo al suscribirse)
+    // y se agrupan los que llegan seguidos.
+    const inicio = Date.now();
+    let espera: ReturnType<typeof setTimeout> | null = null;
+    const off = onRuta((r, dispositivo) => {
+      setRuta(r);
+      if (!dispositivo || Date.now() - inicio < 2000) return;
+      if (espera) clearTimeout(espera);
+      espera = setTimeout(reiniciarVoz, 800);
+    });
+    return () => {
+      off();
+      if (espera) clearTimeout(espera);
+    };
+  }, [tuId, reiniciarVoz]);
 
   const salida = decidirSalida({
     rol,
@@ -393,6 +448,24 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
       return nuevo;
     });
   }, []);
+
+  // ── Diagnóstico en pantalla (solo mientras está abierto) ──
+  const [verDiagnostico, setVerDiagnostico] = useState(false);
+  const [diagnostico, setDiagnostico] = useState('');
+  useEffect(() => {
+    if (!verDiagnostico || !tuId) return;
+    let vivo = true;
+    const tomar = async () => {
+      const lineas = [`audio: ${diagnosticoAudio()}`];
+      for (const [id, par] of paresRef.current) lineas.push(`${id}: ${await par.diagnostico()}`);
+      if (paresRef.current.size === 0) lineas.push('sin conexiones de voz');
+      lineas.push(`reinicios=${reinicio} listo=${listo}`);
+      if (vivo) setDiagnostico(lineas.join('\n'));
+    };
+    void tomar();
+    const reloj = setInterval(() => { void tomar(); }, 1000);
+    return () => { vivo = false; clearInterval(reloj); };
+  }, [verDiagnostico, tuId, reinicio, listo]);
 
   const pistasRef = useRef<MediaStream[]>([]);
   pistasRef.current = pistas;
@@ -428,5 +501,6 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     transmitiendo: microAbierto ? transmitiendo : hablando,
     modoAsistente, fijarModoAsistente,
     ruta, salida, fijarAltavoz,
+    reiniciarVoz, verDiagnostico, fijarVerDiagnostico: setVerDiagnostico, diagnostico,
   };
 }

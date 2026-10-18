@@ -72,6 +72,7 @@ describe('mensajes de señalización', () => {
     { tipo: 'oferta', de: 'asistente', sdp: 'v=0' },
     { tipo: 'respuesta', de: 'p1', sdp: 'v=0' },
     { tipo: 'candidato', de: 'p1', candidate: 'candidate:1' },
+    { tipo: 'renegociar', de: 'asistente' },
     { tipo: 'salir', id: 'p1' },
   ];
 

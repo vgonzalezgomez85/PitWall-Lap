@@ -73,12 +73,23 @@ class BackgroundTtsModule : Module() {
     Function("rutaSalida") {
       rutaSalida()
     }
+
+    // Radio: foto del audio para el diagnóstico en pantalla.
+    Function("diagnosticoAudio") {
+      val am = audio ?: return@Function "sin AudioManager"
+      val disp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        am.communicationDevice?.type?.toString() ?: "-"
+      } else "-"
+      "modo=${am.mode} disp=$disp micMute=${am.isMicrophoneMute} cascos=${hayCascos(am)} " +
+        "voz=$modoVoz alt=$altavoz ruta=${rutaSalida()}"
+    }
   }
 
   private fun avisarRuta() {
     // Con cascos recién conectados, el altavoz forzado deja de tener sentido.
     if (modoVoz) aplicarAltavoz()
-    sendEvent("onRuta", mapOf("ruta" to rutaSalida()))
+    // Solo llegan aquí altas y bajas de dispositivos (cascos).
+    sendEvent("onRuta", mapOf("ruta" to rutaSalida(), "dispositivo" to true))
   }
 
   private fun hayCascos(am: AudioManager): Boolean {

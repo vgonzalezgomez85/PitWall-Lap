@@ -14,9 +14,13 @@ interface BackgroundTtsNative {
   modoVoz?(activo: boolean): void;
   altavoz?(activo: boolean): void;
   rutaSalida?(): string;
+  diagnosticoAudio?(): string;
   mostrarModosMicro?(): Promise<void>;
   modoMicro?(): string;
-  addListener?(evento: 'onLocucion' | 'onRuta', cb: (e: { hablando?: boolean; ruta?: string }) => void): { remove(): void };
+  addListener?(
+    evento: 'onLocucion' | 'onRuta',
+    cb: (e: { hablando?: boolean; ruta?: string; dispositivo?: boolean }) => void,
+  ): { remove(): void };
 }
 
 const native = requireOptionalNativeModule<BackgroundTtsNative>('BackgroundTts');
@@ -45,10 +49,17 @@ export function rutaSalida(): RutaSalida {
   try { return native.rutaSalida() as RutaSalida; } catch { return ''; }
 }
 
-/** Avisa cuando cambia la salida (cascos conectados o desconectados). */
-export function onRuta(cb: (ruta: RutaSalida) => void): () => void {
+/** Foto de la sesión de audio (diagnóstico de Radio en pantalla). */
+export function diagnosticoAudio(): string {
+  if (!native?.diagnosticoAudio) return 'sin módulo nativo';
+  try { return native.diagnosticoAudio(); } catch (e) { return `err: ${e}`; }
+}
+
+/** Avisa cuando cambia la salida. `dispositivo`: se conectaron o
+ *  desconectaron cascos (no un simple cambio de configuración). */
+export function onRuta(cb: (ruta: RutaSalida, dispositivo: boolean) => void): () => void {
   if (!native?.addListener) return () => {};
-  const sub = native.addListener('onRuta', e => cb((e.ruta ?? '') as RutaSalida));
+  const sub = native.addListener('onRuta', e => cb((e.ruta ?? '') as RutaSalida, !!e.dispositivo));
   return () => sub.remove();
 }
 

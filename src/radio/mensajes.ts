@@ -65,6 +65,9 @@ export type MensajeSenalizacion =
   | { tipo: 'oferta'; de: string; sdp: string }
   | { tipo: 'respuesta'; de: string; sdp: string }
   | { tipo: 'candidato'; de: string; candidate: string }
+  // El asistente reinició su voz (p. ej. al cambiar de cascos): pide a los
+  // participantes que vuelvan a negociar el audio con una oferta nueva.
+  | { tipo: 'renegociar'; de: string }
   // Un participante se va (o el asistente lo expulsa).
   | { tipo: 'salir'; id: string };
 
@@ -193,6 +196,8 @@ export function validarSenalizacion(v: unknown): MensajeSenalizacion | null {
       return typeof o.de === 'string' && typeof o.candidate === 'string'
         ? { tipo: 'candidato', de: o.de, candidate: o.candidate }
         : null;
+    case 'renegociar':
+      return typeof o.de === 'string' ? { tipo: 'renegociar', de: o.de } : null;
     case 'salir':
       return typeof o.id === 'string' ? { tipo: 'salir', id: o.id } : null;
     default:

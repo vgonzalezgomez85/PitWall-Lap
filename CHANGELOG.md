@@ -18,6 +18,15 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.18.1] — 2026-10-18
+
+### Corregido
+- **Radio: al conectar o desconectar cascos con la voz en marcha, la voz se quedaba muda (iPhone).** Ahora la voz se **reinicia sola** (micro y conexiones nuevos) cuando se conecta o desconecta un dispositivo. No se reinicia por los cambios de configuración que hace cada locución. Si quien reinicia es el asistente, pide a los demás que renegocien (mensaje `renegociar`).
+- **El asistente reutilizaba la conexión de voz vieja** cuando un participante volvía a conectar su voz, y no se recuperaba. Ahora la sustituye por una nueva.
+
+### Añadido
+- **Radio: botón «Reiniciar voz» y «Diagnóstico»** en la tarjeta «Sonido». El diagnóstico muestra la sesión de audio (categoría, modo, micro y salida en uso, frecuencia, modo de micro de iOS) y, por cada conexión, estado, bytes enviados y recibidos, nivel del micro y nivel entrante.
+
 ## [1.18.0] — 2026-10-18
 
 ### Añadido

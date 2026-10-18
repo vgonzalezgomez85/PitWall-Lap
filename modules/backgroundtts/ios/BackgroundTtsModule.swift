@@ -56,9 +56,15 @@ public class BackgroundTtsModule: Module {
       // la salida (y el aviso de «ponte cascos»).
       self.observadorRuta = NotificationCenter.default.addObserver(
         forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
-      ) { [weak self] _ in
+      ) { [weak self] nota in
         guard let self = self else { return }
-        self.sendEvent("onRuta", ["ruta": self.rutaSalida()])
+        // `dispositivo`: se conectó o desconectó algo (cascos). Los cambios por
+        // reconfigurar la categoría (cada locución) no cuentan: JS reinicia la
+        // voz solo con los de dispositivo.
+        let motivo = (nota.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt)
+          .flatMap { AVAudioSession.RouteChangeReason(rawValue: $0) }
+        let dispositivo = motivo == .newDeviceAvailable || motivo == .oldDeviceUnavailable
+        self.sendEvent("onRuta", ["ruta": self.rutaSalida(), "dispositivo": dispositivo])
       }
     }
 
@@ -70,6 +76,31 @@ public class BackgroundTtsModule: Module {
     Function("altavoz") { (activo: Bool) -> Void in
       self.altavoz = activo
       if self.modoVoz { _ = self.configureAudioSession() }
+    }
+
+    // Radio: foto de la sesión de audio para el diagnóstico en pantalla.
+    Function("diagnosticoAudio") { () -> String in
+      let s = AVAudioSession.sharedInstance()
+      let corto = { (v: String) in
+        v.replacingOccurrences(of: "AVAudioSessionCategory", with: "")
+          .replacingOccurrences(of: "AVAudioSessionMode", with: "")
+          .replacingOccurrences(of: "AVAudioSessionPort", with: "")
+      }
+      let ent = s.currentRoute.inputs.map { corto($0.portType.rawValue) }.joined(separator: "+")
+      let sal = s.currentRoute.outputs.map { corto($0.portType.rawValue) }.joined(separator: "+")
+      var modoMic = "-"
+      if #available(iOS 15.0, *) { modoMic = "\(AVCaptureDevice.activeMicrophoneMode.rawValue)" }
+      return [
+        "cat=\(corto(s.category.rawValue))",
+        "modo=\(corto(s.mode.rawValue))",
+        "opc=\(s.categoryOptions.rawValue)",
+        "ent=\(ent.isEmpty ? "-" : ent)",
+        "sal=\(sal.isEmpty ? "-" : sal)",
+        "micDisp=\(s.isInputAvailable)",
+        "hz=\(Int(s.sampleRate))",
+        "micModo=\(modoMic)",
+        "voz=\(self.modoVoz) alt=\(self.altavoz)",
+      ].joined(separator: " ")
     }
 
     // Por dónde sale ahora el sonido: "cascos", "auricular" o "altavoz".
