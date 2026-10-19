@@ -14,4 +14,18 @@ describe('locucion', () => {
     expect(vistos).toEqual([true, false]);
     expect(estaLocutando()).toBe(true);
   });
+
+  it('si el fin no llega, se da por terminada a los 10 s', () => {
+    jest.useFakeTimers();
+    const vistos: boolean[] = [];
+    const off = onLocucion(v => vistos.push(v));
+    notificarLocucion(true);
+    jest.advanceTimersByTime(9_999);
+    expect(estaLocutando()).toBe(true);
+    jest.advanceTimersByTime(1);
+    expect(estaLocutando()).toBe(false);
+    expect(vistos).toEqual([true, false]);
+    off();
+    jest.useRealTimers();
+  });
 });

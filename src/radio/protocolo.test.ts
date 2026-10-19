@@ -34,6 +34,28 @@ describe('protocolo de sala (loopback en memoria)', () => {
     expect(lista[lista.length - 1]!.map(p => p.nombre)).toEqual(['Hub', 'Ana']);
   });
 
+  it('voz en malla: el hub reenvía la señalización entre participantes con el emisor real', async () => {
+    const { transporte, servidor } = await montar();
+    const piloto = crearClienteRadio();
+    const seguidor = crearClienteRadio();
+    const rp = await piloto.unirse(transporte, HOST, PUERTO, { nombre: 'Ana', rol: 'piloto', codigo: 'K7M-4QX' });
+    const rs = await seguidor.unirse(transporte, HOST, PUERTO, { nombre: 'Seg', rol: 'seguidor', codigo: 'K7M-4QX' });
+
+    const enSeguidor: MensajeSenalizacion[] = [];
+    const enHub: [string, MensajeSenalizacion][] = [];
+    seguidor.onSenalizacion(sig => enSeguidor.push(sig));
+    servidor.onSenalizacion((de, sig) => enHub.push([de, sig]));
+
+    // El piloto ofrece al seguidor (aunque mienta en `de`, el hub pone el real).
+    piloto.enviarSenalizacion({ tipo: 'oferta', de: 'falso', sdp: 'v=0', para: rs.tuId });
+    expect(enSeguidor).toEqual([{ tipo: 'oferta', de: rp.tuId, sdp: 'v=0', para: rs.tuId }]);
+    expect(enHub).toEqual([]);
+
+    // Sin `para` (o para el hub): la consume el propio hub.
+    piloto.enviarSenalizacion({ tipo: 'renegociar', de: rp.tuId });
+    expect(enHub).toEqual([[rp.tuId, { tipo: 'renegociar', de: rp.tuId }]]);
+  });
+
   it('rechaza un segundo piloto', async () => {
     const { transporte } = await montar();
     const a = crearClienteRadio();

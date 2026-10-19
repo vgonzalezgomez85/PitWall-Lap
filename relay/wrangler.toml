@@ -1,0 +1,19 @@
+# Relé de Radio por internet (Cloudflare Worker + Durable Object por sala).
+# Despliegue: ver relay/README.md.
+
+name = "pitwall-radio-relay"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[[durable_objects.bindings]]
+name = "SALAS"
+class_name = "Sala"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sala"]
+
+[vars]
+# ID de la clave TURN de Cloudflare Realtime (no es secreto: sin el token no
+# sirve). El token va aparte: `npx wrangler secret put TURN_TOKEN`.
+TURN_KEY_ID = "f6798036387cf9b63d9de4caa6351b93"

@@ -16,6 +16,7 @@
 package expo.modules.backgroundtts
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -59,9 +60,11 @@ class BackgroundTtsModule : Module() {
       if (activo) {
         am.mode = AudioManager.MODE_IN_COMMUNICATION
         aplicarAltavoz()
+        servicio(true)
       } else {
         limpiarDispositivo(am)
         am.mode = AudioManager.MODE_NORMAL
+        servicio(false)
       }
     }
 
@@ -82,6 +85,22 @@ class BackgroundTtsModule : Module() {
       } else "-"
       "modo=${am.mode} disp=$disp micMute=${am.isMicrophoneMute} cascos=${hayCascos(am)} " +
         "voz=$modoVoz alt=$altavoz ruta=${rutaSalida()}"
+    }
+  }
+
+  /** Arranca (o actualiza) o para el servicio en primer plano de Radio. */
+  private fun servicio(activo: Boolean) {
+    val ctx = appContext.reactContext ?: return
+    val intent = Intent(ctx, ServicioRadio::class.java)
+    try {
+      if (activo) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(intent)
+        else ctx.startService(intent)
+      } else {
+        ctx.stopService(intent)
+      }
+    } catch (e: Exception) {
+      // Sin servicio la radio sigue funcionando con la pantalla encendida.
     }
   }
 

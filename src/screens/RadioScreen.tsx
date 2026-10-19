@@ -18,7 +18,8 @@ import type { Textos } from '../i18n';
 import { useRadio } from '../radio/RadioContext';
 import type { Rol } from '../radio/mensajes';
 import type { SalaDescubierta } from '../radio/red';
-import { salaManual } from '../radio/salaManual';
+import { salaInternet, salaManual } from '../radio/salaManual';
+import type { ModoSala } from '../radio/red';
 import { PUERTO_RADIO } from '../radio/tcp';
 import BackButton from '../ui/BackButton';
 import Button from '../ui/Button';
@@ -65,6 +66,18 @@ export default function RadioScreen({ navigation }: Props) {
   const [ipManual, setIpManual] = useState('');
   const [codigoManual, setCodigoManual] = useState('');
 
+  const [codigoInternet, setCodigoInternet] = useState('');
+
+  function usarSalaInternet() {
+    const sala = salaInternet(codigoInternet);
+    if (!sala) {
+      Alert.alert(t.comun.error, t.radio.codigoNoValido);
+      return;
+    }
+    setSalaElegida(sala);
+    setPapel(null);
+  }
+
   function usarSalaManual() {
     const sala = salaManual(ipManual, codigoManual, PUERTO_RADIO);
     if (!sala) {
@@ -78,10 +91,10 @@ export default function RadioScreen({ navigation }: Props) {
   const puedeEntrar = !!nombre.trim() && !!papel && !!salaElegida && !ocupado;
   const puedeCrear = !!nombre.trim() && !ocupado;
 
-  async function crear() {
+  async function crear(modo: ModoSala = 'local') {
     setOcupado(true);
     try {
-      await radio.crearSala(nombre.trim());
+      await radio.crearSala(nombre.trim(), modo);
       // El estado `conectado` dispara el redirect hacia RadioAsistente.
     } catch (e) {
       setOcupado(false);
@@ -151,11 +164,19 @@ export default function RadioScreen({ navigation }: Props) {
         <Card>
           <Text style={styles.cardSub}>{t.radio.crearSub}</Text>
           <Button
-            label={t.radio.crear}
-            onPress={crear}
+            label={t.radio.crearLocal}
+            onPress={() => crear('local')}
             disabled={!puedeCrear}
             style={styles.mt}
           />
+          <Button
+            label={t.radio.crearInternet}
+            variant="outline"
+            onPress={() => crear('internet')}
+            disabled={!puedeCrear}
+            style={styles.mtSm}
+          />
+          <Text style={styles.manualTexto}>{t.radio.crearModosTexto}</Text>
         </Card>
       </Section>
 
@@ -208,6 +229,30 @@ export default function RadioScreen({ navigation }: Props) {
               </Pressable>
             );
           })}
+
+          {/* Por internet: solo el código (no hace falta estar en la misma red). */}
+          <View style={styles.manual}>
+            <Text style={type.label}>{t.radio.entrarInternet}</Text>
+            <Text style={styles.manualTexto}>{t.radio.entrarInternetTexto}</Text>
+            <View style={styles.manualFila}>
+              <TextInput
+                style={[styles.input, styles.manualIp]}
+                value={codigoInternet}
+                onChangeText={setCodigoInternet}
+                placeholder={t.radio.codigoPh}
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={7}
+              />
+              <Button
+                label={t.radio.usarSala}
+                variant="outline"
+                onPress={usarSalaInternet}
+                disabled={!codigoInternet.trim()}
+              />
+            </View>
+          </View>
 
           {/* Entrada manual: si la búsqueda no encuentra la sala. */}
           <View style={styles.manual}>
@@ -320,6 +365,7 @@ const styles = StyleSheet.create({
   },
   cardSub: { ...type.body, color: colors.textMuted },
   mt: { marginTop: spacing.lg },
+  mtSm: { marginTop: spacing.sm },
 
   buscando: { alignItems: 'center', paddingVertical: spacing.lg },
   sinSalas: { color: colors.textMuted, fontSize: 14, marginTop: spacing.lg, lineHeight: 20 },

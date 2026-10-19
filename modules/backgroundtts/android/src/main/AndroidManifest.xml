@@ -1,1 +1,15 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Radio con la pantalla apagada: Android solo deja usar el micro en
+       segundo plano desde un servicio en primer plano (con notificación). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <application>
+    <service
+      android:name="expo.modules.backgroundtts.ServicioRadio"
+      android:exported="false"
+      android:foregroundServiceType="microphone|mediaPlayback" />
+  </application>
+</manifest>

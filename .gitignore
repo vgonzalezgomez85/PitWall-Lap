@@ -45,3 +45,6 @@ credentials.json
 modules/*/android/build/
 modules/*/android/.cxx/
 modules/*/android/.gradle/
+
+# Caché local de wrangler (relé de Radio)
+relay/.wrangler/

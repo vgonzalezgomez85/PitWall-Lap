@@ -2,7 +2,7 @@ jest.mock('react-native-zeroconf', () => ({}));
 jest.mock('react-native-tcp-socket', () => ({}));
 
 import { generarCodigo } from './codigo';
-import { ipValida, salaManual } from './salaManual';
+import { ipValida, salaInternet, salaManual } from './salaManual';
 
 describe('ipValida', () => {
   it('acepta IPv4 normales y de zona WiFi de iPhone', () => {
@@ -32,5 +32,13 @@ describe('salaManual', () => {
   it('devuelve null si falta la IP o el código', () => {
     expect(salaManual('', codigo, 7080)).toBeNull();
     expect(salaManual('172.20.10.1', 'ABC', 7080)).toBeNull();
+  });
+});
+
+describe('salaInternet', () => {
+  it('solo necesita el código y marca el modo internet', () => {
+    const codigo = generarCodigo(() => 0.3);
+    expect(salaInternet(codigo.replace('-', '').toLowerCase())).toMatchObject({ codigo, modo: 'internet' });
+    expect(salaInternet('ABC')).toBeNull();
   });
 });

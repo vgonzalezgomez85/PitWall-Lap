@@ -25,8 +25,11 @@ import { generarCodigo } from './codigo';
 import { crearCronometro, type Vuelta } from './cronometro';
 import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol, ClaveAviso } from './mensajes';
 import { crearClienteRadio, crearServidorRadio, type ResultadoUnionCliente } from './protocolo';
-import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta, type DiagnosticoBusqueda, type EstadoAnuncio } from './red';
+import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta, type DiagnosticoBusqueda, type EstadoAnuncio, type ModoSala } from './red';
 import { ID_ASISTENTE } from './sala';
+import type { TransporteRadio } from './transporte';
+import { crearTransporteRelay, obtenerServidoresIce } from './transporteRelay';
+import { fijarServidoresIce } from './voz';
 import { crearTransporteTcp } from './tcp';
 import { useVozRadioMotor, type EstadoVozRadio } from './useVozRadio';
 
@@ -52,6 +55,8 @@ interface RadioContextValue {
   descubriendo: boolean;
   /** Se perdió la conexión con la sala y se está reintentando entrar. */
   reconectando: boolean;
+  /** Cómo está montada la sala: WiFi compartida o por internet (relé). */
+  modoSala: ModoSala;
   /** Lo que va oyendo la búsqueda de salas (diagnóstico a distancia). */
   diagBusqueda: DiagnosticoBusqueda | null;
   /** Hub: ¿quedó la sala anunciada en la red? `null` mientras se publica. */
@@ -66,7 +71,7 @@ interface RadioContextValue {
   voz: EstadoVozRadio;
 
   // Acciones.
-  crearSala: (nombre: string) => Promise<void>;
+  crearSala: (nombre: string, modo?: ModoSala) => Promise<void>;
   unirse: (sala: SalaDescubierta, rol: Rol, nombre: string) => Promise<MotivoRechazo | 'entradaFallida' | null>;
   salir: () => void;
   buscarSalas: () => void;
@@ -95,10 +100,20 @@ interface RadioContextValue {
   tuId: string;
   /** Recibe la señalización entrante. `de` es el id del emisor. */
   onSenalizacion: (cb: (de: string, sig: MensajeSenalizacion) => void) => () => void;
-  /** Envía señalización al asistente (lado participante). */
-  enviarSenalizacion: (sig: MensajeSenalizacion) => void;
-  /** Envía señalización a un participante concreto (lado asistente). */
-  enviarSenalizacionA: (destinoId: string, sig: MensajeSenalizacion) => void;
+  /** Envía señalización de voz a un participante concreto. Desde el hub va
+   *  directa; desde un participante va al hub con `para` y el hub la reenvía. */
+  enviarSenalizacionPara: (para: string, sig: MensajeSenalizacion) => void;
+}
+
+/** Transporte de la sala según el modo: TCP local o relé por internet. */
+function crearTransporte(modo: ModoSala, codigo: string): TransporteRadio {
+  return modo === 'internet' ? crearTransporteRelay(codigo) : crearTransporteTcp();
+}
+
+/** Servidores ICE de la voz: por internet, los del relé (con TURN); en local,
+ *  STUN y conexión directa. */
+async function prepararVoz(modo: ModoSala): Promise<void> {
+  fijarServidoresIce(modo === 'internet' ? await obtenerServidoresIce() : null);
 }
 
 /** Esperas entre reintentos de reconexión (≈ 1 min en total). */
@@ -152,6 +167,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   const reconexionRef = useRef<{ cancelada: boolean } | null>(null);
   const [reconectando, setReconectando] = useState(false);
   const [objetivoMs, setObjetivoMs] = useState<number | null>(null);
+  const [modoSala, setModoSala] = useState<ModoSala>('local');
   const reconectarRef = useRef<() => void>(() => {});
   const esHub = tuId === ID_ASISTENTE;
 
@@ -181,6 +197,8 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setTuId('');
     setDiagnostico(null);
     setObjetivoMs(null);
+    setModoSala('local');
+    fijarServidoresIce(null);
   }, [cronometro]);
 
   /** Difunde un resultado a los remotos (TCP) y a nuestro propio bus local
@@ -278,20 +296,24 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     return () => { oyentesSenalizacionRef.current.delete(cb); };
   }, []);
 
-  const enviarSenalizacion = useCallback((sig: MensajeSenalizacion) => {
-    // Lado participante: el mensaje ya lleva `de` = nuestro id.
-    clienteRef.current?.enviarSenalizacion(sig);
+  const enviarSenalizacionPara = useCallback((para: string, sig: MensajeSenalizacion) => {
+    if (servidorRef.current) {
+      // Somos el hub: unicast directo al participante.
+      servidorRef.current.enviarSenalizacion(para, sig);
+    } else {
+      // Participante: al hub, que la reenvía a `para` (o la consume si es él).
+      // Solo la señalización de voz lleva destinatario.
+      if (sig.tipo === 'oferta' || sig.tipo === 'respuesta' || sig.tipo === 'candidato' || sig.tipo === 'renegociar') {
+        clienteRef.current?.enviarSenalizacion({ ...sig, para });
+      }
+    }
   }, []);
 
-  const enviarSenalizacionA = useCallback((destinoId: string, sig: MensajeSenalizacion) => {
-    // Lado hub: unicast al participante concreto.
-    servidorRef.current?.enviarSenalizacion(destinoId, sig);
-  }, []);
-
-  const crearSala = useCallback(async (nombreHub: string) => {
+  const crearSala = useCallback(async (nombreHub: string, modo: ModoSala = 'local') => {
     limpiar();
     const codigoNuevo = generarCodigo();
-    const transporte = crearTransporteTcp();
+    const transporte = crearTransporte(modo, codigoNuevo);
+    await prepararVoz(modo);
     const servidor = crearServidorRadio();
     // `iniciar` registra el hub como participante (rol asistente inicial) y
     // notifica a `setParticipantes` con la lista ya completa.
@@ -305,8 +327,14 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     }
     transporteRef.current = transporte;
     servidorRef.current = servidor;
-    setAnuncio(null);
-    anuncioRef.current = publicarSala(codigoNuevo, setAnuncio);
+    setModoSala(modo);
+    if (modo === 'local') {
+      setAnuncio(null);
+      anuncioRef.current = publicarSala(codigoNuevo, setAnuncio);
+    } else {
+      // Por internet no hay anuncio en la red: se entra con el código.
+      setAnuncio({ ok: true });
+    }
     offDatosRef.current = servidor.onMensaje(alMensajeActual);
     servidor.onSenalizacion((de, sig) => {
       for (const cb of [...oyentesSenalizacionRef.current]) cb(de, sig);
@@ -323,14 +351,16 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   /** Deja enganchado un cliente ya aceptado por el hub (unirse o reconexión). */
   const enlazarCliente = useCallback((
     cliente: ReturnType<typeof crearClienteRadio>,
-    transporte: ReturnType<typeof crearTransporteTcp>,
+    transporte: TransporteRadio,
     resultado: ResultadoUnionCliente,
   ) => {
     transporteRef.current = transporte;
     clienteRef.current = cliente;
     offDatosRef.current = cliente.onMensaje(alMensajeActual);
     cliente.onSenalizacion((sig) => {
-      for (const cb of [...oyentesSenalizacionRef.current]) cb('asistente', sig);
+      // `de` lo pone el hub: es él (`asistente`) o el participante que la envió.
+      const de = 'de' in sig && typeof sig.de === 'string' ? sig.de : ID_ASISTENTE;
+      for (const cb of [...oyentesSenalizacionRef.current]) cb(de, sig);
     });
     offCierreRef.current = cliente.onCerrar(() => reconectarRef.current());
     setParticipantes(resultado.lista);
@@ -343,7 +373,9 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     nombreParticipante: string,
   ) => {
     limpiar();
-    const transporte = crearTransporteTcp();
+    const modo = sala.modo ?? 'local';
+    const transporte = crearTransporte(modo, sala.codigo);
+    await prepararVoz(modo);
     const cliente = crearClienteRadio();
     let resultado: ResultadoUnionCliente;
     try {
@@ -360,7 +392,9 @@ export function RadioProvider({ children }: { children: ReactNode }) {
       let miIp = '';
       try { miIp = await Network.getIpAddressAsync(); } catch { /* ignore */ }
       setDiagnostico(
-        `destino ${sala.host}:${sala.puerto} · mi IP ${miIp || '?'} · ${e instanceof Error ? e.message : String(e)}`,
+        modo === 'internet'
+          ? `por internet · sala ${sala.codigo} · ${e instanceof Error ? e.message : String(e)}`
+          : `destino ${sala.host}:${sala.puerto} · mi IP ${miIp || '?'} · ${e instanceof Error ? e.message : String(e)}`,
       );
       return 'entradaFallida';
     }
@@ -371,6 +405,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     }
     enlazarCliente(cliente, transporte, resultado);
     ultimaUnionRef.current = { sala, nombre: nombreParticipante };
+    setModoSala(modo);
     setNombre(nombreParticipante);
     setCodigo(sala.codigo);
     setError(null);
@@ -407,7 +442,10 @@ export function RadioProvider({ children }: { children: ReactNode }) {
       for (const espera of ESPERAS_RECONEXION_MS) {
         await new Promise(r => setTimeout(r, espera));
         if (estado.cancelada) return;
-        const transporte = crearTransporteTcp();
+        const modo = union.sala.modo ?? 'local';
+        // Por internet, credenciales TURN nuevas (caducan a las pocas horas).
+        await prepararVoz(modo);
+        const transporte = crearTransporte(modo, union.sala.codigo);
         const cliente = crearClienteRadio();
         try {
           const r = await cliente.unirse(transporte, union.sala.host, union.sala.puerto, {
@@ -513,7 +551,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
 
   // Voz: vive aquí (no en la pantalla) para que la sala siga viva al salir atrás.
   const voz = useVozRadioMotor({
-    rol, tuId, esHub, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
+    rol, tuId, participantes, onSenalizacion, enviarSenalizacionPara, enSala: conectado,
   });
 
   // Al desmontar (cierre de la app, recarga), liberamos la red.
@@ -525,22 +563,22 @@ export function RadioProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<RadioContextValue>(() => ({
     rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
-    salas, descubriendo, diagBusqueda, anuncio, reconectando,
+    salas, descubriendo, diagBusqueda, anuncio, reconectando, modoSala,
     vueltas, mejor, tandaIniciada,
     voz,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
     cambiarRol,
     pulsarVuelta, deshacerVuelta, terminarTanda, enviarAviso, fijarObjetivo, objetivoMs,
     onMensaje,
-    tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
+    tuId, onSenalizacion, enviarSenalizacionPara,
   }), [
     rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
-    salas, descubriendo, diagBusqueda, anuncio, reconectando, vueltas, mejor, tandaIniciada,
+    salas, descubriendo, diagBusqueda, anuncio, reconectando, modoSala, vueltas, mejor, tandaIniciada,
     voz,
     crearSala, unirse, salir, buscarSalas, detenerBusqueda,
     cambiarRol,
     pulsarVuelta, deshacerVuelta, terminarTanda, enviarAviso, fijarObjetivo, objetivoMs, onMensaje,
-    tuId, onSenalizacion, enviarSenalizacion, enviarSenalizacionA,
+    tuId, onSenalizacion, enviarSenalizacionPara,
   ]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

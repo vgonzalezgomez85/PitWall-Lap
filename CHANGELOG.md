@@ -18,6 +18,26 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.21.0] — 2026-10-19
+
+### Corregido
+- **Radio: al pulsar «Vuelta», el asistente (iPhone) dejaba de oírse para siempre.** Su propio móvil locuta el tiempo y, durante la locución, el micro abierto se silencia; pero iOS no siempre avisaba del fin de la locución (se comprobaba `isSpeaking` en el mismo instante en que iOS aún decía que sí) y el micro no volvía. Ahora se cuentan las frases empezadas y terminadas, y además hay un seguro: sin aviso de fin, la locución se da por terminada a los 10 s. La sesión de audio tampoco se reconfigura en cada locución si no ha cambiado nada (podía interrumpir el micro de WebRTC).
+- **Radio: con el móvil en reposo (pantalla bloqueada) la voz se cortaba o iba a trozos.**
+  - **iPhone:** al quedarse sin fuente de datos, el módulo de audio desactivaba la sesión y iOS suspendía la app. Con Radio activa la sesión ya no se libera y el bucle silencioso la mantiene viva.
+  - **Micro:** cada reinicio o reconexión de la voz volvía a pedir el micrófono y alternaba la sesión de audio, y iOS no deja abrir el micro en segundo plano. Ahora el micro se abre una vez al entrar y se conserva; la sesión de Radio se activa al entrar en la sala y se restaura solo al salir.
+  - **Android:** nuevo **servicio en primer plano** («PitWall Radio activa», con notificación) mientras se está en una sala. Sin él, Android corta el micrófono en segundo plano desde Android 11.
+
+### Añadido
+- **Radio por internet.** Al crear la sala se elige **«WiFi local»** (como hasta ahora, sin internet) o **«por internet»**: cada uno con su conexión (datos móviles o cualquier WiFi) y **solo con el código**, sin búsqueda en la red ni IP. Para entrar, «Entrar por internet» + código.
+- **Relé en Cloudflare** (`relay/`: Worker + un Durable Object por sala). Reenvía los mensajes de la sala entre el anfitrión y los invitados sin entender el protocolo, que sigue en la app (transporte nuevo `transporteRelay.ts`, misma interfaz que el TCP local). Si el anfitrión pierde la conexión con el relé, vuelve a conectar solo; los invitados se reconectan con la reconexión automática.
+- **Voz por internet con TURN de Cloudflare**: credenciales temporales que da el relé (`/turn`). La clave nunca va dentro de la app y el audio sigue cifrado de extremo a extremo.
+
+## [1.20.0] — 2026-10-18
+
+### Mejorado
+- **Radio: voz en malla. Ahora todos oyen a quien habla, esté en el móvil que esté.** Antes toda la voz pasaba por el móvil que creó la sala: los seguidores no oían al piloto y, si el asistente estaba en otro móvil, su voz solo llegaba a quien creó la sala, no al piloto. Ahora cada pareja de participantes tiene su propia conexión de voz si al menos uno habla (piloto o asistente); dos seguidores no se conectan entre sí. El hub solo reenvía la señalización (campo `para`, con el emisor real puesto por el hub).
+- Las conexiones se ajustan solas cuando alguien entra, sale o cambia de papel. Al reiniciar la voz, se pide a los demás que rehagan su conexión con nosotros.
+
 ## [1.19.0] — 2026-10-18
 
 ### Añadido

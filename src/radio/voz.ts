@@ -29,11 +29,20 @@ import {
 export { deserializarCandidato, extraerNivelAudio, serializarCandidato } from './vozPura';
 export type { CandidatoIce } from './vozPura';
 
-/** STUN público para resolver la IP dentro de la LAN / hotspot del asistente.
- *  Sin TURN: en la misma WiFi la conexión es directa (host candidates). */
-const CONFIGURACION_PAR = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-};
+/** Modo local: STUN público; en la misma WiFi la conexión es directa (host
+ *  candidates) y no hace falta TURN. */
+const ICE_LOCAL = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+/** Servidores ICE en uso. En modo internet son los que da el relé (STUN +
+ *  TURN de Cloudflare con credenciales temporales): por datos móviles los
+ *  móviles no pueden conectarse directamente y la voz pasa por TURN, cifrada
+ *  de extremo a extremo. */
+let servidoresIce: { urls: string | string[]; username?: string; credential?: string }[] = ICE_LOCAL;
+
+/** Fija los servidores ICE de las conexiones nuevas (`null` = modo local). */
+export function fijarServidoresIce(lista: typeof servidoresIce | null): void {
+  servidoresIce = lista && lista.length > 0 ? lista : ICE_LOCAL;
+}
 
 /**
  * Filtros de audio de WebRTC, forzados. En Android se pasan tal cual como
@@ -118,7 +127,7 @@ export interface OpcionesPar {
  */
 export function crearPar(opciones: OpcionesPar): ParVoz {
   const { modo, micro, cb } = opciones;
-  const pc = new RTCPeerConnection(CONFIGURACION_PAR);
+  const pc = new RTCPeerConnection({ iceServers: servidoresIce });
   const pistaMicro = micro?.getAudioTracks()[0] ?? null;
 
   // El micro local se añade como pista de audio. El seguidor (sin micro) abre

@@ -70,7 +70,7 @@ export default function RadioSalaScreen({ navigation }: Props) {
   const {
     rol, esHub, codigo, nombre, participantes, conectado, salir,
     cambiarRol, pulsarVuelta, deshacerVuelta, terminarTanda,
-    tandaIniciada, vueltas, voz, tuId, anuncio, reconectando,
+    tandaIniciada, vueltas, voz, tuId, anuncio, reconectando, modoSala,
     enviarAviso, fijarObjetivo, objetivoMs,
   } = useRadio();
   const { source, state } = useDataSource();
@@ -122,6 +122,7 @@ export default function RadioSalaScreen({ navigation }: Props) {
         <Text style={type.heading}>{t.radio.sala(codigo)}</Text>
         <Text style={styles.conectadoComo}>
           {rol ? t.radio.conectadoComo(papelTexto(rol, t)) : ''} · {nombre}
+          {modoSala === 'internet' ? ` · ${t.radio.porInternet}` : ''}
         </Text>
         {!!voz.calidad && !reconectando && (
           <View style={styles.calidadFila}>
@@ -143,17 +144,23 @@ export default function RadioSalaScreen({ navigation }: Props) {
         <Card style={styles.codigoCard}>
           <Text style={type.label}>{t.radio.comparteCodigo}</Text>
           <Text style={styles.codigo} numberOfLines={1} adjustsFontSizeToFit>{codigo}</Text>
-          {!!miIp && (
+          {modoSala === 'internet' ? (
+            <Text style={styles.ipTexto}>{t.radio.salaInternetTexto}</Text>
+          ) : (
             <>
-              <Text style={styles.ip}>{t.radio.tuIp(miIp)}</Text>
-              <Text style={styles.ipTexto}>{t.radio.tuIpTexto}</Text>
+              {!!miIp && (
+                <>
+                  <Text style={styles.ip}>{t.radio.tuIp(miIp)}</Text>
+                  <Text style={styles.ipTexto}>{t.radio.tuIpTexto}</Text>
+                </>
+              )}
+              <Text style={[styles.ipTexto, anuncio && !anuncio.ok && styles.anuncioError]}>
+                {anuncio == null
+                  ? t.radio.anuncioPendiente
+                  : anuncio.ok ? t.radio.anuncioOk : t.radio.anuncioError(anuncio.error)}
+              </Text>
             </>
           )}
-          <Text style={[styles.ipTexto, anuncio && !anuncio.ok && styles.anuncioError]}>
-            {anuncio == null
-              ? t.radio.anuncioPendiente
-              : anuncio.ok ? t.radio.anuncioOk : t.radio.anuncioError(anuncio.error)}
-          </Text>
         </Card>
       )}
 

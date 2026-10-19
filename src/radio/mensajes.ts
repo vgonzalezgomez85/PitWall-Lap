@@ -71,14 +71,16 @@ export type MensajeSenalizacion =
   | { tipo: 'unirse'; nombre: string; rol: Rol; codigo: string }
   | { tipo: 'bienvenido'; tuId: string; lista: Participante[] }
   | { tipo: 'rechazado'; motivo: MotivoRechazo }
-  // Intercambio SDP/ICE de WebRTC entre el asistente y un participante.
-  // `de` identifica al emisor (el `id` asignado en `bienvenido`, o `asistente`).
-  | { tipo: 'oferta'; de: string; sdp: string }
-  | { tipo: 'respuesta'; de: string; sdp: string }
-  | { tipo: 'candidato'; de: string; candidate: string }
-  // El asistente reinició su voz (p. ej. al cambiar de cascos): pide a los
-  // participantes que vuelvan a negociar el audio con una oferta nueva.
-  | { tipo: 'renegociar'; de: string }
+  // Intercambio SDP/ICE de WebRTC. La voz va en malla (cada pareja con su
+  // conexión) y estos mensajes viajan por el hub: `de` es el emisor (lo
+  // reescribe el hub al reenviar) y `para` el destinatario (sin `para`, o
+  // `asistente`, es para el propio hub).
+  | { tipo: 'oferta'; de: string; sdp: string; para?: string }
+  | { tipo: 'respuesta'; de: string; sdp: string; para?: string }
+  | { tipo: 'candidato'; de: string; candidate: string; para?: string }
+  // Quien reinicia su voz (p. ej. al cambiar de cascos) pide a los demás que
+  // rehagan la conexión con él.
+  | { tipo: 'renegociar'; de: string; para?: string }
   // Un participante se va (o el asistente lo expulsa).
   | { tipo: 'salir'; id: string };
 
@@ -178,6 +180,11 @@ export function validarMensaje(v: unknown): MensajeRadio | null {
   }
 }
 
+/** `para` opcional de la señalización de voz (solo si es texto). */
+function conPara(o: Record<string, unknown>): { para?: string } {
+  return typeof o.para === 'string' ? { para: o.para } : {};
+}
+
 function esRolHablando(v: unknown): v is 'piloto' | 'asistente' {
   return v === 'piloto' || v === 'asistente';
 }
@@ -207,18 +214,18 @@ export function validarSenalizacion(v: unknown): MensajeSenalizacion | null {
         : null;
     case 'oferta':
       return typeof o.de === 'string' && typeof o.sdp === 'string'
-        ? { tipo: 'oferta', de: o.de, sdp: o.sdp }
+        ? { tipo: 'oferta', de: o.de, sdp: o.sdp, ...conPara(o) }
         : null;
     case 'respuesta':
       return typeof o.de === 'string' && typeof o.sdp === 'string'
-        ? { tipo: 'respuesta', de: o.de, sdp: o.sdp }
+        ? { tipo: 'respuesta', de: o.de, sdp: o.sdp, ...conPara(o) }
         : null;
     case 'candidato':
       return typeof o.de === 'string' && typeof o.candidate === 'string'
-        ? { tipo: 'candidato', de: o.de, candidate: o.candidate }
+        ? { tipo: 'candidato', de: o.de, candidate: o.candidate, ...conPara(o) }
         : null;
     case 'renegociar':
-      return typeof o.de === 'string' ? { tipo: 'renegociar', de: o.de } : null;
+      return typeof o.de === 'string' ? { tipo: 'renegociar', de: o.de, ...conPara(o) } : null;
     case 'salir':
       return typeof o.id === 'string' ? { tipo: 'salir', id: o.id } : null;
     default:

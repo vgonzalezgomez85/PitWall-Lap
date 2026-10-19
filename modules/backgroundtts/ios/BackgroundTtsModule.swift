@@ -16,14 +16,23 @@ import AVFoundation
 
 /// Delegado del sintetizador: avisa a JS de cuándo empieza y acaba de hablar
 /// (Radio silencia el micro abierto mientras suena la locución).
+///
+/// Se cuentan las frases empezadas y terminadas: antes el fin se avisaba solo
+/// si `isSpeaking` ya era false dentro de `didFinish`, y iOS a veces aún dice
+/// true en ese instante. El aviso de fin no llegaba nunca y Radio dejaba el
+/// micro silenciado para siempre tras la primera locución.
 private final class DelegadoLocucion: NSObject, AVSpeechSynthesizerDelegate {
   var alCambiar: ((Bool) -> Void)?
-  func speechSynthesizer(_ s: AVSpeechSynthesizer, didStart u: AVSpeechUtterance) { alCambiar?(true) }
-  func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) {
-    if !s.isSpeaking { alCambiar?(false) }
+  private var enCurso = 0
+  func speechSynthesizer(_ s: AVSpeechSynthesizer, didStart u: AVSpeechUtterance) {
+    enCurso += 1
+    if enCurso == 1 { alCambiar?(true) }
   }
-  func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) {
-    if !s.isSpeaking { alCambiar?(false) }
+  func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { terminada() }
+  func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { terminada() }
+  private func terminada() {
+    enCurso = max(0, enCurso - 1)
+    if enCurso == 0 { alCambiar?(false) }
   }
 }
 
@@ -114,6 +123,10 @@ public class BackgroundTtsModule: Module {
     Function("modoVoz") { (activo: Bool) -> Void in
       self.modoVoz = activo
       _ = self.configureAudioSession()
+      // Con Radio activa, el bucle silencioso mantiene la app viva con la
+      // pantalla bloqueada aunque nadie hable (si iOS ve la sesión parada,
+      // suspende la app y se cortan voz y red).
+      if activo { self.startKeepAlive() }
     }
 
     // Abre el panel del sistema para elegir el modo de micro (Aislamiento de
@@ -154,7 +167,9 @@ public class BackgroundTtsModule: Module {
     // Usar al desconectar de la carrera.
     Function("stop") { () -> Void in
       self.synth.stopSpeaking(at: .immediate)
-      self.stopKeepAlive()
+      // Con Radio activa NO se libera la sesión: la usa la voz y, desactivada,
+      // iOS suspendía la app en cuanto se bloqueaba la pantalla.
+      if !self.modoVoz { self.stopKeepAlive() }
     }
 
     // Interrumpe solo el habla en curso, manteniendo viva la sesión.
@@ -226,7 +241,11 @@ public class BackgroundTtsModule: Module {
         var opciones: AVAudioSession.CategoryOptions = [.mixWithOthers, .allowBluetooth]
 #endif
         if altavoz { opciones.insert(.defaultToSpeaker) }
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: opciones)
+        // Solo se reconfigura si algo cambia: hacerlo en cada locución con la
+        // voz en marcha podía interrumpir la captura del micro de WebRTC.
+        if session.category != .playAndRecord || session.mode != .voiceChat || session.categoryOptions != opciones {
+          try session.setCategory(.playAndRecord, mode: .voiceChat, options: opciones)
+        }
         try session.setActive(true, options: [])
         return true
       }

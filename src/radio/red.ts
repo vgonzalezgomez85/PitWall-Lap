@@ -36,11 +36,17 @@ export interface DiagnosticoBusqueda {
 /** Estado del anuncio de la sala propia: `null` mientras se publica. */
 export type EstadoAnuncio = { ok: true } | { ok: false; error: string } | null;
 
+/** Local: WiFi compartida (TCP al móvil que crea la sala). Internet: todos
+ *  por el relé de Cloudflare, con el código de sala. */
+export type ModoSala = 'local' | 'internet';
+
 export interface SalaDescubierta {
   host: string;
   puerto: number;
   codigo: string;
   nombre: string;
+  /** Sin indicar = local. */
+  modo?: ModoSala;
 }
 
 /** Publica una sala (lado asistente). `onEstado` avisa de si el anuncio

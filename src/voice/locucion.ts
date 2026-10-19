@@ -8,9 +8,20 @@ type Oyente = (locutando: boolean) => void;
 
 const oyentes = new Set<Oyente>();
 let locutando = false;
+let seguro: ReturnType<typeof setTimeout> | null = null;
+
+/** Si el aviso de fin no llega (pasó en iPhone), la locución se da por
+ *  terminada a los 10 s: una frase de vuelta dura 1–3 s. Sin esto el micro
+ *  abierto se quedaba silenciado para siempre. */
+const MAX_LOCUCION_MS = 10_000;
 
 /** Notifica un cambio (lo llaman los adaptadores de cada plataforma). */
 export function notificarLocucion(activo: boolean): void {
+  if (seguro) {
+    clearTimeout(seguro);
+    seguro = null;
+  }
+  if (activo) seguro = setTimeout(() => notificarLocucion(false), MAX_LOCUCION_MS);
   if (activo === locutando) return;
   locutando = activo;
   for (const cb of [...oyentes]) cb(activo);

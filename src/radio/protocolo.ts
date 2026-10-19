@@ -165,7 +165,14 @@ export function crearServidorRadio(
         id !== null && sig !== null &&
         (sig.tipo === 'oferta' || sig.tipo === 'respuesta' || sig.tipo === 'candidato' || sig.tipo === 'renegociar')
       ) {
-        for (const cb of [...oyentesSenalizacion]) cb(id, sig);
+        // Voz en malla: si va para otro participante, el hub solo la reenvía,
+        // poniendo como emisor al id real (no se fía del `de` que trae).
+        if (sig.para && sig.para !== ID_ASISTENTE) {
+          const destino = canales.get(sig.para);
+          try { destino?.enviar(serializarSenalizacion({ ...sig, de: id })); } catch { /* canal roto */ }
+          return;
+        }
+        for (const cb of [...oyentesSenalizacion]) cb(id, { ...sig, de: id });
         return;
       }
 

@@ -1,23 +1,19 @@
-// Ciclo de vida de los pares WebRTC de voz según el rol (Fase 2). Sobre la
-// señalización ya enrutada por `RadioContext` (onSenalizacion/enviarSenalizacion),
-// gestiona:
+// Motor de voz de Radio. Sobre la señalización que enruta `RadioContext`
+// gestiona la voz en MALLA (ver malla.ts): cada pareja de participantes tiene
+// su propia conexión WebRTC si al menos uno habla (piloto o asistente), así
+// que cualquiera con micro llega a todos, esté en el móvil que esté. El hub
+// (quien creó la sala) solo reenvía la señalización.
 //
-//   • Hub (quien creó la sala, D6): un peer respondedor por participante, con su
-//     micro compartido entre todos. Su papel solo cambia el modo de micro
-//     (walkie PTT, micro abierto o silencio), nunca la topología.
-//   • Piloto/asistente remotos: un peer oferente hacia el hub. Piloto con el
-//     micro abierto; asistente remoto con walkie (PTT); seguidor solo escucha.
-//
-// La topología (respondedor vs oferente) depende de si somos el hub; el micro
-// depende de si el rol necesita enviar voz. Se separan en dos efectos para que
-// cambiar de rol en el hub no tumbe los peers. Devuelve los flujos remotos (para
-// montar el `RTCView` que los reproduce), el nivel de audio (medidor) y el
-// control PTT. No re-encodifica: el reenvío piloto→seguidor se aplaza.
+// Además: modo del micro según el papel (walkie, micro abierto con puerta de
+// voz, silencio durante la locución), salida del sonido, calidad, reinicio y
+// diagnóstico. Devuelve los flujos remotos para montar el `RTCView` que los
+// reproduce.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MediaStream } from 'react-native-webrtc';
 
-import type { MensajeSenalizacion, Rol } from './mensajes';
+import type { MensajeSenalizacion, Participante, Rol } from './mensajes';
+import { firmaPar, planificarMalla, soyOferente, tieneMicro } from './malla';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { activarAudioVoz, restaurarAudio } from './audioSesion';
@@ -27,7 +23,7 @@ import {
 } from './vozPura';
 import { estaLocutando, onLocucion } from '../voice/locucion';
 import {
-  diagnosticoAudio, fijarAltavoz as fijarAltavozNativo, onRuta, rutaSalida, type RutaSalida,
+  diagnosticoAudio, fijarAltavoz as fijarAltavozNativo, fijarModoVoz, onRuta, rutaSalida, type RutaSalida,
 } from '../../modules/backgroundtts';
 import { decidirSalida, type DecisionSalida } from './salidaAudio';
 
@@ -86,10 +82,15 @@ const MUESTREO_PUERTA_MS = 80;
 export interface ConfigVozRadio {
   rol: Rol | null;
   tuId: string;
-  esHub: boolean;
+  /** Quién hay en la sala: de aquí sale con quién hay que tener conexión. */
+  participantes: Participante[];
+  /** Señalización entrante: `de` es el id del emisor. */
   onSenalizacion: (cb: (de: string, sig: MensajeSenalizacion) => void) => () => void;
-  enviarSenalizacion: (sig: MensajeSenalizacion) => void;
-  enviarSenalizacionA: (destinoId: string, sig: MensajeSenalizacion) => void;
+  /** Envía señalización a un participante concreto (el hub la reenvía). */
+  enviarSenalizacionPara: (para: string, sig: MensajeSenalizacion) => void;
+  /** Estamos en una sala (también mientras se reconecta, cuando `tuId` está
+   *  vacío un momento). Marca cuándo activar y restaurar el audio de Radio. */
+  enSala: boolean;
 }
 
 /** Cuántas veces por segundo se refresca el medidor de nivel. */
@@ -101,7 +102,7 @@ const MUESTREO_MS = 400;
  * el resultado vía contexto.
  */
 export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
-  const { rol, tuId, esHub, onSenalizacion, enviarSenalizacion, enviarSenalizacionA } = config;
+  const { rol, tuId, participantes, onSenalizacion, enviarSenalizacionPara, enSala } = config;
 
   const [pistas, setPistas] = useState<MediaStream[]>([]);
   const [nivel, setNivel] = useState(0);
@@ -112,9 +113,10 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
 
   const microRef = useRef<MediaStream | null>(null);
   const paresRef = useRef<Map<string, ParVoz>>(new Map());
-  /** Hub: ids de los participantes con voz. No se borra al reiniciar, para
-   *  poder pedirles que renegocien (`renegociar`). */
-  const idsConVozRef = useRef<Set<string>>(new Set());
+  const participantesRef = useRef(participantes);
+  participantesRef.current = participantes;
+  /** Ajusta las conexiones a la lista de participantes (lo fija la sesión). */
+  const reconciliarRef = useRef<() => void>(() => {});
   /** Sube para reiniciar la voz (botón, cascos conectados/desconectados o
    *  petición del asistente): fuerza micro y conexiones nuevos. */
   const [reinicio, setReinicio] = useState(0);
@@ -138,15 +140,16 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     AsyncStorage.setItem(CLAVE_MODO_ASISTENTE, m).catch(() => { /* ignore */ });
   }, []);
 
-  // El hub siempre tiene micro (compartido); el remoto lo necesita salvo que sea
-  // seguidor (solo escucha).
-  const necesitaMicro = esHub || (rol != null && rol !== 'seguidor');
+  // Solo piloto y asistente abren el micro; el seguidor solo escucha.
+  const conMicro = tieneMicro(rol);
 
+  // El micro NO se suelta al rehacer las conexiones: iOS no deja volver a
+  // abrirlo con la pantalla bloqueada, y cada reconexión o reinicio de la voz
+  // lo pedía de nuevo (en segundo plano la voz ya no volvía). Se abre una vez
+  // y se suelta solo al salir de la sala o al dejar de tener papel con micro.
   const cerrarTodo = useCallback(() => {
     for (const par of paresRef.current.values()) par.cerrar();
     paresRef.current.clear();
-    soltarMicro(microRef.current);
-    microRef.current = null;
     setPistas([]);
     setListo(false);
     setNivel(0);
@@ -162,133 +165,154 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     setHablando(activo);
   }, []);
 
-  // ── Topología: arranca al entrar en sala y si cambia quiénes somos ──
+  // ── Audio de Radio: se activa al entrar en la sala y se restaura solo al
+  //    salir. Antes se alternaba en cada reinicio de la voz, y con la pantalla
+  //    bloqueada ese cambio dejaba el micro sin poder volver a abrirse. ──
   useEffect(() => {
-    if (!tuId) {
-      idsConVozRef.current.clear();
-      return;
-    }
-    cerrarTodo();
+    if (!enSala) return;
     void activarAudioVoz();
+    return () => { void restaurarAudio(); };
+  }, [enSala]);
+
+  // El micro se suelta al salir de la sala o al dejar de tener papel con micro.
+  useEffect(() => {
+    if (enSala && conMicro) return;
+    soltarMicro(microRef.current);
+    microRef.current = null;
+  }, [enSala, conMicro]);
+  useEffect(() => () => {
+    soltarMicro(microRef.current);
+    microRef.current = null;
+  }, []);
+
+  // ── Sesión de voz en malla: arranca al entrar, al cambiar si tenemos micro
+  //    y en cada reinicio ──
+  useEffect(() => {
+    if (!tuId) return;
+    cerrarTodo();
 
     let desechado = false;
-    // Un flujo remoto por participante: al rehacer su conexión, el nuevo
-    // sustituye al viejo (antes se acumulaban flujos muertos).
+    // Hasta tener el micro (si nos toca) no se crea ninguna conexión: lo que
+    // llega mientras tanto se guarda en orden.
+    let microListo = !conMicro;
+    const pendientes: { de: string; sig: MensajeSenalizacion }[] = [];
+    // Un flujo remoto, una firma (quién envía audio) y un estado por participante.
     const flujosRemotos = new Map<string, MediaStream>();
-    // Señales (oferta y sus candidatos) que llegan al hub antes de tener el
-    // micro listo: se guardan en orden y se procesan al obtenerlo. Antes solo
-    // se guardaban las ofertas y los candidatos de esa ráfaga se perdían.
-    const senalesPendientes: { de: string; sig: MensajeSenalizacion }[] = [];
+    const firmas = new Map<string, string>();
+    const estados = new Map<string, string>();
 
     const publicarPistas = () => {
       if (!desechado) setPistas([...flujosRemotos.values()]);
     };
+    const publicarListo = () => {
+      if (!desechado) setListo([...estados.values()].includes('connected'));
+    };
+    const rolDe = (id: string) => participantesRef.current.find(p => p.id === id)?.rol ?? null;
 
-    const hacerPar = (id: string, micro: MediaStream | null, modo: 'oferente' | 'respondedor') => {
+    const quitarPar = (id: string) => {
+      paresRef.current.get(id)?.cerrar();
+      paresRef.current.delete(id);
+      firmas.delete(id);
+      estados.delete(id);
+      if (flujosRemotos.delete(id)) publicarPistas();
+      publicarListo();
+    };
+
+    const hacerPar = (id: string, modo: 'oferente' | 'respondedor') => {
       const par = crearPar({
         modo,
-        micro,
+        micro: microRef.current,
         cb: {
           onSdp(sdp) {
-            const sig: MensajeSenalizacion =
-              modo === 'oferente'
-                ? { tipo: 'oferta', de: tuId || id, sdp }
-                : { tipo: 'respuesta', de: 'asistente', sdp };
-            if (esHub) enviarSenalizacionA(id, sig);
-            else enviarSenalizacion(sig);
+            enviarSenalizacionPara(id, modo === 'oferente'
+              ? { tipo: 'oferta', de: tuId, sdp }
+              : { tipo: 'respuesta', de: tuId, sdp });
           },
           onCandidato(candidate) {
-            const sig: MensajeSenalizacion = {
-              tipo: 'candidato', de: esHub ? 'asistente' : tuId, candidate,
-            };
-            if (esHub) enviarSenalizacionA(id, sig);
-            else enviarSenalizacion(sig);
+            enviarSenalizacionPara(id, { tipo: 'candidato', de: tuId, candidate });
           },
           onPistaRemota(flujo) {
             flujosRemotos.set(id, flujo);
             publicarPistas();
           },
           onEstado(estado) {
-            if (estado === 'connected') setListo(true);
-            else if (estado === 'failed' || estado === 'closed') setListo(false);
+            estados.set(id, estado);
+            publicarListo();
           },
         },
       });
       paresRef.current.set(id, par);
-      if (esHub) idsConVozRef.current.add(id);
+      firmas.set(id, firmaPar(rolDe(tuId), rolDe(id)));
       return par;
     };
 
-    /** Hub: una oferta nueva de alguien que ya tenía conexión es que reinició
-     *  su voz: se descarta la conexión vieja (reusarla no se recuperaba). */
-    const parParaSenal = (de: string, sig: MensajeSenalizacion): ParVoz | undefined => {
-      const existente = paresRef.current.get(de);
-      if (sig.tipo !== 'oferta') return existente;
-      if (existente) {
-        existente.cerrar();
-        paresRef.current.delete(de);
-        flujosRemotos.delete(de);
-        publicarPistas();
+    /** Abre y cierra conexiones para que cuadren con la lista de la sala. */
+    const reconciliar = () => {
+      if (desechado || !microListo) return;
+      const plan = planificarMalla(tuId, participantesRef.current, firmas);
+      for (const id of plan.cerrar) quitarPar(id);
+      for (const id of plan.ofrecer) void hacerPar(id, 'oferente').iniciar();
+    };
+    reconciliarRef.current = reconciliar;
+
+    const procesar = (de: string, sig: MensajeSenalizacion) => {
+      if (sig.tipo === 'renegociar') {
+        // El otro reinició su voz: la conexión vieja ya no vale. Si nos toca
+        // ofrecer, ofrecemos; si no, esperamos su oferta.
+        quitarPar(de);
+        reconciliar();
+        return;
       }
-      return hacerPar(de, microRef.current, 'respondedor');
+      if (sig.tipo === 'oferta') {
+        // Una oferta nueva sustituye siempre a la conexión anterior con él.
+        quitarPar(de);
+        void hacerPar(de, 'respondedor').recibir(sig);
+        return;
+      }
+      void paresRef.current.get(de)?.recibir(sig);
     };
 
-    // Suscripción a la señalización entrante (se cancela al desmontar).
     const offSenal = onSenalizacion((de, sig) => {
-      if (esHub) {
-        // Sin micro todavía (o con señales anteriores en espera): a la cola,
-        // para no adelantar un candidato a su oferta.
-        if (!microRef.current || senalesPendientes.length > 0) {
-          senalesPendientes.push({ de, sig });
-          return;
-        }
-        void parParaSenal(de, sig)?.recibir(sig);
-      } else if (de === 'asistente') {
-        if (sig.tipo === 'renegociar') {
-          reiniciarVoz();
-          return;
-        }
-        const par = [...paresRef.current.values()][0];
-        void par?.recibir(sig);
+      if (!microListo || pendientes.length > 0) {
+        pendientes.push({ de, sig });
+        return;
       }
+      procesar(de, sig);
     });
 
-    // Arranque según la topología (hub respondedor / remoto oferente).
     (async () => {
-      try {
-        if (esHub) {
-          // El hub adquiere el micro una vez y lo comparte entre peers.
-          microRef.current = await obtenerMicro();
+      if (conMicro) {
+        try {
+          // Se reutiliza el micro si ya estaba abierto (reinicio, reconexión).
+          if (!microRef.current) {
+            microRef.current = await obtenerMicro();
+            // Android 14: el servicio en primer plano solo puede declararse
+            // «de micrófono» con el permiso ya concedido; se actualiza ahora.
+            fijarModoVoz(true);
+          }
           setErrorMicro(false);
-          // Procesa, en orden, lo que llegó mientras esperábamos el permiso.
-          while (senalesPendientes.length > 0) {
-            const { de, sig } = senalesPendientes.shift()!;
-            await parParaSenal(de, sig)?.recibir(sig);
-          }
           aplicarModoMicro();
-          // Si es un reinicio, los participantes siguen atados a conexiones
-          // que ya no existen: se les pide una oferta nueva.
-          if (reinicio > 0) {
-            for (const id of idsConVozRef.current) {
-              if (!paresRef.current.has(id)) enviarSenalizacionA(id, { tipo: 'renegociar', de: 'asistente' });
-            }
-          }
-        } else {
-          const micro = necesitaMicro ? await obtenerMicro() : null;
-          if (necesitaMicro) {
-            microRef.current = micro;
-            setErrorMicro(false);
-          }
-          const par = hacerPar('asistente', micro, 'oferente');
-          await par.iniciar();
-          if (necesitaMicro) aplicarModoMicro();
+        } catch {
+          // Permiso denegado o micro en uso por otra app: se avisa en
+          // pantalla, pero se sigue conectando para poder escuchar.
+          if (!desechado) setErrorMicro(true);
         }
-      } catch {
-        // Permiso de micro denegado o micro en uso por otra app: se avisa en
-        // pantalla en vez de quedarse en «Conectando voz…» para siempre.
-        if (!desechado) {
-          setListo(false);
-          setErrorMicro(true);
+      }
+      if (desechado) return;
+      microListo = true;
+      while (pendientes.length > 0) {
+        const { de, sig } = pendientes.shift()!;
+        procesar(de, sig);
+      }
+      reconciliar();
+      // Reinicio: quienes nos ofrecían siguen atados a conexiones que ya no
+      // existen; se les pide una nueva. (A los que ofrecemos nosotros ya les
+      // llega nuestra oferta, que sustituye a la vieja.)
+      if (reinicio > 0) {
+        for (const p of participantesRef.current) {
+          if (p.id !== tuId && !soyOferente(tuId, p.id)) {
+            enviarSenalizacionPara(p.id, { tipo: 'renegociar', de: tuId });
+          }
         }
       }
     })();
@@ -320,12 +344,15 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
       clearInterval(relojCalidad);
       setCalidad(null);
       cerrarTodo();
-      void restaurarAudio();
     };
   }, [
-    tuId, esHub, necesitaMicro, onSenalizacion, enviarSenalizacion,
-    enviarSenalizacionA, cerrarTodo, aplicarModoMicro, reinicio, reiniciarVoz,
+    tuId, conMicro, onSenalizacion, enviarSenalizacionPara, cerrarTodo, aplicarModoMicro, reinicio,
   ]);
+
+  // Alguien entra, sale o cambia de papel: se ajustan las conexiones.
+  useEffect(() => {
+    reconciliarRef.current();
+  }, [participantes]);
 
   // ── Modo de micro: cambia con el rol sin tumbar los peers ──
   useEffect(() => {

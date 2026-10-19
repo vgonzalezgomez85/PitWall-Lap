@@ -20,3 +20,11 @@ export function salaManual(ip: string, codigo: string, puerto: number): SalaDesc
   const c = formatearCodigo(codigo);
   return { host: ip.trim(), puerto, codigo: c, nombre: `Radio ${c}` };
 }
+
+/** Sala por internet: solo hace falta el código (el relé hace de punto de
+ *  encuentro). `null` si el código no es válido. */
+export function salaInternet(codigo: string): SalaDescubierta | null {
+  if (!codigoValido(codigo)) return null;
+  const c = formatearCodigo(codigo);
+  return { host: 'internet', puerto: 0, codigo: c, nombre: `Radio ${c}`, modo: 'internet' };
+}
