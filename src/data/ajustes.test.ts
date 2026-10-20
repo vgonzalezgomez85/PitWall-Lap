@@ -5,6 +5,12 @@ describe('normalizarAjustes', () => {
     expect(normalizarAjustes(null)).toEqual(AJUSTES_POR_DEFECTO);
     expect(normalizarAjustes(undefined)).toEqual(AJUSTES_POR_DEFECTO);
     expect(AJUSTES_POR_DEFECTO.estrategiaNeumaticos).toBe(true);
+    expect(AJUSTES_POR_DEFECTO.radioDesbloqueada).toBe(false);
+  });
+
+  it('Radio solo desbloqueada si se guardó así', () => {
+    expect(normalizarAjustes({ radioDesbloqueada: true }).radioDesbloqueada).toBe(true);
+    expect(normalizarAjustes({ radioDesbloqueada: 'true' }).radioDesbloqueada).toBe(false);
   });
 
   it('respeta lo guardado', () => {

@@ -2,12 +2,16 @@
 // de voz). Lo que se fija aquí es con lo que arranca cada sesión; el piloto
 // puede cambiar los avisos sobre la marcha desde la pantalla de Lap.
 
-import { Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useState } from 'react';
+import {
+  Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View,
+} from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useAjustes } from '../data/AjustesContext';
 import { useIdioma } from '../i18n/IdiomaContext';
 import { nombreIdioma } from '../i18n/idiomas';
+import { claveRadioValida } from '../radio/desbloqueo';
 import { useVoiceSettings } from '../voice/settings';
 import BackButton from '../ui/BackButton';
 import { BuscarActualizacion } from '../ui/AvisoActualizacion';
@@ -15,7 +19,7 @@ import Card from '../ui/Card';
 import NavRow from '../ui/NavRow';
 import Section from '../ui/Section';
 import VoiceControls from '../ui/VoiceControls';
-import { colors, spacing, type } from '../ui/theme';
+import { colors, radius, spacing, type } from '../ui/theme';
 import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Ajustes'>;
@@ -41,6 +45,68 @@ function FilaInterruptor({ titulo, texto, valor, onChange }: {
         ios_backgroundColor={colors.border}
       />
     </View>
+  );
+}
+
+/** Radio en pruebas: se muestra en el menú tras meter la contraseña. */
+function SeccionRadio() {
+  const { t } = useIdioma();
+  const { ajustes, actualizar } = useAjustes();
+  const [clave, setClave] = useState('');
+  const [error, setError] = useState(false);
+  const a = t.ajustes;
+
+  if (ajustes.radioDesbloqueada) {
+    return (
+      <Card style={styles.tarjeta}>
+        <FilaInterruptor
+          titulo={a.radioVisible}
+          texto={a.radioVisibleSub}
+          valor
+          onChange={v => { if (!v) actualizar({ radioDesbloqueada: false }); }}
+        />
+      </Card>
+    );
+  }
+
+  const probar = () => {
+    if (claveRadioValida(clave)) {
+      setClave('');
+      setError(false);
+      actualizar({ radioDesbloqueada: true });
+    } else {
+      setError(true);
+    }
+  };
+
+  return (
+    <Card style={styles.tarjeta}>
+      <Text style={type.caption}>{a.radioSub}</Text>
+      <View style={styles.claveFila}>
+        <TextInput
+          style={styles.claveInput}
+          value={clave}
+          onChangeText={v => { setClave(v); setError(false); }}
+          onSubmitEditing={probar}
+          placeholder={a.radioClave}
+          placeholderTextColor={colors.textMuted}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="done"
+        />
+        <Pressable
+          onPress={probar}
+          disabled={clave.length === 0}
+          style={({ pressed }) => [
+            styles.claveBoton, clave.length === 0 && styles.claveBotonOff, pressed && styles.pulsado,
+          ]}
+        >
+          <Text style={styles.claveBotonTexto}>{a.radioDesbloquear}</Text>
+        </Pressable>
+      </View>
+      {error && <Text style={styles.claveError}>{a.radioClaveMal}</Text>}
+    </Card>
   );
 }
 
@@ -94,6 +160,10 @@ export default function AjustesScreen({ navigation }: Props) {
         <Text style={type.caption}>{a.vozNota}</Text>
       </Section>
 
+      <Section title={a.radio}>
+        <SeccionRadio />
+      </Section>
+
       {Platform.OS === 'android' && (
         <Section title={t.actualizacion.seccion}>
           <BuscarActualizacion />
@@ -111,4 +181,18 @@ const styles = StyleSheet.create({
   fila: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   filaTextos: { flex: 1, minWidth: 0, gap: 2 },
   filaTitulo: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  claveFila: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
+  claveInput: {
+    flex: 1, minWidth: 0, color: colors.text, fontSize: 16,
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm,
+    paddingHorizontal: spacing.md, paddingVertical: 10,
+  },
+  claveBoton: {
+    backgroundColor: colors.accentFill, borderRadius: radius.sm,
+    paddingHorizontal: spacing.lg, justifyContent: 'center',
+  },
+  claveBotonOff: { opacity: 0.4 },
+  claveBotonTexto: { color: colors.onAccent, fontSize: 15, fontWeight: '700' },
+  claveError: { color: colors.danger, marginTop: spacing.sm, fontSize: 14 },
+  pulsado: { opacity: 0.65 },
 });

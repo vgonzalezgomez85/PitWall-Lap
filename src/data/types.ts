@@ -186,6 +186,13 @@ export interface LiveState {
   rivalGapMs?: number | null;
   /** Vueltas completadas por el rival. */
   rivalLapCount?: number | null;
+
+  // ── Mangas (sólo TicTac nuevo) ────────────────────────────────────────
+  /** Nº total de mangas de la carrera (por la rotación de carriles). Solo
+   *  si hemos visto empezar la carrera; si no, la numeración no es segura. */
+  totalMangas?: number | null;
+  /** Duración de manga deducida del propio TicTac (null = aún no medida). */
+  detectedMangaMs?: number | null;
 }
 
 /** Eventos discretos. La capa de voz los traduce a locuciones. */
@@ -199,12 +206,15 @@ export type SourceEvent =
   | { type: 'half-manga' }
   | { type: 'last-minute' }
   | { type: 'last-30s' }
-  | { type: 'race-finished' }
+  // Fin de manga (o de la pole). TicTac nuevo: `position` = posición final en
+  // la clasificación cerrada; `raceOver` = era la última manga de la carrera.
+  | { type: 'race-finished';     position?: number | null; raceOver?: boolean }
   | { type: 'manga-paused' }
   | { type: 'manga-resumed' }
   // STOP manual en PitWall: la manga se anula y se repetirá desde cero.
   | { type: 'manga-cancelled' }
-  | { type: 'manga-changed';     newMangaNum: number; newLane: number | null }
+  // `lastManga`: TicTac nuevo, empieza la última manga de la carrera.
+  | { type: 'manga-changed';     newMangaNum: number; newLane: number | null; lastManga?: boolean }
   // Sólo PitWall: vuelta cuyo tiempo era < Pt (mínimo). El servidor
   // intenta reasignar automáticamente al carril "overdue" más probable.
   | { type: 'lap-ghost';         lane: number; lapTimeMs: number }

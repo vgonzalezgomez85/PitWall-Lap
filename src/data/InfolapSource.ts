@@ -39,8 +39,8 @@ import type {
 import { INFOLAP_CAPABILITIES, emptyLiveState } from './types';
 import { decodeLapField } from './infolapDecode';
 import {
-  INFOLAP_WSS_PORT, claveConfig, clasificarConfig, parseWsMessage, standingForLane, standingOf,
-  type InfolapConfigMessage, type InfolapLapMessage, type InfolapRival,
+  INFOLAP_WSS_PORT, aprenderDuracion, claveConfig, clasificacionACero, clasificarConfig, mangasPorRotacion,
+  parseWsMessage, standingForLane, standingOf, type InfolapConfigMessage, type InfolapLapMessage, type InfolapRival,
   type InfolapRivalsMessage, type InfolapStanding,
 } from './infolapWss';
 import {
@@ -94,6 +94,14 @@ const WSS_RECONNECT_MS = 2000;
 const MIN_WSS_LAP_MS = 500;
 const LAST_MINUTE_MS = 60_000;
 const LAST_30S_MS = 30_000;
+// TicTac nuevo: un RIVALS_UPDATE que no va seguido de LAP ni CONFIG en este
+// plazo es el cierre de la manga (los emparejados llegan en el mismo ms).
+const FIN_MANGA_ESPERA_MS = 500;
+// …pero no antes de este tiempo desde el CONFIG (ninguna manga dura menos).
+const FIN_MANGA_MIN_MS = 30_000;
+// Con el TicTac nuevo el fin lo marca el TicTac; el reloj solo lo da por
+// acabado si ese cierre no llega en este margen.
+const FIN_RESPALDO_MS = 10_000;
 
 // ── Parsers puros (testables sin red) ─────────────────────────────────────
 
@@ -223,6 +231,28 @@ export class InfolapSource implements DataSource {
   private firedLastMinute = false;
   private firedLast30s = false;
   private firedEnd = false;
+  // ── Mangas según el propio TicTac nuevo ──
+  /** Date.now() del último CONFIG (el reloj arranca `startDelayMs` después). */
+  private configAt: number | null = null;
+  /** Lo que tardó el TicTac en cerrar cada manga desde su CONFIG. */
+  private mangaMedidasMs: number[] = [];
+  /** Duración deducida de esas medidas (null = aún ninguna). */
+  private learnedDurationMs: number | null = null;
+  /** Semáforo: del CONFIG a que empieza a correr el tiempo. */
+  private startDelayMs = 0;
+  /** El TicTac ya cerró la manga en curso. */
+  private mangaEnded = false;
+  /** Hubo cruces de carrera (también salidas) desde el último CONFIG. */
+  private crossingsSinceConfig = false;
+  /** RIVALS_UPDATE pendiente de saber si va suelto (= fin de manga). */
+  private finTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Cambio de posición retenido hasta saber si el RIVALS_UPDATE era el
+   *  cierre (entonces la posición va en el aviso de fin). */
+  private pendingPosChange: { from: number; to: number } | null = null;
+  /** Vimos empezar la carrera (CONFIG con la clasificación a cero): el nº
+   *  de manga es seguro y sabemos cuál es la última. */
+  private mangaNumFiable = false;
+  private totalMangas: number | null = null;
   /** Acumulado de toda la carrera por piloto (nombre normalizado). */
   private pilotStats = new Map<string, PilotStats>();
   /** Tiempo acumulado tras cada vuelta, por piloto (nombre normalizado):
@@ -287,6 +317,7 @@ export class InfolapSource implements DataSource {
     this.raceLapsSinceConfig = false;
     this.reloj.reiniciar();
     this.relojEnEspera = false;
+    this.resetMangasTicTac();
     this.pilotStats.clear();
     this.pilotCumMs.clear();
     this.lastRivals = [];
@@ -502,6 +533,7 @@ export class InfolapSource implements DataSource {
     this.raceLapsSinceConfig = false;
     this.reloj.reiniciar();
     this.relojEnEspera = false;
+    this.resetMangasTicTac();
     this.laneLastMs.clear();
     this.laneLastSeq.clear();
     this.laneLapCount.clear();
@@ -539,6 +571,8 @@ export class InfolapSource implements DataSource {
       currentMangaNum: this.configSeen ? this.mangaCount : null,
       remainingMs: this.remainingMsNow(),
       totalParticipants: this.participants.length,
+      totalMangas: this.totalMangas,
+      detectedMangaMs: this.learnedDurationMs,
     };
     this.refreshDerived();
     this.emitState();
@@ -878,17 +912,100 @@ export class InfolapSource implements DataSource {
       console.log('[Infolap] WSS mensaje no reconocido:', text.slice(0, 120));
       return;
     }
+    // Un LAP o CONFIG detrás: el RIVALS_UPDATE anterior iba emparejado.
+    if (msg.type !== 'RIVALS_UPDATE') this.rivalsEmparejado();
     switch (msg.type) {
       case 'LAP': this.ingestWsLap(msg); break;
       case 'CONFIG': this.ingestConfig(msg); break;
-      case 'RIVALS_UPDATE': this.ingestRivals(msg); break;
+      case 'RIVALS_UPDATE':
+        this.rivalsEmparejado();
+        this.ingestRivals(msg, true);
+        this.finTimer = setTimeout(() => {
+          this.finTimer = null;
+          this.rivalsSuelto();
+        }, FIN_MANGA_ESPERA_MS);
+        break;
     }
+  }
+
+  /** El último RIVALS_UPDATE era de una vuelta/manga: suelta su aviso. */
+  private rivalsEmparejado(): void {
+    if (this.finTimer) { clearTimeout(this.finTimer); this.finTimer = null; }
+    const p = this.pendingPosChange;
+    this.pendingPosChange = null;
+    if (p && p.from !== p.to) this.emitEvent({ type: 'position-changed', ...p });
+  }
+
+  /** RIVALS_UPDATE sin nada detrás: el TicTac ha cerrado la manga (si la
+   *  hay en marcha y lleva lo bastante para serlo). */
+  private rivalsSuelto(): void {
+    if (!this.active) return;
+    const enMarcha = this.crossingsSinceConfig && !this.mangaEnded;
+    const pronto = this.configAt != null && Date.now() - this.configAt < FIN_MANGA_MIN_MS;
+    if (!enMarcha || pronto) { this.rivalsEmparejado(); return; }
+    this.pendingPosChange = null;   // la posición va en el aviso de fin
+    this.finalizarManga();
+  }
+
+  /** Cierre de manga del TicTac nuevo: aprende la duración, avisa con la
+   *  posición final y, si era la última, da la carrera por terminada. */
+  private finalizarManga(): void {
+    const now = Date.now();
+    this.mangaEnded = true;
+    if (this.configAt != null) {
+      this.mangaMedidasMs.push(now - this.configAt);
+      const a = aprenderDuracion(this.mangaMedidasMs);
+      if (a) {
+        this.learnedDurationMs = a.duracionMs;
+        this.startDelayMs = a.retardoMs;
+      }
+    }
+    const raceOver = this.mangaNumFiable && this.totalMangas != null
+      && this.mangaCount >= this.totalMangas;
+    const yaAvisado = this.firedEnd;
+    this.firedHalf = this.firedLastMinute = this.firedLast30s = this.firedEnd = true;
+    this.currentState = {
+      ...this.currentState,
+      remainingMs: 0,
+      estadoManga: 'terminada',
+      detectedMangaMs: this.learnedDurationMs,
+    };
+    this.refreshDerived();
+    this.emitState();
+    // Antes de cambiar el estado: la voz solo habla en 'my-turn'.
+    if (!yaAvisado || raceOver) {
+      this.emitEvent({
+        type: 'race-finished',
+        position: this.selectedLane != null ? this.currentState.position : null,
+        raceOver,
+      });
+    }
+    this.emitSnapshot();
+    this.closeTrackedManga();
+    if (raceOver) {
+      this.currentState = { ...this.currentState, status: 'resting', isFinal: true };
+      this.emitState();
+    }
+  }
+
+  private resetMangasTicTac(): void {
+    if (this.finTimer) { clearTimeout(this.finTimer); this.finTimer = null; }
+    this.pendingPosChange = null;
+    this.configAt = null;
+    this.mangaMedidasMs = [];
+    this.learnedDurationMs = null;
+    this.startDelayMs = 0;
+    this.mangaEnded = false;
+    this.crossingsSinceConfig = false;
+    this.mangaNumFiable = false;
+    this.totalMangas = null;
   }
 
   private ingestWsLap(msg: InfolapLapMessage): void {
     if (msg.lapTimeMs != null && msg.lapTimeMs < MIN_WSS_LAP_MS) return;  // test de transmisión
     // Tanda libre (`isRace` false): se canta, pero no cuenta para la carrera.
     if (msg.isRace && msg.lapTimeMs != null) this.raceLapsSinceConfig = true;
+    if (msg.isRace) this.crossingsSinceConfig = true;
     // El cruce de salida cuenta como vuelta en el seguimiento (como en el
     // TicTac y en PitWall), pero sin tiempo. Las vueltas con tiempo entran
     // por ingestPacket.
@@ -919,18 +1036,25 @@ export class InfolapSource implements DataSource {
   private ingestConfig(msg: InfolapConfigMessage): void {
     if (msg.pilots.length === 0) return;
     const clave = claveConfig(msg.pilots);
+    const inicioCarrera = msg.inicioCarrera ?? clasificacionACero(this.lastRivals);
     const tipo = clasificarConfig({
       claveAnterior: this.lastConfigKey,
       clave,
       vueltasCarrera: this.raceLapsSinceConfig,
+      inicioCarrera,
     });
     this.lastConfigKey = clave;
     if (tipo === 'duplicado') {
       // El TicTac repite el CONFIG al arrancar: la carrera empieza ahora.
-      this.reloj.iniciar(Date.now());
-      this.armMangaFlags();
+      this.arrancarRelojManga();
       this.tickManga(true);
       return;
+    }
+    if (tipo === 'reinicio') {
+      // Carrera nueva: puede durar otra cosa; se vuelve a medir.
+      this.mangaMedidasMs = [];
+      this.learnedDurationMs = null;
+      this.startDelayMs = 0;
     }
     if (tipo !== 'misma-manga') this.emitSnapshot();   // cierra la manga (o la carrera reiniciada)
     if (tipo === 'nueva-manga') this.closeTrackedManga();
@@ -948,10 +1072,24 @@ export class InfolapSource implements DataSource {
       this.mangaCount += 1;
     }
     const first = !this.configSeen || tipo === 'reinicio';
+    // Nº de manga seguro solo si hemos visto la manga 1 (clasificación a
+    // cero); conectando a mitad de carrera no sabemos cuántas van.
+    if (inicioCarrera === true && (first || tipo === 'misma-manga')) {
+      this.mangaNumFiable = true;
+      this.mangaCount = 1;
+    } else if (first) {
+      this.mangaNumFiable = false;
+    }
+    this.totalMangas = this.mangaNumFiable ? mangasPorRotacion(msg.pilots) : null;
+    // Más mangas que carriles: la rotación no era la que suponíamos.
+    if (this.totalMangas != null && this.mangaCount > this.totalMangas) {
+      this.mangaNumFiable = false;
+      this.totalMangas = null;
+    }
+    const lastManga = this.totalMangas != null && this.mangaCount === this.totalMangas;
     this.configSeen = true;
     this.raceLapsSinceConfig = false;
-    this.reloj.iniciar(Date.now());
-    this.armMangaFlags();
+    this.arrancarRelojManga();
     if (first) this.emitEvent({ type: 'race-started' });
 
     this.laneName.clear();
@@ -969,6 +1107,10 @@ export class InfolapSource implements DataSource {
       ...this.currentState,
       // Si mi piloto no está en la lista de esta manga, descansa.
       status: this.selectedName && lane == null ? 'resting' : 'my-turn',
+      isFinal: false,
+      estadoManga: 'en-curso',
+      totalMangas: this.totalMangas,
+      detectedMangaMs: this.learnedDurationMs,
       myLane: lane,
       lapCount: 0,
       lastLapMs: null,
@@ -988,21 +1130,42 @@ export class InfolapSource implements DataSource {
     this.applyRivalToState();
     this.refreshDerived();
     this.emitState();
-    if (lane != null) this.emitEvent({ type: 'manga-changed', newMangaNum: this.mangaCount, newLane: lane });
+    if (lane != null) {
+      this.emitEvent({
+        type: 'manga-changed', newMangaNum: this.mangaCount, newLane: lane,
+        ...(lastManga ? { lastManga: true } : {}),
+      });
+    }
   }
 
-  private ingestRivals(msg: InfolapRivalsMessage): void {
+  /** CONFIG recibido: la manga arranca (el tiempo corre tras el semáforo). */
+  private arrancarRelojManga(): void {
+    const now = Date.now();
+    this.configAt = now;
+    // Semáforo: el tiempo empieza a correr `startDelayMs` después del CONFIG.
+    this.reloj.iniciar(now + this.startDelayMs);
+    this.mangaEnded = false;
+    this.crossingsSinceConfig = false;
+    this.armMangaFlags();
+  }
+
+  /** `deferPosEvent`: RIVALS_UPDATE del WSS; el cambio de posición espera a
+   *  saber si es el cierre de manga (ver rivalsEmparejado / rivalsSuelto). */
+  private ingestRivals(msg: InfolapRivalsMessage, deferPosEvent = false): void {
     this.lastRivals = msg.rivals;
     // Corriendo: por carril. Descansando: por nombre (sigue en la general).
     const name = this.selectedName;
     const s = this.selectedLane != null
       ? standingForLane(msg.rivals, this.selectedLane)
       : name ? standingOf(msg.rivals, r => this.nameMatches(r.name, name)) : null;
-    if (s) this.applyStanding(s);
+    if (s) this.applyStanding(s, deferPosEvent);
   }
 
   /** Posición y gaps del piloto propio (en tiempo del TicTac y en vueltas). */
-  private applyStanding(s: Omit<InfolapStanding, 'total'> & { total: number | null }): void {
+  private applyStanding(
+    s: Omit<InfolapStanding, 'total'> & { total: number | null },
+    deferPosEvent = false,
+  ): void {
     const prev = this.currentState.position;
     const pace = this.myPaceMs();
     this.currentState = {
@@ -1019,7 +1182,11 @@ export class InfolapSource implements DataSource {
     this.refreshDerived();
     this.emitState();
     if (prev != null && prev !== s.position) {
-      this.emitEvent({ type: 'position-changed', from: prev, to: s.position });
+      if (deferPosEvent) {
+        this.pendingPosChange = { from: this.pendingPosChange?.from ?? prev, to: s.position };
+      } else {
+        this.emitEvent({ type: 'position-changed', from: prev, to: s.position });
+      }
     }
   }
 
@@ -1068,14 +1235,29 @@ export class InfolapSource implements DataSource {
 
   // ── Reloj de manga (duración configurada por el usuario) ────────────────
 
+  /** Duración de manga: la que configura el usuario o, si no, la deducida
+   *  del TicTac nuevo. */
+  private duracionMs(): number | null {
+    return this.mangaDurationMs ?? this.learnedDurationMs;
+  }
+
+  /** Tiempo restante sin recortar a 0 (negativo = ya pasado). */
+  private restanteBrutoMs(): number | null {
+    const d = this.duracionMs();
+    if (d == null || !this.reloj.iniciado) return null;
+    if (this.mangaEnded) return 0;
+    return this.reloj.restanteBrutoMs(Date.now(), d);
+  }
+
   private remainingMsNow(): number | null {
-    return this.reloj.restanteMs(Date.now(), this.mangaDurationMs);
+    const r = this.restanteBrutoMs();
+    return r == null ? null : Math.max(0, r);
   }
 
   /** Marca como ya lanzados los avisos cuyo umbral ya pasó. */
   private armMangaFlags(): void {
     const rem = this.remainingMsNow();
-    const d = this.mangaDurationMs;
+    const d = this.duracionMs();
     this.firedHalf = rem != null && d != null && rem <= d / 2;
     this.firedLastMinute = rem != null && rem <= LAST_MINUTE_MS;
     this.firedLast30s = rem != null && rem <= LAST_30S_MS;
@@ -1097,7 +1279,9 @@ export class InfolapSource implements DataSource {
   private tickManga(force = false): void {
     if (!this.active) return;
     if (this.tracker.checkSilence()) this.trackingChanged();
-    if (this.reloj.comprobarPausa(Date.now(), this.mangaDurationMs)) {
+    // Solo el TicTac antiguo: el nuevo cierra él la manga y aquí el reloj es
+    // de respaldo (y con pocas vueltas un silencio largo no es una pausa).
+    if (!this.wssMode && this.reloj.comprobarPausa(Date.now(), this.duracionMs())) {
       console.log('[Infolap] sin vueltas: manga parada, reloj congelado');
       force = true;
     }
@@ -1109,7 +1293,7 @@ export class InfolapSource implements DataSource {
       this.emitState();
     }
     if (rem == null) return;
-    const d = this.mangaDurationMs!;
+    const d = this.duracionMs()!;
     if (!this.firedHalf && rem <= d / 2 && rem > LAST_MINUTE_MS) {
       this.firedHalf = true;
       this.emitEvent({ type: 'half-manga' });
@@ -1122,7 +1306,10 @@ export class InfolapSource implements DataSource {
       this.firedLast30s = true;
       this.emitEvent({ type: 'last-30s' });
     }
-    if (!this.firedEnd && rem <= 0) {
+    // TicTac nuevo: el fin lo marca el TicTac (finalizarManga); el reloj solo
+    // hace de respaldo si ese cierre no llega.
+    const pasado = -(this.restanteBrutoMs() ?? 0);
+    if (!this.firedEnd && rem <= 0 && pasado >= (this.wssMode ? FIN_RESPALDO_MS : 0)) {
       this.firedEnd = true;
       this.emitEvent({ type: 'race-finished' });
       this.emitSnapshot();

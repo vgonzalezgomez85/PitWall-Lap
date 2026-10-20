@@ -31,7 +31,8 @@ export class RelojManga {
     return this.pausaDesde != null;
   }
 
-  /** La manga empieza ahora (CONFIG del TicTac nuevo). */
+  /** La manga empieza en `ahora` (CONFIG del TicTac nuevo; puede ser un
+   *  instante futuro si hay semáforo). */
   iniciar(ahora: number): void {
     this.inicioAt = ahora;
     this.ultimaVueltaAt = null;
@@ -73,9 +74,16 @@ export class RelojManga {
 
   /** Tiempo restante, o null sin duración o sin la manga empezada. */
   restanteMs(ahora: number, duracionMs: number | null): number | null {
+    const r = this.restanteBrutoMs(ahora, duracionMs);
+    return r == null ? null : Math.max(0, r);
+  }
+
+  /** Como `restanteMs` pero sin recortar a 0 (negativo = ya pasado). Con el
+   *  inicio en el futuro (semáforo del TicTac nuevo) se queda en la duración. */
+  restanteBrutoMs(ahora: number, duracionMs: number | null): number | null {
     if (duracionMs == null || this.inicioAt == null) return null;
     const hasta = this.pausaDesde ?? ahora;
     const corrido = hasta - this.inicioAt - this.pausadoMs;
-    return Math.max(0, duracionMs - corrido);
+    return Math.min(duracionMs, duracionMs - corrido);
   }
 }

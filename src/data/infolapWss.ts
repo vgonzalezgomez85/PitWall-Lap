@@ -11,7 +11,9 @@
 //       {"type":"CONFIG","minAppVersionCode":1,"minAppVersion":"1.0",
 //        "mangaPilots":[{"laneId":1,"name":"Piloto 1"},…],"rivals":[…]}
 //     Incluye todos los carriles; los libres llevan "Carril N". `rivals` es
-//     la parrilla (a veces vacía). Al arrancar una carrera llega DOS veces
+//     la clasificación acumulada (a veces vacía): en la manga 1 todos llevan
+//     vme 0 y gap null; en las siguientes ya trae datos → sabemos si es el
+//     inicio de la carrera (`inicioCarrera`). Al arrancar una carrera llega DOS veces
 //     seguidas, sin vueltas entre medias; y si se reinicia la carrera llega
 //     otra vez con los mismos pilotos en los mismos carriles (una manga
 //     nueva, en cambio, los rota). Ver `clasificarConfig`.
@@ -33,6 +35,16 @@
 //     `gap` = distancia en tiempo al líder (null hasta que se conoce: en cada
 //     salida llegan todos a null, no indica reinicio).
 //     `vme` = tiempo total / vueltas (incluye el tramo de salida); 0 = sin datos.
+//   • Fin de manga: un RIVALS_UPDATE SUELTO (sin LAP ni CONFIG detrás) al
+//     agotarse el tiempo, con la clasificación cerrada: el TicTac da a cada
+//     piloto exactamente mangas × duración de tiempo total (vme × vueltas =
+//     5 × 60 s al acabar la 5ª manga de 1 min). Llega ~3 s después de lo que
+//     dura la manga contando desde el CONFIG (semáforo). El fin de la última
+//     manga es igual: el TicTac NO avisa del fin de carrera, y entre mangas no
+//     manda nada hasta que se lanza la siguiente a mano.
+//   • Rotación: en cada manga los pilotos cambian de carril; con todos los
+//     carriles ocupados, en tantas mangas como carriles cada piloto ha corrido
+//     en todos (6 pilotos / 6 carriles → 6 mangas).
 
 export const INFOLAP_WSS_PORT = 12543;
 
@@ -57,6 +69,9 @@ export interface InfolapLapMessage {
 export interface InfolapConfigMessage {
   type: 'CONFIG';
   pilots: { laneId: number; name: string }[];
+  /** true si la clasificación que lo acompaña está a cero (manga 1 de una
+   *  carrera), false si ya trae datos de mangas anteriores, null si no viene. */
+  inicioCarrera: boolean | null;
 }
 
 export interface InfolapRival {
@@ -88,6 +103,15 @@ function str(v: unknown): string | null {
 function secToMs(v: unknown): number | null {
   const n = num(v);
   return n == null ? null : Math.round(n * 1000);
+}
+
+/** ¿La clasificación del CONFIG está a cero (nadie tiene vme ni gap)? */
+function esInicioCarrera(v: unknown): boolean | null {
+  if (!Array.isArray(v) || v.length === 0) return null;
+  return v.every(r => {
+    const o = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>;
+    return !((num(o.vme) ?? 0) > 0) && !((num(o.gap) ?? 0) > 0);
+  });
 }
 
 export function parseWsMessage(text: string): InfolapWsMessage | null {
@@ -134,7 +158,7 @@ export function parseWsMessage(text: string): InfolapWsMessage | null {
         const name = str(o.name);
         if (laneId != null && laneId > 0 && name) pilots.push({ laneId, name });
       }
-      return { type: 'CONFIG', pilots };
+      return { type: 'CONFIG', pilots, inicioCarrera: esInicioCarrera(m.rivals) };
     }
     case 'RIVALS_UPDATE': {
       const list = Array.isArray(m.rivals) ? m.rivals : [];
@@ -198,8 +222,9 @@ export function standingOf(rivals: InfolapRival[], match: (r: InfolapRival) => b
 /** Qué supone un CONFIG respecto al anterior:
  *  - `duplicado`: mismos pilotos y ninguna vuelta de carrera desde el último
  *    (el TicTac lo manda dos veces al arrancar). Solo reajusta el reloj.
- *  - `reinicio`: mismos pilotos en los mismos carriles tras vueltas de
- *    carrera → se ha reiniciado la carrera; empieza de cero.
+ *  - `reinicio`: carrera nueva tras vueltas de carrera; empieza de cero. Si
+ *    el CONFIG trae la clasificación, lo es cuando viene a cero
+ *    (`inicioCarrera`); si no, cuando repite pilotos y carriles.
  *  - `nueva-manga`: hubo vueltas de carrera y los pilotos han cambiado de
  *    carril (o es el primer CONFIG tras conectar a mitad de manga).
  *  - `misma-manga`: primer CONFIG, o pilotos cambiados antes de correr. */
@@ -220,8 +245,40 @@ export function clasificarConfig(args: {
   /** ¿Ha habido vueltas cronometradas de carrera desde el CONFIG anterior
    *  (o desde que conectamos, si no hubo)? */
   vueltasCarrera: boolean;
+  /** `InfolapConfigMessage.inicioCarrera` (null u omitido = no se sabe). */
+  inicioCarrera?: boolean | null;
 }): TipoConfig {
-  const { claveAnterior, clave, vueltasCarrera } = args;
-  if (claveAnterior === clave) return vueltasCarrera ? 'reinicio' : 'duplicado';
-  return vueltasCarrera ? 'nueva-manga' : 'misma-manga';
+  const { claveAnterior, clave, vueltasCarrera, inicioCarrera = null } = args;
+  if (!vueltasCarrera) return claveAnterior === clave ? 'duplicado' : 'misma-manga';
+  if (inicioCarrera != null) return inicioCarrera ? 'reinicio' : 'nueva-manga';
+  return claveAnterior === clave ? 'reinicio' : 'nueva-manga';
+}
+
+/** Duración de manga deducida de lo que tarda el TicTac en cerrarla, medido
+ *  desde su CONFIG. Una medida solo puede pasarse (semáforo, salida lanzada
+ *  tarde), nunca quedarse corta: con la más corta, `duracionMs` es el minuto
+ *  entero por debajo y `retardoMs` lo que sobra (el semáforo, que se descuenta
+ *  para el reloj). Si sobran más de 15 s no es el semáforo y no se descuenta. */
+export function aprenderDuracion(medidasMs: number[]): { duracionMs: number; retardoMs: number } | null {
+  const validas = medidasMs.filter(m => Number.isFinite(m) && m >= 60_000);
+  if (validas.length === 0) return null;
+  const min = Math.min(...validas);
+  const duracionMs = Math.floor(min / 60_000) * 60_000;
+  const sobra = min - duracionMs;
+  return { duracionMs, retardoMs: sobra <= RETARDO_MAX_MS ? sobra : 0 };
+}
+const RETARDO_MAX_MS = 15_000;
+
+/** ¿Clasificación a cero (inicio de carrera)? Al arrancar, el CONFIG puede
+ *  venir con `rivals` vacío, pero va precedido de un RIVALS_UPDATE con todos
+ *  a vme 0 / gap null. null si no hay clasificación. */
+export function clasificacionACero(rivals: InfolapRival[]): boolean | null {
+  if (rivals.length === 0) return null;
+  return rivals.every(r => r.vmeMs == null && !((r.gapMs ?? 0) > 0));
+}
+
+/** Nº de mangas de la carrera según la rotación: tantas como carriles (el
+ *  CONFIG los trae todos, también los libres). */
+export function mangasPorRotacion(pilots: InfolapConfigMessage['pilots']): number | null {
+  return pilots.length > 0 ? new Set(pilots.map(p => p.laneId)).size : null;
 }

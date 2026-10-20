@@ -1,6 +1,8 @@
 // Flujo completo con el TicTac nuevo: "OK" por UDP → WSS → mensajes JSON.
 
 import { Buffer } from 'buffer';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 import type { LiveState, SourceEvent } from './types';
 
@@ -61,16 +63,13 @@ function paqueteUdpSinVuelta(seq: number, lane: number, name: string): Uint8Arra
 const lap = (frame: number, lane: number, name: string, sec: number, extra = '') =>
   `{"type":"LAP","frame":${frame},"laneId":${lane},"pilotName":"${name}","lapTime":${sec},"isFastLap":false,"position":0,"isRace":true,"isFirstLap":${sec === 0}${extra}}`;
 
-async function connectNew() {
+async function connectNew(ok = 'OK Piloto 1;#001Piloto 2;#002Piloto 3;#003') {
   udp.handlers = {}; udp.sent = []; ws.opened = [];
   const src = new InfolapSource();
   const p = src.connect();
   // Deja que connect() pase los await de IP / AsyncStorage y abra el socket.
   for (let i = 0; i < 5 && !udp.handlers.message; i++) await Promise.resolve();
-  udp.handlers.message!(
-    new Uint8Array(Buffer.from('OK Piloto 1;#001Piloto 2;#002Piloto 3;#003')),
-    { address: '192.168.10.144' },
-  );
+  udp.handlers.message!(new Uint8Array(Buffer.from(ok)), { address: '192.168.10.144' });
   expect(ws.opened).toHaveLength(1);
   expect(ws.opened[0]!.url).toBe('wss://192.168.10.144:12543/');
   ws.opened[0]!.h.onOpen();
@@ -109,7 +108,11 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     conn.h.onMessage('{"type":"RIVALS_UPDATE","rivals":[{"position":1,"name":"Piloto 1","laneId":1,"gap":0},{"position":2,"name":"Piloto 2","laneId":2,"gap":0.3}]}');
     expect(state.position).toBe(2);
     expect(state.gapAheadMs).toBe(300);
-    expect(events).toContainEqual({ type: 'position-changed', from: 1, to: 2 });
+    // El aviso espera al LAP que acompaña al RIVALS_UPDATE (podría ser el
+    // cierre de manga, que ya lleva la posición).
+    expect(events.filter(e => e.type === 'position-changed')).toHaveLength(0);
+    conn.h.onMessage(lap(104, 1, 'Piloto 1', 2.8));
+    expect(events.filter(e => e.type === 'position-changed')).toEqual([{ type: 'position-changed', from: 1, to: 2 }]);
     src.disconnect();
     expect(conn.closed).toBe(true);
   });
@@ -145,7 +148,7 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       expect(state.projectedTotal).toBe(62);   // 2 + 180 s / 3 s
       expect(state.avgToCatchMs).toBe(Math.round((3000 * 180_000) / 186_100));
 
-      // La manga sigue: el carril 1 cruza cada 10 s (sin vueltas = pausa).
+      // La manga sigue: el carril 1 cruza cada 10 s.
       let frame = 100;
       const rodar = (ms: number) => {
         for (let t = 0; t < ms; t += 10_000) {
@@ -158,18 +161,14 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       expect(events).toContainEqual({ type: 'half-manga' });
       rodar(30_000);
       expect(events).toContainEqual({ type: 'last-minute' });
-      // Parada de 60 s: el reloj se congela y no avisa.
-      const congelado = state.remainingMs;
-      jest.advanceTimersByTime(60_000);
-      expect(state.remainingMs).toBe(congelado);
-      expect(events).not.toContainEqual({ type: 'last-30s' });
-      // Se reanuda: la primera vuelta (10 s) descuenta lo parado.
-      conn.h.onMessage(lap(frame++, 1, 'Piloto 1', 10));
-      jest.advanceTimersByTime(1_000);
-      expect(state.remainingMs).toBe(congelado! - 11_000);
       rodar(30_000);
       expect(events).toContainEqual({ type: 'last-30s' });
-      rodar(21_000);
+      // El TicTac nuevo cierra él la manga; sin ese cierre, el reloj lo da
+      // por acabado pasado un margen.
+      rodar(31_000);
+      expect(events).not.toContainEqual({ type: 'race-finished' });
+      expect(state.remainingMs).toBe(0);
+      rodar(10_000);
       expect(events).toContainEqual({ type: 'race-finished' });
       expect(state.remainingMs).toBe(0);
       expect(state.avgToCatchMs).toBeNull();
@@ -178,7 +177,7 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       src.disconnect();
       expect(snaps).toHaveLength(2);   // al desconectar se vuelve a guardar
       const last = snaps[1] as { standings: { name: string; totalLaps: number }[] };
-      expect(last.standings.map(s => [s.name, s.totalLaps])).toEqual([['Piloto 1', 19], ['Piloto 2', 2]]);
+      expect(last.standings.map(s => [s.name, s.totalLaps])).toEqual([['Piloto 1', 20], ['Piloto 2', 2]]);
     } finally {
       jest.useRealTimers();
     }
@@ -306,6 +305,74 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     src.disconnect();
   });
 
+  it('carrera vista desde la salida: fin de manga del TicTac, duración deducida y última manga', async () => {
+    jest.useFakeTimers();
+    try {
+      const { src, conn } = await connectNew();
+      let state!: LiveState;
+      const events: SourceEvent[] = [];
+      src.onStateChange(s => { state = s; });
+      src.onEvent(e => events.push(e));
+      src.selectParticipant('#002');
+      const fin = () => events.filter(e => e.type === 'race-finished');
+      // Piloto 1 en el carril 1 y Piloto 2 en el 2 hasta que rotan (manga 2).
+      let rotados = false;
+      const rivals = (p1: number, p2: number, cero = false) =>
+        `{"type":"RIVALS_UPDATE","rivals":[{"position":${p1},"name":"Piloto 1","vme":${cero ? 0 : 30},"isRacing":true,"laneId":${rotados ? 2 : 1},"gap":${cero ? null : 0}},{"position":${p2},"name":"Piloto 2","vme":${cero ? 0 : 31},"isRacing":true,"laneId":${rotados ? 1 : 2},"gap":${cero ? null : 1.5}}]}`;
+
+      // Manga 1: clasificación a cero antes del CONFIG → numeración segura.
+      conn.h.onMessage(rivals(1, 2, true));
+      conn.h.onMessage('{"type":"CONFIG","mangaPilots":[{"laneId":1,"name":"Piloto 1"},{"laneId":2,"name":"Piloto 2"}],"rivals":[]}');
+      expect(state.totalMangas).toBe(2);
+      expect(state.remainingMs).toBeNull();   // sin duración configurada ni medida
+      conn.h.onMessage(rivals(1, 2)); conn.h.onMessage(lap(1, 1, 'Piloto 1', 0));
+      conn.h.onMessage(rivals(1, 2)); conn.h.onMessage(lap(2, 2, 'Piloto 2', 0));
+      jest.advanceTimersByTime(10_000);
+      conn.h.onMessage(rivals(1, 2)); conn.h.onMessage(lap(3, 2, 'Piloto 2', 9.5));
+
+      // RIVALS_UPDATE suelto demasiado pronto: no es el cierre.
+      jest.advanceTimersByTime(5_000);
+      conn.h.onMessage(rivals(1, 2));
+      jest.advanceTimersByTime(1_000);
+      expect(fin()).toHaveLength(0);
+
+      // A los 63 s del CONFIG llega la clasificación cerrada, sin LAP detrás.
+      jest.advanceTimersByTime(47_000);
+      conn.h.onMessage(rivals(1, 2));
+      expect(fin()).toHaveLength(0);          // aún podría venir su LAP
+      jest.advanceTimersByTime(600);
+      expect(fin()).toEqual([{ type: 'race-finished', position: 2, raceOver: false }]);
+      expect(state.detectedMangaMs).toBe(60_000);
+      expect(state.remainingMs).toBe(0);
+      expect(state.estadoManga).toBe('terminada');
+      expect((await src.getTracking())!.teams.find(t => t.isMe)!.laps).toBe(2);
+
+      // Pausa a mano y manga 2 (la última: 2 carriles → 2 mangas).
+      jest.advanceTimersByTime(40_000);
+      rotados = true;
+      conn.h.onMessage('{"type":"CONFIG","mangaPilots":[{"laneId":1,"name":"Piloto 2"},{"laneId":2,"name":"Piloto 1"}],"rivals":[{"position":1,"name":"Piloto 1","vme":30,"isRacing":true,"laneId":2,"gap":0}]}');
+      expect(events).toContainEqual({ type: 'manga-changed', newMangaNum: 2, newLane: 1, lastManga: true });
+      expect(state.remainingMs).toBe(60_000);   // semáforo: el reloj aún no corre
+      expect(state.estadoManga).toBe('en-curso');
+      jest.advanceTimersByTime(3_500 + 31_000);   // semáforo medido: 3,5 s
+      expect(state.remainingMs).toBeGreaterThanOrEqual(29_000);
+      expect(state.remainingMs).toBeLessThanOrEqual(30_000);
+      expect(events).toContainEqual({ type: 'last-30s' });
+      conn.h.onMessage(rivals(2, 1)); conn.h.onMessage(lap(10, 1, 'Piloto 2', 9.0));
+      expect(state.position).toBe(1);
+
+      jest.advanceTimersByTime(30_000);
+      conn.h.onMessage(rivals(2, 1));
+      jest.advanceTimersByTime(600);
+      expect(fin()[1]).toEqual({ type: 'race-finished', position: 1, raceOver: true });
+      expect(state.isFinal).toBe(true);
+      expect(state.status).toBe('resting');
+      src.disconnect();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   async function connectAntiguo() {
     udp.handlers = {}; ws.opened = [];
     const src = new InfolapSource();
@@ -337,14 +404,64 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       send(3, 1, 'Piloto 1', 4000);
       expect(restante()).toBe(5 * 60_000 - 5_000);
 
+      // 30 s sin vueltas: manga parada, el reloj vuelve a la última vuelta y
+      // se queda ahí. Al reanudar, la primera vuelta (4 s) descuenta lo parado.
+      jest.advanceTimersByTime(30_000);
+      expect(restante()).toBe(5 * 60_000 - 4_000);
+      send(5, 1, 'Piloto 1', 4000);
+      expect(restante()).toBe(5 * 60_000 - 9_000);
+
       // Manga nueva (rotan los pilotos) sin piloto seleccionado: se guarda la
       // anterior y el reloj espera; la repetición de la vuelta vieja no cuenta.
-      send(3, 1, 'Piloto 2', 4000, false);
+      send(5, 1, 'Piloto 2', 4000, false);
       send(2, 2, 'Piloto 1', null);
       expect(snaps).toHaveLength(1);
       expect(restante()).toBeNull();
       send(4, 2, 'Piloto 1', 3000);
       expect(restante()).toBe(5 * 60_000 - 4_000);
+      src.disconnect();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('captura real: conectando a mitad de carrera (mangas 5 y 6 de 1 min)', async () => {
+    jest.useFakeTimers();
+    try {
+      const { src, conn } = await connectNew(
+        'OK piloto 1;#001piloto 2;#002piloto 3;#003Piloto 4;#004Piloto 5;#005Piloto 6;#006');
+      let state!: LiveState;
+      const events: SourceEvent[] = [];
+      src.onStateChange(s => { state = s; });
+      src.onEvent(e => events.push(e));
+      src.selectParticipant('#001');
+
+      const captura = readFileSync(join(__dirname, 'fixtures', 'tictac-mangas-1min.log'), 'utf8')
+        .split('\n').map(l => l.match(/^\s*([\d.]+)\s+(\{.*\})\s*$/))
+        .filter((m): m is RegExpMatchArray => m != null);
+      let t = 0;
+      const restantes: number[] = [];
+      for (const m of captura) {
+        const ts = Math.round(Number(m[1]) * 1000);
+        // Tiempo restante justo antes del cierre de la manga 6 (t = 230,4 s).
+        if (t < 229_000 && ts > 229_000) { jest.advanceTimersByTime(229_000 - t); t = 229_000; restantes.push(state.remainingMs!); }
+        jest.advanceTimersByTime(ts - t);
+        t = ts;
+        conn.h.onMessage(m[2]!);
+      }
+      jest.advanceTimersByTime(1_000);
+
+      // El primer mensaje es el cierre de la manga 4, sin manga vista: nada.
+      // Manga 5 (CONFIG 63,4 s → cierre 126,4 s) y manga 6 (167,4 → 230,4).
+      expect(events.filter(e => e.type === 'race-finished')).toEqual([
+        { type: 'race-finished', position: 3, raceOver: false },
+        { type: 'race-finished', position: 1, raceOver: false },   // sin ver la salida no sabemos que es la última
+      ]);
+      expect(state.detectedMangaMs).toBe(60_000);
+      expect(state.totalMangas).toBeNull();
+      // Reloj de la manga 6 con la duración y el semáforo deducidos de la 5.
+      expect(restantes[0]).toBeGreaterThan(0);
+      expect(restantes[0]).toBeLessThanOrEqual(2_000);
       src.disconnect();
     } finally {
       jest.useRealTimers();

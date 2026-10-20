@@ -1,5 +1,6 @@
 import {
-  claveConfig, clasificarConfig, parseWsMessage, standingForLane, type InfolapRival,
+  aprenderDuracion, claveConfig, clasificacionACero, clasificarConfig, mangasPorRotacion,
+  parseWsMessage, standingForLane, type InfolapRival,
 } from './infolapWss';
 
 // Mensajes reales capturados del TICTAC_Slot nuevo (carrera con simulador).
@@ -103,6 +104,46 @@ describe('parseWsMessage — capturas de la demo (oct 2026)', () => {
 
   it('CONFIG con la parrilla en rivals', () => {
     const m = parseWsMessage('{"type":"CONFIG","minAppVersionCode":1,"minAppVersion":"1.0","mangaPilots":[{"laneId":1,"name":"piloto 1"}],"rivals":[{"position":1,"name":"piloto 1","vme":0.0,"isRacing":true,"laneId":1,"gap":null}]}');
-    expect(m).toEqual({ type: 'CONFIG', pilots: [{ laneId: 1, name: 'piloto 1' }] });
+    expect(m).toEqual({ type: 'CONFIG', pilots: [{ laneId: 1, name: 'piloto 1' }], inicioCarrera: true });
+  });
+});
+
+// Carrera simulada de 6 mangas de 1 min (oct 2026).
+describe('mangas del TicTac nuevo', () => {
+  const CONFIG_M2 = '{"type":"CONFIG","minAppVersionCode":1,"minAppVersion":"1.0","mangaPilots":[{"laneId":1,"name":"piloto 2"},{"laneId":2,"name":"Piloto 4"},{"laneId":3,"name":"piloto 1"},{"laneId":4,"name":"Piloto 6"},{"laneId":5,"name":"piloto 3"},{"laneId":6,"name":"Piloto 5"}],"rivals":[{"position":1,"name":"piloto 3","vme":30.0000,"isRacing":true,"laneId":3,"gap":0.0000},{"position":2,"name":"Piloto 5","vme":0.0,"isRacing":true,"laneId":5,"gap":null}]}';
+
+  it('CONFIG con clasificación de mangas anteriores → no es inicio de carrera', () => {
+    const m = parseWsMessage(CONFIG_M2);
+    expect(m?.type === 'CONFIG' && m.inicioCarrera).toBe(false);
+    expect(m?.type === 'CONFIG' && mangasPorRotacion(m.pilots)).toBe(6);
+    expect(parseWsMessage(CONFIG)).toMatchObject({ inicioCarrera: null });   // rivals vacío
+  });
+
+  it('clasificación a cero', () => {
+    const r = (vmeMs: number | null, gapMs: number | null): InfolapRival =>
+      ({ position: 1, laneId: 1, name: 'x', vmeMs, gapMs, isRacing: true });
+    expect(clasificacionACero([])).toBeNull();
+    expect(clasificacionACero([r(null, null), r(null, 0)])).toBe(true);
+    expect(clasificacionACero([r(null, null), r(30_000, 0)])).toBe(false);
+  });
+
+  it('con la clasificación del CONFIG: reinicio solo si viene a cero', () => {
+    const a = claveConfig([{ laneId: 1, name: 'A' }, { laneId: 2, name: 'B' }]);
+    // Mismos carriles pero clasificación con datos: la carrera sigue.
+    expect(clasificarConfig({ claveAnterior: a, clave: a, vueltasCarrera: true, inicioCarrera: false })).toBe('nueva-manga');
+    // Carriles distintos y clasificación a cero: carrera nueva.
+    const b = claveConfig([{ laneId: 1, name: 'B' }, { laneId: 2, name: 'A' }]);
+    expect(clasificarConfig({ claveAnterior: a, clave: b, vueltasCarrera: true, inicioCarrera: true })).toBe('reinicio');
+    expect(clasificarConfig({ claveAnterior: a, clave: a, vueltasCarrera: false, inicioCarrera: true })).toBe('duplicado');
+  });
+
+  it('duración deducida del cierre de las mangas', () => {
+    // CONFIG → fin medido en la simulación: 77 s (salida tardía) y 63 s.
+    expect(aprenderDuracion([77_000, 63_000, 63_000])).toEqual({ duracionMs: 60_000, retardoMs: 3_000 });
+    expect(aprenderDuracion([123_500])).toEqual({ duracionMs: 120_000, retardoMs: 3_500 });
+    // Sobra demasiado para ser el semáforo: no se descuenta.
+    expect(aprenderDuracion([140_000])).toEqual({ duracionMs: 120_000, retardoMs: 0 });
+    expect(aprenderDuracion([])).toBeNull();
+    expect(aprenderDuracion([45_000])).toBeNull();
   });
 });

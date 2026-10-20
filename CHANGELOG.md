@@ -18,6 +18,15 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.0] — 2026-10-20
+
+### Añadido
+- **Radio, oculta mientras está en pruebas.** La baldosa **Radio** 🎧 ya no sale en el menú hasta que se desbloquea en **Ajustes → Radio (en pruebas)** con una contraseña. Se puede volver a ocultar con el interruptor; si ya hay una sala abierta, la baldosa sigue visible para poder volver a ella. En el código solo va el SHA-256 de la contraseña (`src/radio/desbloqueo.ts`).
+- **Una sola versión para todos.** Esta versión junta la línea de Radio con la de `main`: llegan aquí las mejoras del TicTac nuevo de la 1.12.0 (fin de manga marcado por el TicTac, duración detectada, «Manga X de Y», última manga y vista FINAL) y la 1.12.1.
+
+### Corregido
+- **TicTac nuevo: el reloj de manga podía congelarse con la manga en marcha** (1.21.2). La detección de pausas (20 s sin vueltas) queda solo para el TicTac antiguo: el nuevo cierra él la manga, y con pocas vueltas un silencio largo no es una pausa.
+
 ## [1.21.2] — 2026-10-20
 
 ### Mejorado
@@ -172,12 +181,29 @@ para lo importante y `código` para rutas, flags e identificadores.
 - **Radio: voz por WebRTC entre el asistente y su equipo (inicio de la Fase 2).** La sala ya no es solo datos: el **asistente** habla con el **piloto** y los **seguidores** con un **walkie (pulsar-para-hablar)**, el **piloto** lleva el **micro abierto** para que el asistente le oiga en pista, y los **seguidores** solo escuchan. Topología en estrella (cada participante abre un peer con el asistente), señalización SDP/ICE por el TCP de la sala y un **medidor de nivel de micro** para calibrar la puerta de voz.
 - Motor WebRTC en `src/radio/voz.ts` (sobre `react-native-webrtc`, solo audio) y ciclo de vida por rol en `src/radio/useVozRadio.ts`. El permiso de micrófono ya no se borra en el build (`expo-audio`/`expo-image-picker` con texto de uso) y se añaden los permisos Android de red y Bluetooth en `plugins/withWebrtcPermissions.js`.
 
+## [1.12.1] — 2026-10-20
+
+### Mejorado
+- **TicTac antiguo: solo se locuta lo que da el cronómetro.** Con el TicTac antiguo (UDP) ya no se dicen la **media de carrera**, los **gaps** ni la **media para subir**: salían de una clasificación que reconstruye el móvil. Se siguen diciendo las vueltas, la posición, la vuelta rápida, la media de carril, mitad de manga, último minuto y últimos 30 s. Con el TicTac nuevo y con PitWall Manager no cambia nada.
+- **TicTac antiguo: el reloj de manga se para con la manga.** Si ningún carril cruza meta en 20 s, la manga está parada: el reloj se congela y, al reanudarse, descuenta lo parado. Antes seguía corriendo y los avisos (mitad, último minuto, 30 s, fin) se adelantaban.
+
+### Corregido
+- **TicTac antiguo: el reloj de manga arrancaba antes de tiempo.** El Gestor repite en bucle la última vuelta de cada carril, y esa repetición contaba como vuelta nueva al conectar y al cambiar de manga. Ahora el primer paquete de cada carril sirve solo de referencia; si al conectar la manga ya está en marcha, el reloj espera a la siguiente (como dice el texto de ayuda).
+- **TicTac antiguo: la manga nueva solo se detectaba si rotaba tu piloto.** Ahora basta con que cambie el piloto de cualquier carril: el reloj se reinicia y la manga anterior se guarda aunque estés descansando o no hayas elegido piloto.
+
 ## [1.12.0] — 2026-10-16
 
 ### Añadido
 - **Radio: voz y tiempos entre el piloto y su equipo, sin WiFi ni cronómetro.** Nueva área **Radio** (🎧) en el menú. El **asistente** crea una sala (servidor TCP + anuncio mDNS) y es su centro: pulsa **«Vuelta»** en cada cruce y cronometra; el **piloto** se une y **escucha los tiempos locutados**; el **seguidor** solo mira. Sin servidor propio: la sala vive en la zona WiFi que monta el asistente. Tres perfiles y un código corto para que entre quien toca.
 - Fuente de datos **`AsistenteSource`** (`src/data/types.ts`, `src/data/AsistenteSource.ts`): los tiempos que manda el asistente llegan como `LiveState`/`SourceEvent`, así que la locución reutiliza el motor de voz (`useVoice`) y, al terminar, la tanda se guarda en el **histórico** igual que una sesión de TicTac.
 - Protocolo y reglas de sala en `src/radio/` (puro y testeado): un solo piloto y un solo asistente, seguidores hasta el límite de la zona WiFi, transporte TCP con framing JSON y descubrimiento por Bonjour (`_pitwall-radio._tcp`). El audio por WebRTC llega en la fase siguiente.
+- **TicTac nuevo: fin de manga marcado por el propio TicTac.** Al agotarse el tiempo, el TicTac manda la clasificación cerrada sin vuelta detrás (`RIVALS_UPDATE` suelto); la app lo usa para avisar **«Fin de la manga, segundo»** con tu posición final, guardar el histórico y cerrar la manga en el seguimiento de rivales. El reloj de la app solo da la manga por acabada si ese cierre no llega en 10 s.
+- **TicTac nuevo: duración de manga detectada sola.** Si no la configuras, se deduce al cerrarse la primera manga vista (lo que tarda el TicTac desde el `CONFIG`, redondeado al minuto por debajo) y aparece como «1 min (detectada)». A partir de la siguiente manga hay tiempo restante, avisos, proyección y media para subir. El reloj descuenta el semáforo (~3 s) medido. Si la configurada no coincide con la del TicTac, se avisa en el ajuste.
+- **TicTac nuevo: última manga y fin de carrera.** Si la app ve empezar la carrera (clasificación a cero en el `CONFIG` o justo antes), sabe el total de mangas por la rotación (tantas como carriles) y muestra **«Manga 3 de 6»**. Al empezar la última avisa **«Tu turno, carril 4, última manga»**, y al acabarla **«Fin de carrera, primero»** y pasa a la vista **FINAL**. Si te conectas con la carrera ya empezada no se puede saber cuántas van, y no se anuncia.
+
+### Mejorado
+- **TicTac nuevo: reinicio de carrera más fiable.** Además de mirar si se repiten pilotos y carriles, se usa la clasificación que acompaña al `CONFIG`: si viene a cero es una carrera nueva, y si trae datos de mangas anteriores la carrera sigue.
+- **TicTac nuevo: sin aviso de posición duplicado al acabar la manga.** El cambio de posición del cierre va dentro del aviso de fin.
 
 ## [1.11.0] — 2026-10-12
 

@@ -9,6 +9,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getCurrentVersion } from '../data/appVersion';
+import { useAjustes } from '../data/AjustesContext';
 import { useIdioma } from '../i18n/IdiomaContext';
 import { useRadio } from '../radio/RadioContext';
 import AvisoActualizacion from '../ui/AvisoActualizacion';
@@ -33,6 +34,10 @@ interface Baldosa {
 export default function HomeScreen({ navigation }: Props) {
   const { t } = useIdioma();
   const radio = useRadio();
+  const { ajustes } = useAjustes();
+  // Radio está en pruebas: solo con la contraseña metida en Ajustes (o si ya
+  // hay una sala abierta, para poder volver a ella).
+  const verRadio = ajustes.radioDesbloqueada || radio.conectado;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
@@ -91,7 +96,7 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         </Pressable>
 
-        <Pressable
+        {verRadio && <Pressable
           onPress={() => navigation.push('Radio')}
           style={({ pressed }) => [styles.radio, pressed && styles.pulsada]}
         >
@@ -105,7 +110,7 @@ export default function HomeScreen({ navigation }: Props) {
               {radio.conectado ? t.radio.sala(radio.codigo) : t.menu.radioSub}
             </Text>
           </View>
-        </Pressable>
+        </Pressable>}
 
         <View style={styles.rejilla}>
           {cuadradas.map(b => (
