@@ -42,6 +42,14 @@ function ensureFallbackInit(): void {
   Tts.setIgnoreSilentSwitch?.('ignore');
 }
 
+/** Radio con voz activa: en Android la locución va por el canal de llamada,
+ *  el mismo que la voz (mismo volumen y misma salida: cascos, auricular o
+ *  altavoz). Por el de música, en modo llamada, sonaba más baja. */
+let canalLlamada = false;
+export function fijarLocucionEnLlamada(activo: boolean): void {
+  canalLlamada = activo;
+}
+
 /** Cambia el idioma de la voz ("es-ES", "en-GB"…). */
 export function fijarVoz(codigo: string): void {
   if (codigo === lang) return;
@@ -69,7 +77,17 @@ export function speak(text: string): void {
     loggedRoute = true;
   }
   ensureFallbackInit();
-  try { Tts.speak(text); } catch (e) { console.log('[TTS fallback] err:', e); }
+  try {
+    if (canalLlamada) {
+      Tts.speak(text, {
+        androidParams: { KEY_PARAM_STREAM: 'STREAM_VOICE_CALL', KEY_PARAM_VOLUME: 1, KEY_PARAM_PAN: 0 },
+        iosVoiceId: '',
+        rate: RATE,
+      });
+    } else {
+      Tts.speak(text);
+    }
+  } catch (e) { console.log('[TTS fallback] err:', e); }
 }
 
 /** Detiene el habla en curso. */

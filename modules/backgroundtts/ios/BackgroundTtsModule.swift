@@ -186,6 +186,7 @@ public class BackgroundTtsModule: Module {
       let utterance = AVSpeechUtterance(string: text)
       utterance.voice = self.vozPara(language)
       utterance.rate = Float(rate)
+      utterance.volume = 1.0
       self.synth.speak(utterance)
       return ok ? "ok" : "session-failed"
     }

@@ -74,6 +74,8 @@ const CLAVE_MODO_ASISTENTE = 'radio.modoAsistente';
 const CLAVE_ALTAVOZ = 'radio.altavozPorRol';
 
 const CLAVE_PUERTA = 'radio.puertaVoz';
+/** Volumen de la voz entrante mientras suena la locución (0..1). */
+const VOLUMEN_DURANTE_LOCUCION = 0.25;
 /** Cada cuánto se evalúa la puerta de voz (ms). Corto para no comerse el
  *  arranque de las frases. */
 const MUESTREO_PUERTA_MS = 80;
@@ -520,6 +522,26 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
 
   const pistasRef = useRef<MediaStream[]>([]);
   pistasRef.current = pistas;
+
+  // Mientras la app locuta (tiempos, mensajes rápidos), la voz que llega baja
+  // al 25 % para que la locución se entienda bien; luego vuelve. La locución
+  // ya suena al máximo: lo que se puede hacer es apartar lo demás.
+  useEffect(() => {
+    if (!tuId) return;
+    const fijarVolumen = (v: number) => {
+      for (const flujo of pistasRef.current) {
+        for (const p of flujo.getAudioTracks()) {
+          try { (p as unknown as { _setVolume?: (n: number) => void })._setVolume?.(v); } catch { /* ignore */ }
+        }
+      }
+    };
+    if (estaLocutando()) fijarVolumen(VOLUMEN_DURANTE_LOCUCION);
+    const off = onLocucion(v => fijarVolumen(v ? VOLUMEN_DURANTE_LOCUCION : 1));
+    return () => {
+      off();
+      fijarVolumen(1);
+    };
+  }, [tuId, pistas]);
 
   // Si deja de haber semidúplex (cascos conectados, otro papel…), el audio
   // entrante no puede quedarse silenciado.

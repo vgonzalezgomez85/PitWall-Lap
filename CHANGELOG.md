@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.21.1] — 2026-10-20
+
+### Mejorado
+- **Radio: los mensajes rápidos y los tiempos se oyen más claros.** Mientras la app locuta, la voz que llega de los demás baja al 25 % y luego vuelve. En Android, con Radio activa, la locución va por el **canal de llamada** (mismo volumen y misma salida que la voz; la tecla de volumen regula las dos) en vez del de música, que en modo llamada sonaba más bajo. En iPhone la locución va siempre a volumen máximo.
+
 ## [1.21.0] — 2026-10-19
 
 ### Corregido

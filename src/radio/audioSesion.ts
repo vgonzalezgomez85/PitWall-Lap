@@ -4,6 +4,7 @@
 
 import { setAudioModeAsync } from 'expo-audio';
 import { fijarModoVoz } from '../../modules/backgroundtts';
+import { fijarLocucionEnLlamada } from '../voice/speak';
 
 async function aplicar(allowsRecording: boolean): Promise<void> {
   try {
@@ -23,10 +24,12 @@ async function aplicar(allowsRecording: boolean): Promise<void> {
 export async function activarAudioVoz(): Promise<void> {
   await aplicar(true);
   fijarModoVoz(true);
+  fijarLocucionEnLlamada(true);
 }
 
 /** Restaura el modo reproducción (locución) al cerrar Radio. */
 export async function restaurarAudio(): Promise<void> {
   fijarModoVoz(false);
+  fijarLocucionEnLlamada(false);
   await aplicar(false);
 }
