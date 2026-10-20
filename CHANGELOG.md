@@ -18,6 +18,16 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.21.2] — 2026-10-20
+
+### Mejorado
+- **TicTac antiguo: solo se locuta lo que da el cronómetro.** Con el TicTac antiguo (UDP) ya no se dicen la **media de carrera**, los **gaps** ni la **media para subir**: salían de una clasificación que reconstruye el móvil. Se siguen diciendo las vueltas, la posición, la vuelta rápida, la media de carril, mitad de manga, último minuto y últimos 30 s. Con el TicTac nuevo y con PitWall Manager no cambia nada.
+- **TicTac: el reloj de manga se para con la manga.** Si ningún carril cruza meta en 20 s, la manga está parada: el reloj se congela y, al reanudarse, descuenta lo parado. Antes seguía corriendo y los avisos (mitad, último minuto, 30 s, fin) se adelantaban.
+
+### Corregido
+- **TicTac antiguo: el reloj de manga arrancaba antes de tiempo.** El Gestor repite en bucle la última vuelta de cada carril, y esa repetición contaba como vuelta nueva al conectar y al cambiar de manga. Ahora el primer paquete de cada carril sirve solo de referencia; si al conectar la manga ya está en marcha, el reloj espera a la siguiente (como dice el texto de ayuda).
+- **TicTac antiguo: la manga nueva solo se detectaba si rotaba tu piloto.** Ahora basta con que cambie el piloto de cualquier carril: el reloj se reinicia y la manga anterior se guarda aunque estés descansando o no hayas elegido piloto.
+
 ## [1.21.1] — 2026-10-20
 
 ### Mejorado

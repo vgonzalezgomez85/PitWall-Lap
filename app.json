@@ -2,7 +2,7 @@
   "expo": {
     "name": "PitWall Lap",
     "slug": "pitwall-lap",
-    "version": "1.21.1",
+    "version": "1.21.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
