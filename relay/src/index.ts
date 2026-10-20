@@ -48,7 +48,7 @@ export default {
   },
 };
 
-/** Pide a Cloudflare Realtime credenciales TURN válidas unas horas. La app
+/** Pide a Cloudflare Realtime credenciales TURN válidas 48 h. La app
  *  nunca ve el token: solo usuario y contraseña temporales. */
 async function credencialesTurn(env: Env): Promise<Response> {
   if (!env.TURN_TOKEN) return Response.json({ iceServers: [] });
@@ -56,7 +56,10 @@ async function credencialesTurn(env: Env): Promise<Response> {
   const init: RequestInit = {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.TURN_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ttl: 6 * 3600 }),
+    // 48 h: el TURN renueva su reserva con estas mismas credenciales, así que
+    // deben durar más que la sesión más larga (carreras de 24 h). Con 6 h la
+    // voz por TURN se habría cortado a mitad de carrera.
+    body: JSON.stringify({ ttl: 48 * 3600 }),
   };
   // Endpoint nuevo (devuelve la lista lista para WebRTC) y, si no, el clásico.
   let r = await fetch(`${base}/generate-ice-servers`, init);
