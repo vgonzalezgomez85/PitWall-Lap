@@ -45,6 +45,8 @@ export interface RaceInfo {
   /** Sólo PitWall: planning completo por participante. */
   participantsPlan?: ParticipantPlan[];
   capabilities: SourceCapabilities;
+  /** Sólo InfoLap: TicTac antiguo (UDP) o nuevo (WSS). */
+  protocoloTicTac?: 'antiguo' | 'nuevo';
 }
 
 /** Qué señales puede entregar cada fuente. La UI/voz se degrada según esto. */

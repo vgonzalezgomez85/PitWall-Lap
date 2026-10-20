@@ -1,4 +1,13 @@
-import { cuentaParaMedia, mediaAnunciable } from './avisos';
+import { cuentaParaMedia, locutaAvisosDeClasificacion, mediaAnunciable } from './avisos';
+
+describe('avisos de clasificación (media de carrera, gaps, para subir)', () => {
+  it('se callan solo con el TicTac antiguo', () => {
+    expect(locutaAvisosDeClasificacion({ source: 'infolap', protocoloTicTac: 'antiguo' })).toBe(false);
+    expect(locutaAvisosDeClasificacion({ source: 'infolap', protocoloTicTac: 'nuevo' })).toBe(true);
+    expect(locutaAvisosDeClasificacion({ source: 'pitwall' })).toBe(true);
+    expect(locutaAvisosDeClasificacion(null)).toBe(true);
+  });
+});
 
 describe('avisos de media', () => {
   it('solo cuentan las vueltas con tiempo, sin salida ni primer paso', () => {

@@ -16,7 +16,7 @@ import { AppState } from 'react-native';
 import { useDataSource, useSourceEvent } from '../data/sourceContext';
 import { speak, speakTime, shutUp } from './speak';
 import { useVoiceSettings, type VoiceSettings } from './settings';
-import { cuentaParaMedia, mediaAnunciable } from './avisos';
+import { cuentaParaMedia, locutaAvisosDeClasificacion, mediaAnunciable } from './avisos';
 import { useIdioma } from '../i18n/IdiomaContext';
 import { ordinalHablado } from '../i18n';
 
@@ -30,7 +30,9 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   const settingsRef = useRef(settings);
   const stateRef    = useRef(state);
   const vozRef      = useRef(t.voz);
+  const raceInfoRef = useRef(raceInfo);
   settingsRef.current = settings;
+  raceInfoRef.current = raceInfo;
   stateRef.current    = state;
   vozRef.current      = t.voz;
 
@@ -152,6 +154,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       // Con la manga pausada o cerrada no hay nada nuevo que contar.
       if (st.estadoManga != null && st.estadoManga !== 'en-curso') return;
       const minute = Math.floor((Date.now() / 1000) / 60);
+      const clasificacion = locutaAvisosDeClasificacion(raceInfoRef.current);
 
       // Medias: cada N minutos en punto, y solo con al menos dos vueltas
       // válidas en la manga (con una, la media es esa vuelta repetida).
@@ -166,7 +169,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       // Media de carrera (todas las mangas): cada N minutos en punto. Misma
       // espera de dos vueltas válidas en la manga, para no repetir de entrada
       // una media que aún no incluye nada de esta manga.
-      if (s.sayRaceAvgEveryMin > 0 && minute % s.sayRaceAvgEveryMin === 0) {
+      if (clasificacion && s.sayRaceAvgEveryMin > 0 && minute % s.sayRaceAvgEveryMin === 0) {
         if (lastRaceAvgMinuteRef.current !== minute && st.raceAvgLapMs != null
             && mediaAnunciable(vueltasValidasRef.current)) {
           lastRaceAvgMinuteRef.current = minute;
@@ -176,7 +179,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
 
       // Gaps: cada N minutos en punto. Avisamos en VUELTAS, y solo cuando el
       // rival está a 2 vueltas o menos (lo bastante cerca para importar).
-      if (s.sayGapsEveryMin > 0 && minute % s.sayGapsEveryMin === 0) {
+      if (clasificacion && s.sayGapsEveryMin > 0 && minute % s.sayGapsEveryMin === 0) {
         if (lastGapMinuteRef.current !== minute) {
           lastGapMinuteRef.current = minute;
           if (st.gapAheadLaps != null && st.gapAheadLaps <= GAP_LAPS_THRESHOLD && st.aheadName) {
@@ -194,7 +197,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
 
       // Media para subir: cada N minutos en punto. Solo si el servidor manda un
       // ritmo aplicable (no líder / con tiempo / alcanzable).
-      if (s.sayCatchUpEveryMin > 0 && minute % s.sayCatchUpEveryMin === 0) {
+      if (clasificacion && s.sayCatchUpEveryMin > 0 && minute % s.sayCatchUpEveryMin === 0) {
         if (lastCatchMinuteRef.current !== minute && st.avgToCatchMs != null) {
           lastCatchMinuteRef.current = minute;
           speak(v.paraSubir(speakTime(st.avgToCatchMs, v)));

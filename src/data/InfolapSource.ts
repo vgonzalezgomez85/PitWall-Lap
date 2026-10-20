@@ -48,6 +48,7 @@ import {
   statsAvgMs, type PilotStats,
 } from './infolapRace';
 import { loadMangaDurationMin } from './infolapSettings';
+import { RelojManga } from './relojManga';
 import { openInfolapWs, type InfolapWsConnection } from '../../modules/infolapws';
 import { LaneTracker, MAX_TRACKED, buildLocalTracking } from './laneTracking';
 import { loadLocalRivals, loadTracker, saveLocalRivals, saveTracker } from './trackingStore';
@@ -219,8 +220,12 @@ export class InfolapSource implements DataSource {
   private raceLapsSinceConfig = false;
   /** Duración de manga configurada en la app (el TicTac no la manda). */
   private mangaDurationMs: number | null = null;
-  /** Date.now() del CONFIG de la manga en curso (null = no la vimos empezar). */
-  private mangaStartAt: number | null = null;
+  /** Reloj de la manga en curso: arranque, pausas y tiempo restante. */
+  private reloj = new RelojManga();
+  /** TicTac antiguo: al conectar los carriles ya traían vueltas → la manga
+   *  estaba empezada y no sabemos cuándo empezó. El reloj espera a la
+   *  siguiente (cambio de pilotos en los carriles). */
+  private relojEnEspera = false;
   private mangaTimer: ReturnType<typeof setInterval> | null = null;
   private firedHalf = false;
   private firedLastMinute = false;
@@ -310,7 +315,8 @@ export class InfolapSource implements DataSource {
     this.configSeen = false;
     this.lastConfigKey = null;
     this.raceLapsSinceConfig = false;
-    this.mangaStartAt = null;
+    this.reloj.reiniciar();
+    this.relojEnEspera = false;
     this.resetMangasTicTac();
     this.pilotStats.clear();
     this.pilotCumMs.clear();
@@ -525,7 +531,8 @@ export class InfolapSource implements DataSource {
     this.lastRivals = [];
     this.lastConfigKey = null;
     this.raceLapsSinceConfig = false;
-    this.mangaStartAt = null;
+    this.reloj.reiniciar();
+    this.relojEnEspera = false;
     this.resetMangasTicTac();
     this.laneLastMs.clear();
     this.laneLastSeq.clear();
@@ -633,17 +640,12 @@ export class InfolapSource implements DataSource {
    *  los contadores de todos los carriles y seguimos a mi piloto y al
    *  rival a sus nuevos carriles. */
   private handleLaneRotation(newLane: number): void {
-    if (!this.wssMode) {
-      // TicTac antiguo: sin CONFIG, la rotación es el único aviso de manga
-      // nueva. Guardamos la anterior y el reloj arranca con la primera vuelta.
-      this.emitSnapshot();
-      this.mangaStartAt = null;
-      this.armMangaFlags();
-    }
+    if (!this.wssMode) this.nuevaMangaAntiguo();
     this.mangaCount += 1;
     this.laneLapCount.clear();
     this.laneSumMs.clear();
-    this.laneLastSeq.clear();
+    // laneLastSeq NO se borra: el TicTac antiguo sigue repitiendo la última
+    // vuelta de la manga anterior y no debe contar como la primera de esta.
     this.laneLastMs.clear();
     this.laneLastIngestAt.clear();
     this.selectedLane = newLane;
@@ -846,6 +848,8 @@ export class InfolapSource implements DataSource {
       raceId: dayKey(this.sessionStartedAt),
       participants: this.participants,
       capabilities: INFOLAP_CAPABILITIES,
+      // Se construye tras intentar el WSS: ya sabemos qué protocolo habla.
+      protocoloTicTac: this.wssMode ? 'nuevo' : 'antiguo',
     };
   }
 
@@ -1138,7 +1142,8 @@ export class InfolapSource implements DataSource {
   private arrancarRelojManga(): void {
     const now = Date.now();
     this.configAt = now;
-    this.mangaStartAt = now + this.startDelayMs;
+    // Semáforo: el tiempo empieza a correr `startDelayMs` después del CONFIG.
+    this.reloj.iniciar(now + this.startDelayMs);
     this.mangaEnded = false;
     this.crossingsSinceConfig = false;
     this.armMangaFlags();
@@ -1239,10 +1244,9 @@ export class InfolapSource implements DataSource {
   /** Tiempo restante sin recortar a 0 (negativo = ya pasado). */
   private restanteBrutoMs(): number | null {
     const d = this.duracionMs();
-    if (d == null || this.mangaStartAt == null) return null;
+    if (d == null || !this.reloj.iniciado) return null;
     if (this.mangaEnded) return 0;
-    // Durante el semáforo el reloj aún no corre.
-    return Math.min(d, d - (Date.now() - this.mangaStartAt));
+    return this.reloj.restanteBrutoMs(Date.now(), d);
   }
 
   private remainingMsNow(): number | null {
@@ -1260,9 +1264,27 @@ export class InfolapSource implements DataSource {
     this.firedEnd = rem != null && rem <= 0;
   }
 
+  /** TicTac antiguo: empieza otra manga (cambian los pilotos de los
+   *  carriles). Guarda la anterior y el reloj espera a la primera vuelta.
+   *  Solo la primera vez: llega un paquete por carril con el nombre nuevo. */
+  private nuevaMangaAntiguo(): void {
+    if (!this.reloj.iniciado && !this.relojEnEspera) return;
+    this.relojEnEspera = false;
+    this.emitSnapshot();
+    this.reloj.reiniciar();
+    this.armMangaFlags();
+    this.tickManga(true);
+  }
+
   private tickManga(force = false): void {
     if (!this.active) return;
     if (this.tracker.checkSilence()) this.trackingChanged();
+    // Solo el TicTac antiguo: el nuevo cierra él la manga y aquí el reloj es
+    // de respaldo (y con pocas vueltas un silencio largo no es una pausa).
+    if (!this.wssMode && this.reloj.comprobarPausa(Date.now(), this.duracionMs())) {
+      console.log('[Infolap] sin vueltas: manga parada, reloj congelado');
+      force = true;
+    }
     const rem = this.remainingMsNow();
     const shown = rem == null ? null : Math.ceil(rem / 1000) * 1000;
     if (force || shown !== this.currentState.remainingMs) {
@@ -1419,6 +1441,7 @@ export class InfolapSource implements DataSource {
       const prevName = this.laneName.get(pkt.lane);
       if (!this.wssMode && prevName && normName(prevName) !== normName(pkt.driverName)) {
         this.closeTrackedManga();
+        this.nuevaMangaAntiguo();
       }
       this.laneName.set(pkt.lane, pkt.driverName);
 
@@ -1453,6 +1476,14 @@ export class InfolapSource implements DataSource {
     const prevSeq = this.laneLastSeq.get(pkt.lane);
     if (prevSeq === pkt.sequence) return;   // duplicado por sequence → ignorar
     this.laneLastSeq.set(pkt.lane, pkt.sequence);
+    // TicTac antiguo: el primer paquete de un carril tras conectar suele ser
+    // la repetición de una vuelta vieja (el Gestor reenvía el último estado
+    // en bucle). Sirve de referencia, salvo que venga marcado como nuevo.
+    if (!reliable && prevSeq === undefined && !pkt.isNewLap) {
+      // Y si ya trae una vuelta, la manga está en marcha (o recién acabada).
+      if (!this.wssMode && !this.reloj.iniciado) this.relojEnEspera = true;
+      return;
+    }
 
     // Segunda red de seguridad: si llega la misma vuelta del mismo carril
     // en menos de 3 s, es una retransmisión tardía con sequence distinto
@@ -1470,12 +1501,11 @@ export class InfolapSource implements DataSource {
     this.laneLapCount.set(pkt.lane, newCount);
     this.laneSumMs.set(pkt.lane, (this.laneSumMs.get(pkt.lane) ?? 0) + pkt.lastLapMs);
 
-    // TicTac antiguo: la manga empieza (para el reloj) con la primera vuelta
-    // que vemos, descontando lo que ha tardado en darla.
-    if (!this.wssMode && this.mangaStartAt == null) {
-      this.mangaStartAt = now - pkt.lastLapMs;
-      this.armMangaFlags();
-    }
+    // Reloj: cierra la pausa si la había. En el TicTac antiguo la manga
+    // empieza con la primera vuelta que vemos, descontando lo que ha tardado.
+    const arrancaba = !this.reloj.iniciado;
+    this.reloj.vuelta(now, pkt.lastLapMs, !this.wssMode && !this.relojEnEspera);
+    if (arrancaba && this.reloj.iniciado) this.armMangaFlags();
 
     // Vuelta de CUALQUIER piloto → acumulado de carrera y estrategia de rivales.
     if (race) {

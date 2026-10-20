@@ -41,14 +41,22 @@ jest.mock('../../modules/infolapws', () => ({
 import { InfolapSource } from './InfolapSource';
 
 // Paquete de estado de 52 bytes del TicTac antiguo (ver infolapDecode.ts).
-function paqueteUdp(seq: number, lane: number, name: string, ms: number): Uint8Array {
+function paqueteUdp(seq: number, lane: number, name: string, ms: number | null, nueva = true): Uint8Array {
+  if (ms == null) return paqueteUdpSinVuelta(seq, lane, name);
   const d = [
     Math.floor(ms / 100) % 10, Math.floor(ms / 10000) % 10, ms % 10,
     Math.floor(ms / 10) % 10, Math.floor(ms / 100000) % 10, Math.floor(ms / 1000) % 10, 0,
   ];
   const tiempo = d.map((x, i) => (x ^ Number('7654321'[i])).toString(16).toUpperCase()).join('');
   const s = String(seq).padStart(4, '0') + String(lane) + name.padEnd(20) + ' '.repeat(5)
-    + tiempo + ' ' + ' '.repeat(6) + '1' + String(lane).padStart(3, '0') + ' '.repeat(4);
+    + tiempo + ' ' + ' '.repeat(6) + (nueva ? '1' : 'X') + String(lane).padStart(3, '0') + ' '.repeat(4);
+  return new Uint8Array(Buffer.from(s, 'ascii'));
+}
+
+// Carril que aún no ha dado vuelta: centinela "EF54AB1" en el campo de tiempo.
+function paqueteUdpSinVuelta(seq: number, lane: number, name: string): Uint8Array {
+  const s = String(seq).padStart(4, '0') + String(lane) + name.padEnd(20) + ' '.repeat(5)
+    + 'EF54AB1' + ' ' + ' '.repeat(6) + 'X' + String(lane).padStart(3, '0') + ' '.repeat(4);
   return new Uint8Array(Buffer.from(s, 'ascii'));
 }
 
@@ -140,18 +148,27 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       expect(state.projectedTotal).toBe(62);   // 2 + 180 s / 3 s
       expect(state.avgToCatchMs).toBe(Math.round((3000 * 180_000) / 186_100));
 
-      jest.advanceTimersByTime(90_000);
+      // La manga sigue: el carril 1 cruza cada 10 s.
+      let frame = 100;
+      const rodar = (ms: number) => {
+        for (let t = 0; t < ms; t += 10_000) {
+          const paso = Math.min(10_000, ms - t);
+          jest.advanceTimersByTime(paso);
+          if (paso === 10_000) conn.h.onMessage(lap(frame++, 1, 'Piloto 1', 10));
+        }
+      };
+      rodar(90_000);
       expect(events).toContainEqual({ type: 'half-manga' });
-      jest.advanceTimersByTime(30_000);
+      rodar(30_000);
       expect(events).toContainEqual({ type: 'last-minute' });
-      jest.advanceTimersByTime(30_000);
+      rodar(30_000);
       expect(events).toContainEqual({ type: 'last-30s' });
       // El TicTac nuevo cierra él la manga; sin ese cierre, el reloj lo da
       // por acabado pasado un margen.
-      jest.advanceTimersByTime(31_000);
+      rodar(31_000);
       expect(events).not.toContainEqual({ type: 'race-finished' });
       expect(state.remainingMs).toBe(0);
-      jest.advanceTimersByTime(10_000);
+      rodar(10_000);
       expect(events).toContainEqual({ type: 'race-finished' });
       expect(state.remainingMs).toBe(0);
       expect(state.avgToCatchMs).toBeNull();
@@ -160,7 +177,7 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       src.disconnect();
       expect(snaps).toHaveLength(2);   // al desconectar se vuelve a guardar
       const last = snaps[1] as { standings: { name: string; totalLaps: number }[] };
-      expect(last.standings.map(s => [s.name, s.totalLaps])).toEqual([['Piloto 1', 1], ['Piloto 2', 2]]);
+      expect(last.standings.map(s => [s.name, s.totalLaps])).toEqual([['Piloto 1', 20], ['Piloto 2', 2]]);
     } finally {
       jest.useRealTimers();
     }
@@ -356,6 +373,58 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     }
   });
 
+  async function connectAntiguo() {
+    udp.handlers = {}; ws.opened = [];
+    const src = new InfolapSource();
+    const p = src.connect();
+    for (let i = 0; i < 5 && !udp.handlers.message; i++) await Promise.resolve();
+    udp.handlers.message!(new Uint8Array(Buffer.from('OK Piloto 1;#001Piloto 2;#002')), { address: '192.168.10.9' });
+    ws.opened[0]!.h.onClose('ECONNREFUSED');
+    const info = await p;
+    let state!: LiveState;
+    const snaps: unknown[] = [];
+    src.onStateChange(s => { state = s; });
+    src.onRaceStatsSnapshot(s => snaps.push(s));
+    src.setMangaDurationMs(5 * 60_000);
+    const send = (seq: number, lane: number, name: string, ms: number | null, nueva = true) =>
+      udp.handlers.message!(paqueteUdp(seq, lane, name, ms, nueva), { address: '192.168.10.9' });
+    const restante = () => { jest.advanceTimersByTime(1_000); return state.remainingMs; };
+    return { src, info, snaps, send, restante };
+  }
+
+  it('TicTac antiguo: conectado antes de la manga, el reloj arranca con la primera vuelta', async () => {
+    jest.useFakeTimers();
+    try {
+      const { src, info, snaps, send, restante } = await connectAntiguo();
+      expect(info.protocoloTicTac).toBe('antiguo');
+      send(1, 1, 'Piloto 1', null);
+      send(2, 2, 'Piloto 2', null);
+      expect(restante()).toBeNull();
+
+      send(3, 1, 'Piloto 1', 4000);
+      expect(restante()).toBe(5 * 60_000 - 5_000);
+
+      // 30 s sin vueltas: manga parada, el reloj vuelve a la última vuelta y
+      // se queda ahí. Al reanudar, la primera vuelta (4 s) descuenta lo parado.
+      jest.advanceTimersByTime(30_000);
+      expect(restante()).toBe(5 * 60_000 - 4_000);
+      send(5, 1, 'Piloto 1', 4000);
+      expect(restante()).toBe(5 * 60_000 - 9_000);
+
+      // Manga nueva (rotan los pilotos) sin piloto seleccionado: se guarda la
+      // anterior y el reloj espera; la repetición de la vuelta vieja no cuenta.
+      send(5, 1, 'Piloto 2', 4000, false);
+      send(2, 2, 'Piloto 1', null);
+      expect(snaps).toHaveLength(1);
+      expect(restante()).toBeNull();
+      send(4, 2, 'Piloto 1', 3000);
+      expect(restante()).toBe(5 * 60_000 - 4_000);
+      src.disconnect();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('captura real: conectando a mitad de carrera (mangas 5 y 6 de 1 min)', async () => {
     jest.useFakeTimers();
     try {
@@ -393,6 +462,28 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       // Reloj de la manga 6 con la duración y el semáforo deducidos de la 5.
       expect(restantes[0]).toBeGreaterThan(0);
       expect(restantes[0]).toBeLessThanOrEqual(2_000);
+      src.disconnect();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('TicTac antiguo: conectado con la manga empezada, el reloj espera a la siguiente', async () => {
+    jest.useFakeTimers();
+    try {
+      const { src, send, restante } = await connectAntiguo();
+      // El Gestor repite la última vuelta de cada carril: manga en marcha.
+      send(40, 1, 'Piloto 1', 3000, false);
+      send(41, 2, 'Piloto 2', 3200, false);
+      send(42, 1, 'Piloto 1', 3100);
+      expect(restante()).toBeNull();
+
+      // Rotación: la siguiente manga sí se cronometra.
+      send(42, 1, 'Piloto 2', 3100, false);
+      send(41, 2, 'Piloto 1', 3200, false);
+      expect(restante()).toBeNull();
+      send(43, 2, 'Piloto 1', 3000);
+      expect(restante()).toBe(5 * 60_000 - 4_000);
       src.disconnect();
     } finally {
       jest.useRealTimers();
