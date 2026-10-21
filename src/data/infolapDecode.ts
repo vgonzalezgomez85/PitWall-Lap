@@ -20,6 +20,8 @@
 // tiempo. La cadena literal "EF54AB1" es el centinela de "este carril
 // todavía no ha cruzado una vuelta válida".
 
+import { Buffer } from 'buffer';
+
 const TEMPLATE = '7654321';
 const NO_LAP_SENTINEL = 'EF54AB1';
 
@@ -58,4 +60,17 @@ export function decodeLapField(field: string): number | null {
 
   return hundreds * 100000 + tens * 10000 + units * 1000
        + tenths * 100 + hundredths * 10 + milesims;
+}
+
+/** Texto del TicTac: UTF-8 (lo que manda el Gestor: «ESQUADRÓ» llega como
+ *  C3 93). Si no es UTF-8 válido, Latin-1, por si algún Gestor antiguo lo
+ *  manda así. Leerlo como ASCII rompía las tildes. */
+export function decodificarTextoTicTac(bytes: Uint8Array): string {
+  const b = Buffer.from(bytes);
+  const utf8 = b.toString('utf8');
+  if (!utf8.includes('\uFFFD')) return utf8;
+  // El nombre del paquete de estado va cortado a 20 bytes: el corte puede
+  // partir la última letra. Eso no lo hace Latin-1.
+  const sinCorte = utf8.replace(/\uFFFD+$/, '');
+  return sinCorte.includes('\uFFFD') ? b.toString('latin1') : sinCorte;
 }

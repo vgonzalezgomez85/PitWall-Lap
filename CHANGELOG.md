@@ -18,6 +18,12 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.5] — 2026-10-21
+
+### Corregido
+- **TicTac: nombres con tildes rotos.** El Gestor manda los nombres en UTF-8 y la app los leía como ASCII: «ESQUADRÓ DIABÒLIC» salía como «ESQUADRC DIABCLIC» en la lista de pilotos, y podía fallar el emparejamiento de tu piloto con su carril. Ahora se leen en UTF-8 (y en Latin-1 si no lo son), también en el nombre de 20 bytes del paquete de estado aunque el corte parta la última letra.
+- **TicTac nuevo: al elegir piloto se perdía el protocolo** detectado y los avisos de clasificación podían quedarse desactivados (1.22.4).
+
 ## [1.22.4] — 2026-10-21
 
 ### Corregido

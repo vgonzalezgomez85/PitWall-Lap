@@ -511,8 +511,10 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       ws.opened[1]!.h.onOpen();
       expect(state.protocoloTicTac).toBe('nuevo');
 
-      // Y ya habla el protocolo nuevo (los UDP se ignoran).
+      // Y ya habla el protocolo nuevo (los UDP se ignoran). Elegir piloto no
+      // borra el protocolo.
       src.selectParticipant('#002');
+      expect(state.protocoloTicTac).toBe('nuevo');
       ws.opened[1]!.h.onMessage('{"type":"CONFIG","mangaPilots":[{"laneId":1,"name":"Piloto 1"},{"laneId":2,"name":"Piloto 2"}]}');
       ws.opened[1]!.h.onMessage(lap(1, 2, 'Piloto 2', 3.2));
       expect(state.lapCount).toBe(1);

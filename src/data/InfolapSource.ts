@@ -37,7 +37,7 @@ import type {
   SourceEvent,
 } from './types';
 import { INFOLAP_CAPABILITIES, emptyLiveState } from './types';
-import { decodeLapField } from './infolapDecode';
+import { decodeLapField, decodificarTextoTicTac } from './infolapDecode';
 import {
   INFOLAP_WSS_PORT, aprenderDuracion, claveConfig, clasificacionACero, clasificarConfig, mangasPorRotacion,
   parseWsMessage, standingForLane, standingOf, type InfolapConfigMessage, type InfolapLapMessage, type InfolapRival,
@@ -144,10 +144,12 @@ export interface InfolapStatePacket {
 
 export function parseStatePacket(buf: Uint8Array): InfolapStatePacket | null {
   if (buf.length !== 52) return null;
-  const s = Buffer.from(buf).toString('ascii');
+  // Campos por posición de BYTE: el nombre (bytes 5-24) puede llevar UTF-8
+  // de varios bytes, así que se decodifica aparte.
+  const s = Buffer.from(buf).toString('latin1');
   const sequence = parseInt(s.slice(0, 4), 10);
   const lane = parseInt(s.slice(4, 5), 10);
-  const driverName = s.slice(5, 25).trimEnd();
+  const driverName = decodificarTextoTicTac(buf.subarray(5, 25)).replace(/\0/g, '').trimEnd();
   const timeField = s.slice(30, 37);
   const lastLapMs = decodeLapField(timeField);
   const isNewLap = s[44] === '1';
@@ -449,7 +451,7 @@ export class InfolapSource implements DataSource {
         if (addr) this.serverHost = addr;
         // Distinguimos discovery response ("OK …") vs state packet (52 bytes).
         if (buf.length >= 3 && buf[0] === 0x4f && buf[1] === 0x4b && buf[2] === 0x20) {
-          const text = Buffer.from(buf).toString('ascii');
+          const text = decodificarTextoTicTac(buf);
           console.log('[Infolap] discovery payload:', text);
           const participants = parseDiscoveryResponse(text);
           console.log('[Infolap] parsed', participants.length, 'participants');
@@ -576,6 +578,8 @@ export class InfolapSource implements DataSource {
       totalParticipants: this.participants.length,
       totalMangas: this.totalMangas,
       detectedMangaMs: this.learnedDurationMs,
+      // El protocolo no depende del piloto: se conserva.
+      protocoloTicTac: this.currentState.protocoloTicTac,
     };
     this.refreshDerived();
     this.emitState();
