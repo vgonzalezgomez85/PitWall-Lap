@@ -51,6 +51,8 @@ export interface RaceInfo {
   participants: Participant[];
   /** Sólo PitWall: planning completo por participante. */
   participantsPlan?: ParticipantPlan[];
+  /** Sólo PitWall (≥ v1.64.2): colores de carril del circuito, índice 0 = carril 1. */
+  laneColors?: string[];
   capabilities: SourceCapabilities;
   /** Sólo InfoLap: TicTac antiguo (UDP) o nuevo (WSS). */
   protocoloTicTac?: 'antiguo' | 'nuevo';

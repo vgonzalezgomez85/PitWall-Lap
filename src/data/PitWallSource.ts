@@ -92,6 +92,8 @@ interface RaceCurrentResponse {
     lanesCount: number;
     mangaDurationMin: number;
     startedAt: string | null;
+    /** Colores de carril del circuito (PitWall Manager ≥ v1.64.2). */
+    laneColors?: string[];
   } | null;
   activeManga: {
     id: number;
@@ -271,6 +273,7 @@ export class PitWallSource implements DataSource {
       format: data.race.format,
       participants: this.participants.map(p => ({ id: p.id, name: p.name, color: p.color })),
       participantsPlan: this.participants,
+      laneColors: data.race.laneColors,
       capabilities: SLOTTIME_CAPABILITIES,
     };
   }

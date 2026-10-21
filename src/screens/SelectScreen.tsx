@@ -1,11 +1,13 @@
 // Selector de piloto/equipo. Si la navegación trae `tandaNum`, filtra los
 // participantes a los que corren en esa tanda (solo aplica a PitWall; en
-// InfoLap no se pasa tanda y se ven todos).
+// InfoLap no se pasa tanda y se ven todos). Con tanda, cada fila lleva el
+// color del carril en el que corre, como en la pantalla de carrera.
 
 import { useMemo } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { carrilEnTanda, colorDeCarril } from '../data/coloresCarril';
 import { useDataSource } from '../data/sourceContext';
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
@@ -15,7 +17,7 @@ import { colors } from '../ui/theme';
 type Props = NativeStackScreenProps<RootStackParamList, 'Select'>;
 
 export default function SelectScreen({ route, navigation }: Props) {
-  const { source, raceInfo } = useDataSource();
+  const { source, raceInfo, state } = useDataSource();
   const tandaNum = route.params?.tandaNum;
   const { t } = useIdioma();
 
@@ -33,6 +35,15 @@ export default function SelectScreen({ route, navigation }: Props) {
     );
     return raceInfo.participants.filter(p => idsInTanda.has(p.id));
   }, [raceInfo, tandaNum]);
+
+  // Color del carril de cada participante en la tanda; sin tanda o sin plan,
+  // el color propio del participante.
+  const colorDe = (p: { id: string; color?: string }): string => {
+    const plan = tandaNum != null ? raceInfo?.participantsPlan?.find(x => x.id === p.id) : undefined;
+    const carril = plan && tandaNum != null ? carrilEnTanda(plan, tandaNum, state.currentMangaNum) : null;
+    if (carril != null) return colorDeCarril(carril, raceInfo?.laneColors);
+    return p.color ?? '#8b949e';
+  };
 
   if (!source || !raceInfo) {
     navigation.replace('Discovery');
@@ -58,7 +69,7 @@ export default function SelectScreen({ route, navigation }: Props) {
         contentContainerStyle={{ paddingVertical: 12 }}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={[styles.row, { borderLeftColor: item.color ?? '#8b949e' }]}
+            style={[styles.row, { borderLeftColor: colorDe(item) }]}
             onPress={() => onPick(item.id)}
           >
             <Text style={styles.rowName}>{item.name}</Text>

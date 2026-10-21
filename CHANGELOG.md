@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.6] — 2026-10-21
+
+### Corregido
+- **Carrera: la selección de piloto/equipo sale con el color del carril.** Al entrar en una tanda, cada fila llevaba el color del equipo (o gris en individual) en vez del del carril en el que corre, como sí pasaba en entrenos. Ahora usa el carril de la manga en curso (o el de su primera manga de la tanda) y los colores de carril del circuito que manda PitWall Manager (`race.laneColors`, ≥ v1.64.2); con un servidor anterior, la paleta de fábrica.
+
 ## [1.22.5] — 2026-10-21
 
 ### Corregido
