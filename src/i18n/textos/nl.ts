@@ -189,6 +189,7 @@ const nl: Textos = {
     chipParaSubir: 'Stijgen',
     cadaMin: (etiqueta: string, n: number) => `${etiqueta} · ${n} min`,
     vozApagada: 'De stem staat uit: zet hem hierboven aan.',
+    soloCronometro: 'Met de oude TicTac is er geen racegemiddelde, geen gaps en geen tempo om op te schuiven: de tijdwaarneming stuurt geen klassement.',
   },
 
   estrategia: {

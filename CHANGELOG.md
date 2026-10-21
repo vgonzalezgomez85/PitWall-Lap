@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.3] — 2026-10-21
+
+### Mejorado
+- **TicTac antiguo: los avisos que no se pueden dar salen desactivados.** Con el TicTac antiguo, **Media de carrera**, **Gaps** y **Media para subir** aparecen apagados y no se pueden activar, con una nota que explica por qué (el cronómetro no manda la clasificación). Antes se podían encender aunque desde la 1.22.0 no decían nada. Tampoco cuentan en el resumen de avisos.
+
 ## [1.22.2] — 2026-10-21
 
 ### Corregido

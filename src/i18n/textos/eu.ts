@@ -191,6 +191,7 @@ const eu: Textos = {
     chipParaSubir: 'Igotzeko',
     cadaMin: (etiqueta: string, n: number) => `${etiqueta} · ${n} min`,
     vozApagada: 'Ahotsa itzalita dago: aktibatu goian.',
+    soloCronometro: 'TicTac zaharrarekin ez dago lasterketaren batezbestekorik, alderik edo igotzeko batezbestekorik: kronometroak ez du sailkapena bidaltzen.',
   },
 
   estrategia: {

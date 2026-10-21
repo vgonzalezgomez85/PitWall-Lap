@@ -189,6 +189,7 @@ const ca: Textos = {
     chipParaSubir: 'Per pujar',
     cadaMin: (etiqueta: string, n: number) => `${etiqueta} · ${n} min`,
     vozApagada: 'La veu està apagada: activa-la a dalt.',
+    soloCronometro: 'Amb el TicTac antic no hi ha mitjana de cursa, gaps ni mitjana per pujar: el cronòmetre no envia la classificació.',
   },
 
   estrategia: {

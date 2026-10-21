@@ -1,7 +1,9 @@
 // Avisos de voz: chips de avisos y de avisos periódicos. Lo usan «Mi turno»
 // (en vivo, durante la sesión) y Ajustes (los valores con los que arranca cada
 // sesión). El interruptor general de la voz va aparte.
-// `full`: PitWall o TicTac nuevo (todos los avisos); TicTac antiguo, solo vueltas.
+// `full`: con datos de carrera (PitWall o TicTac); sin ellos, solo vueltas.
+// `clasificacion`: false con el TicTac antiguo, que no da la clasificación:
+// media de carrera, gaps y media para subir salen desactivados.
 
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -23,9 +25,10 @@ interface Props {
   toggle: (k: keyof VoiceSettings) => void;
   update: (p: Partial<VoiceSettings>) => void;
   full: boolean;
+  clasificacion?: boolean;
 }
 
-export default function VoiceControls({ settings, toggle, update, full }: Props) {
+export default function VoiceControls({ settings, toggle, update, full, clasificacion = true }: Props) {
   const { t } = useIdioma();
   const c = t.turno;
   return (
@@ -54,19 +57,25 @@ export default function VoiceControls({ settings, toggle, update, full }: Props)
             <Chip
               label={settings.sayRaceAvgEveryMin > 0 ? c.cadaMin(c.chipMediaCarrera, settings.sayRaceAvgEveryMin) : c.chipMediaCarrera}
               active={settings.sayRaceAvgEveryMin > 0}
+              disabled={!clasificacion}
               onPress={() => update({ sayRaceAvgEveryMin: cycleMinutes(settings.sayRaceAvgEveryMin) })}
             />
             <Chip
               label={settings.sayGapsEveryMin > 0 ? c.cadaMin(c.chipGaps, settings.sayGapsEveryMin) : c.chipGaps}
               active={settings.sayGapsEveryMin > 0}
+              disabled={!clasificacion}
               onPress={() => update({ sayGapsEveryMin: cycleMinutes(settings.sayGapsEveryMin) })}
             />
             <Chip
               label={settings.sayCatchUpEveryMin > 0 ? c.cadaMin(c.chipParaSubir, settings.sayCatchUpEveryMin) : c.chipParaSubir}
               active={settings.sayCatchUpEveryMin > 0}
+              disabled={!clasificacion}
               onPress={() => update({ sayCatchUpEveryMin: cycleMinutes(settings.sayCatchUpEveryMin) })}
             />
           </View>
+          {!clasificacion && (
+            <Text style={[type.caption, styles.subLabel]}>{c.soloCronometro}</Text>
+          )}
         </>
       )}
       {!settings.enabled && (

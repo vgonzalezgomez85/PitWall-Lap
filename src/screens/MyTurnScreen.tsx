@@ -35,6 +35,7 @@ import NavRow from '../ui/NavRow';
 import Section from '../ui/Section';
 import Stat from '../ui/Stat';
 import VoiceControls from '../ui/VoiceControls';
+import { locutaAvisosDeClasificacion } from '../voice/avisos';
 import { lapDeltaLabel, lapTone, type LapTone } from '../ui/lapTone';
 import { colors, radius, spacing, type } from '../ui/theme';
 import type { RootStackParamList } from '../navigation';
@@ -99,6 +100,9 @@ export default function MyTurnScreen(_props: Props) {
   // TicTac nuevo (WSS): mismos datos que PitWall salvo salidas/pits/plan.
   const isTicTacLive = raceInfo?.source === 'infolap' && (raceInfo.capabilities.positions ?? false);
   const fullData = isPitWall || isTicTacLive;
+  // TicTac antiguo: sin clasificación del cronómetro (media de carrera, gaps,
+  // media para subir) → esos avisos salen desactivados.
+  const clasificacion = locutaAvisosDeClasificacion(raceInfo);
   const isTraining = raceInfo?.mode === 'training';
   // Seguimiento de rivales: TicTac (local) y carreras por equipos de PitWall.
   const trackingAvailable = !isTraining && !!source?.getTracking && (
@@ -217,7 +221,7 @@ export default function MyTurnScreen(_props: Props) {
             />
             <Section title={t.turno.vozYAjustes}>
               {isTicTacLive && <MangaDurationControl />}
-              <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
+              <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} clasificacion={clasificacion} />
             </Section>
           </>
         )}
@@ -364,10 +368,10 @@ export default function MyTurnScreen(_props: Props) {
         title={t.turno.vozYAjustes}
         collapsible
         initiallyOpen={false}
-        summary={voiceSummary(settings, fullData, t)}
+        summary={voiceSummary(settings, fullData, clasificacion, t)}
       >
         {isTicTacLive && <MangaDurationControl />}
-        <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} />
+        <VoiceControls settings={settings} toggle={toggle} update={update} full={fullData} clasificacion={clasificacion} />
       </Section>
 
       {/* ── Modal: datos del stint al detener ──────────────────────────── */}
@@ -534,12 +538,14 @@ function SetupField({
 }
 
 // Resumen de la sección plegada: "Voz ON · 5 avisos".
-function voiceSummary(s: VoiceSettings, full: boolean, t: Textos): string {
+function voiceSummary(s: VoiceSettings, full: boolean, clasificacion: boolean, t: Textos): string {
   if (!s.enabled) return t.turno.vozOff;
   const avisos = full
     ? [s.sayLaps, s.sayPositionChange, s.sayHalfManga, s.sayLastMinute, s.sayLast30s,
-       s.sayAveragesEveryMin > 0, s.sayRaceAvgEveryMin > 0, s.sayGapsEveryMin > 0,
-       s.sayCatchUpEveryMin > 0]
+       s.sayAveragesEveryMin > 0,
+       ...(clasificacion
+         ? [s.sayRaceAvgEveryMin > 0, s.sayGapsEveryMin > 0, s.sayCatchUpEveryMin > 0]
+         : [])]
     : [s.sayLaps];
   const n = avisos.filter(Boolean).length;
   return t.turno.vozResumen(n);

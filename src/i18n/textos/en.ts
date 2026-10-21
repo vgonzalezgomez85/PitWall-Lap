@@ -189,6 +189,7 @@ const en: Textos = {
     chipParaSubir: 'Move up',
     cadaMin: (etiqueta: string, n: number) => `${etiqueta} · ${n} min`,
     vozApagada: 'Voice is off: turn it on above.',
+    soloCronometro: 'With the old TicTac there is no race average, gaps or pace to catch up: the timer does not send the standings.',
   },
 
   estrategia: {

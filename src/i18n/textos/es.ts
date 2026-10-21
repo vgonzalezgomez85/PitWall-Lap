@@ -188,6 +188,7 @@ const es = {
     chipParaSubir: 'Media para subir',
     cadaMin: (etiqueta: string, n: number) => `${etiqueta} · ${n} min`,
     vozApagada: 'La voz está apagada: actívala arriba.',
+    soloCronometro: 'Con el TicTac antiguo no hay media de carrera, gaps ni media para subir: el cronómetro no manda la clasificación.',
   },
 
   estrategia: {

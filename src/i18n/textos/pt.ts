@@ -189,6 +189,7 @@ const pt: Textos = {
     chipParaSubir: 'P/Subir',
     cadaMin: (etiqueta: string, n: number) => `${etiqueta} · ${n} min`,
     vozApagada: 'A voz está desligada: liga-a em cima.',
+    soloCronometro: 'Com o TicTac antigo não há média de corrida, diferenças nem média para subir: o cronómetro não envia a classificação.',
   },
 
   estrategia: {

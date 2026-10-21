@@ -189,6 +189,7 @@ const it: Textos = {
     chipParaSubir: 'Per salire',
     cadaMin: (etiqueta: string, n: number) => `${etiqueta} · ${n} min`,
     vozApagada: 'La voce è spenta: attivala in alto.',
+    soloCronometro: 'Con il vecchio TicTac non ci sono media gara, distacchi né media per salire: il cronometro non invia la classifica.',
   },
 
   estrategia: {
