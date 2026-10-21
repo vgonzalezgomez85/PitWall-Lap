@@ -102,7 +102,7 @@ export default function MyTurnScreen(_props: Props) {
   const fullData = isPitWall || isTicTacLive;
   // TicTac antiguo: sin clasificación del cronómetro (media de carrera, gaps,
   // media para subir) → esos avisos salen desactivados.
-  const clasificacion = locutaAvisosDeClasificacion(raceInfo);
+  const clasificacion = locutaAvisosDeClasificacion(raceInfo, state.protocoloTicTac);
   const isTraining = raceInfo?.mode === 'training';
   // Seguimiento de rivales: TicTac (local) y carreras por equipos de PitWall.
   const trackingAvailable = !isTraining && !!source?.getTracking && (

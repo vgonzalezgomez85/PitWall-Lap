@@ -124,6 +124,9 @@ export type EstadoManga = 'en-curso' | 'pausada' | 'terminada' | 'cancelada';
 
 /** Estado actual del piloto seleccionado. */
 export interface LiveState {
+  /** Sólo TicTac: protocolo con el que se está hablando AHORA. Puede pasar de
+   *  'antiguo' a 'nuevo' si el WSS del TicTac nuevo abre tarde. */
+  protocoloTicTac?: 'antiguo' | 'nuevo';
   status:
     | 'pre-race'         // aún no empezó ninguna manga
     | 'my-turn'          // estoy corriendo ahora

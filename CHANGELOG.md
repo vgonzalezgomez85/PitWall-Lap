@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.4] — 2026-10-21
+
+### Corregido
+- **TicTac nuevo tratado como antiguo.** Si al conectar el WSS del TicTac nuevo no respondía a tiempo (o aún no estaba levantado), la app se quedaba toda la sesión en modo antiguo (UDP): sin la clasificación del TicTac y, desde la 1.22.3, con Media de carrera, Gaps y Media para subir desactivados. Ahora, en modo antiguo, se vuelve a probar el WSS cada 10 s y, en cuanto abre, se pasa al TicTac nuevo. El protocolo va en el estado en vivo (`protocoloTicTac`), así que los botones y la voz cambian solos.
+
 ## [1.22.3] — 2026-10-21
 
 ### Mejorado

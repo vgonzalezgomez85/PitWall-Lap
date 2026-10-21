@@ -89,6 +89,9 @@ const STATE_RESOLVE_MS = 1200;
 // descarte la conexión en silencio.
 const WSS_OPEN_TIMEOUT_MS = 2500;
 const WSS_RECONNECT_MS = 2000;
+// En modo antiguo se sigue probando el WSS: si el TicTac nuevo no respondió a
+// tiempo al conectar (o aún no lo había levantado), se pasa a él al abrir.
+const WSS_REINTENTO_ANTIGUO_MS = 10_000;
 // "Test de transmisión" del TicTac envía 100 vueltas falsas de 0,001–0,1 s
 // al carril 1. Ninguna vuelta real de slot baja de esto.
 const MIN_WSS_LAP_MS = 500;
@@ -848,9 +851,29 @@ export class InfolapSource implements DataSource {
       raceId: dayKey(this.sessionStartedAt),
       participants: this.participants,
       capabilities: INFOLAP_CAPABILITIES,
-      // Se construye tras intentar el WSS: ya sabemos qué protocolo habla.
-      protocoloTicTac: this.wssMode ? 'nuevo' : 'antiguo',
+      // Se construye tras intentar el WSS: el protocolo con el que se empieza.
+      // El de cada momento va en el estado (marcarProtocolo).
+      protocoloTicTac: this.marcarProtocolo(),
     };
+  }
+
+  /** Publica en el estado el protocolo actual (y lo devuelve). */
+  private marcarProtocolo(): 'antiguo' | 'nuevo' {
+    const p = this.wssMode ? 'nuevo' : 'antiguo';
+    if (this.currentState.protocoloTicTac !== p) {
+      this.currentState = { ...this.currentState, protocoloTicTac: p };
+      this.emitState();
+    }
+    return p;
+  }
+
+  /** Modo antiguo: vuelve a probar el WSS dentro de un rato. */
+  private reintentarWssLuego(host: string): void {
+    if (!this.active || this.wssMode || this.wsReconnectTimer) return;
+    this.wsReconnectTimer = setTimeout(() => {
+      this.wsReconnectTimer = null;
+      if (this.active && !this.wssMode && !this.wsConn) this.openWss(host);
+    }, WSS_REINTENTO_ANTIGUO_MS);
   }
 
   // ── Protocolo nuevo (WSS) ───────────────────────────────────────────────
@@ -874,8 +897,9 @@ export class InfolapSource implements DataSource {
         if (openTimer) clearTimeout(openTimer);
         const wasWss = this.wssMode;
         this.wssMode = true;
-        console.log('[Infolap] WSS conectado', url);
+        console.log('[Infolap] WSS conectado', url, ready ? '' : '(tarde: se pasa al TicTac nuevo)');
         if (wasWss) this.emitEvent({ type: 'connection-restored' });
+        this.marcarProtocolo();
         markReady();
       },
       onMessage: (data) => this.handleWsMessage(data),
@@ -884,7 +908,11 @@ export class InfolapSource implements DataSource {
         if (this.wsConn === conn) this.wsConn = null;
         console.log('[Infolap] WSS cerrado:', reason);
         if (!this.active) return;
-        if (!this.wssMode) { markReady(); return; }   // TicTac antiguo
+        if (!this.wssMode) {   // TicTac antiguo (o el nuevo aún sin WSS)
+          markReady();
+          this.reintentarWssLuego(host);
+          return;
+        }
         if (opened) this.emitEvent({ type: 'connection-lost' });
         this.wsReconnectTimer = setTimeout(() => {
           this.wsReconnectTimer = null;
@@ -894,15 +922,16 @@ export class InfolapSource implements DataSource {
     });
     this.wsConn = conn;
 
-    if (onReady) {
-      openTimer = setTimeout(() => {
-        if (opened) return;
-        console.log('[Infolap] WSS sin respuesta → protocolo UDP antiguo');
-        conn.close();
-        if (this.wsConn === conn) this.wsConn = null;
-        markReady();
-      }, WSS_OPEN_TIMEOUT_MS);
-    }
+    // Sin respuesta (un firewall que descarta en silencio): se sigue en UDP.
+    // Cerrar a mano no avisa por onClose, así que el reintento va aquí también.
+    openTimer = setTimeout(() => {
+      if (opened || !this.active) return;
+      if (ready) console.log('[Infolap] WSS sin respuesta → protocolo UDP antiguo');
+      conn.close();
+      if (this.wsConn === conn) this.wsConn = null;
+      markReady();
+      this.reintentarWssLuego(host);
+    }, WSS_OPEN_TIMEOUT_MS);
   }
 
   private handleWsMessage(text: string): void {

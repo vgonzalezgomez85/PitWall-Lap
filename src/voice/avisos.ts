@@ -24,8 +24,11 @@ export function mediaAnunciable(vueltasValidas: number): boolean {
  *  tiempo sí. */
 export function locutaAvisosDeClasificacion(
   raceInfo: { source: string; protocoloTicTac?: 'antiguo' | 'nuevo' } | null | undefined,
+  /** El protocolo de ahora (LiveState): manda sobre el de la conexión. */
+  enVivo?: 'antiguo' | 'nuevo',
 ): boolean {
-  return !(raceInfo?.source === 'infolap' && raceInfo.protocoloTicTac === 'antiguo');
+  const protocolo = enVivo ?? raceInfo?.protocoloTicTac;
+  return !(raceInfo?.source === 'infolap' && protocolo === 'antiguo');
 }
 
 /** Silencio sin cambios de posición antes de anunciarla: con el TicTac llega

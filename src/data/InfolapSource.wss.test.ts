@@ -490,6 +490,40 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     }
   });
 
+  it('TicTac nuevo que abre el WSS tarde: se reintenta y se pasa a él', async () => {
+    jest.useFakeTimers();
+    try {
+      udp.handlers = {}; ws.opened = [];
+      const src = new InfolapSource();
+      const p = src.connect();
+      for (let i = 0; i < 5 && !udp.handlers.message; i++) await Promise.resolve();
+      udp.handlers.message!(new Uint8Array(Buffer.from('OK Piloto 1;#001Piloto 2;#002')), { address: '192.168.10.9' });
+      ws.opened[0]!.h.onClose('ECONNREFUSED');
+      const info = await p;
+      expect(info.protocoloTicTac).toBe('antiguo');
+      let state!: LiveState;
+      src.onStateChange(s => { state = s; });
+      expect(state.protocoloTicTac).toBe('antiguo');
+
+      // Reintento: esta vez el TicTac nuevo sí abre.
+      jest.advanceTimersByTime(10_000);
+      expect(ws.opened).toHaveLength(2);
+      ws.opened[1]!.h.onOpen();
+      expect(state.protocoloTicTac).toBe('nuevo');
+
+      // Y ya habla el protocolo nuevo (los UDP se ignoran).
+      src.selectParticipant('#002');
+      ws.opened[1]!.h.onMessage('{"type":"CONFIG","mangaPilots":[{"laneId":1,"name":"Piloto 1"},{"laneId":2,"name":"Piloto 2"}]}');
+      ws.opened[1]!.h.onMessage(lap(1, 2, 'Piloto 2', 3.2));
+      expect(state.lapCount).toBe(1);
+      src.disconnect();
+      jest.advanceTimersByTime(30_000);
+      expect(ws.opened).toHaveLength(2);   // sin reintentos tras desconectar
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('TicTac antiguo: si el WSS falla sigue con UDP y calcula la clasificación', async () => {
     udp.handlers = {}; ws.opened = [];
     const src = new InfolapSource();

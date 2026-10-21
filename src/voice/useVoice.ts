@@ -180,7 +180,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       // Con la manga pausada o cerrada no hay nada nuevo que contar.
       if (st.estadoManga != null && st.estadoManga !== 'en-curso') return;
       const minute = Math.floor((Date.now() / 1000) / 60);
-      const clasificacion = locutaAvisosDeClasificacion(raceInfoRef.current);
+      const clasificacion = locutaAvisosDeClasificacion(raceInfoRef.current, st.protocoloTicTac);
 
       // Medias: cada N minutos en punto, y solo con al menos dos vueltas
       // válidas en la manga (con una, la media es esa vuelta repetida).

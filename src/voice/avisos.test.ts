@@ -10,6 +10,12 @@ describe('avisos de clasificación (media de carrera, gaps, para subir)', () => 
     expect(locutaAvisosDeClasificacion({ source: 'pitwall' })).toBe(true);
     expect(locutaAvisosDeClasificacion(null)).toBe(true);
   });
+
+  it('manda el protocolo de ahora: el TicTac nuevo que abrió tarde ya no es antiguo', () => {
+    const info = { source: 'infolap', protocoloTicTac: 'antiguo' as const };
+    expect(locutaAvisosDeClasificacion(info, 'nuevo')).toBe(true);
+    expect(locutaAvisosDeClasificacion(info, 'antiguo')).toBe(false);
+  });
 });
 
 describe('avisos de media', () => {
