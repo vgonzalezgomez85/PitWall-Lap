@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.1] — 2026-10-21
+
+### Mejorado
+- **Nombres más claros en los botones de avisos de voz.** «Media manga» pasa a **Mitad carrera**, «30 s» a **Últimos 30 s**; en los periódicos, «Media manga» pasa a **Media de carril** y «P/Subir» a **Media para subir**.
+
 ## [1.22.0] — 2026-10-20
 
 ### Añadido
