@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.2] — 2026-10-21
+
+### Corregido
+- **La posición se canta una vez, con la última.** Con el TicTac llega una clasificación por cada cruce, y si te pasaban varios seguidos se oía «tercero, cuarto, quinto, sexto». Ahora la voz espera a que la posición se quede quieta 3 s (6 s como mucho) y dice solo «sexto»; si vuelves a donde estabas, no dice nada (`crearAgrupadorPosicion` en `src/voice/avisos.ts`).
+
 ## [1.22.1] — 2026-10-21
 
 ### Mejorado

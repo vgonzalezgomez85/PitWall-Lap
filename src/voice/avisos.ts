@@ -27,3 +27,46 @@ export function locutaAvisosDeClasificacion(
 ): boolean {
   return !(raceInfo?.source === 'infolap' && raceInfo.protocoloTicTac === 'antiguo');
 }
+
+/** Silencio sin cambios de posición antes de anunciarla: con el TicTac llega
+ *  una clasificación por cada cruce, y si te pasan cuatro seguidos se oiría
+ *  «tercero, cuarto, quinto, sexto». */
+export const ESPERA_POSICION_MS = 3_000;
+/** Tope de espera desde el primer cambio, por si la posición no para quieta. */
+export const ESPERA_POSICION_MAX_MS = 6_000;
+
+export interface AgrupadorPosicion {
+  cambio(desde: number, hasta: number): void;
+  cancelar(): void;
+}
+
+/** Agrupa una racha de cambios de posición en un solo aviso con la última.
+ *  Si la racha acaba donde empezó (2 → 3 → 2), no se anuncia nada. */
+export function crearAgrupadorPosicion(anunciar: (posicion: number) => void): AgrupadorPosicion {
+  let origen: number | null = null;
+  let ultima: number | null = null;
+  let inicio = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const cerrar = () => {
+    timer = null;
+    const desde = origen, hasta = ultima;
+    origen = ultima = null;
+    if (desde != null && hasta != null && hasta !== desde) anunciar(hasta);
+  };
+
+  return {
+    cambio(desde, hasta) {
+      if (origen == null) { origen = desde; inicio = Date.now(); }
+      ultima = hasta;
+      if (timer) clearTimeout(timer);
+      const restante = ESPERA_POSICION_MAX_MS - (Date.now() - inicio);
+      timer = setTimeout(cerrar, Math.max(0, Math.min(ESPERA_POSICION_MS, restante)));
+    },
+    cancelar() {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      origen = ultima = null;
+    },
+  };
+}

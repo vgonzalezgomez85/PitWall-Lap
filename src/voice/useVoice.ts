@@ -16,7 +16,7 @@ import { AppState } from 'react-native';
 import { useDataSource, useSourceEvent } from '../data/sourceContext';
 import { speak, speakTime, shutUp } from './speak';
 import { useVoiceSettings, type VoiceSettings } from './settings';
-import { cuentaParaMedia, locutaAvisosDeClasificacion, mediaAnunciable } from './avisos';
+import { crearAgrupadorPosicion, cuentaParaMedia, locutaAvisosDeClasificacion, mediaAnunciable, type AgrupadorPosicion } from './avisos';
 import { useIdioma } from '../i18n/IdiomaContext';
 import { ordinalHablado, type TextosVoz } from '../i18n';
 import type { ClaveAviso } from '../radio/mensajes';
@@ -36,6 +36,17 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   raceInfoRef.current = raceInfo;
   stateRef.current    = state;
   vozRef.current      = t.voz;
+
+  // Cambios de posición: una racha seguida (2 → 3 → … → 6) se dice una vez,
+  // con la última. Al decirla se vuelve a mirar si sigue tocando hablar.
+  const posicionRef = useRef<AgrupadorPosicion | null>(null);
+  if (!posicionRef.current) {
+    posicionRef.current = crearAgrupadorPosicion(pos => {
+      const s = settingsRef.current;
+      if (!s.enabled || !s.sayPositionChange || stateRef.current.status !== 'my-turn') return;
+      speak(ordinalHablado(pos, vozRef.current));
+    });
+  }
 
   // ── Eventos discretos ──────────────────────────────────────────────────
   useSourceEvent(e => {
@@ -88,7 +99,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
       }
       case 'position-changed': {
         if (!s.sayPositionChange) return;
-        if (e.to !== e.from) speak(ordinalHablado(e.to, v));
+        if (e.to !== e.from) posicionRef.current?.cambio(e.from, e.to);
         break;
       }
       case 'half-manga':
@@ -104,6 +115,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         vueltasValidasRef.current = 0;
         break;
       case 'manga-changed':
+        posicionRef.current?.cancelar();
         bestLapRef.current = null;
         vueltasValidasRef.current = 0;
         if (e.newLane != null) {
@@ -112,6 +124,8 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
         }
         break;
       case 'race-finished': {
+        // La posición final ya va en el aviso de fin.
+        posicionRef.current?.cancelar();
         if (stateRef.current.pole) { speak(v.finPole); break; }
         // TicTac nuevo: posición final de la clasificación cerrada.
         const fin = e.raceOver ? v.finCarrera : v.finManga;
@@ -233,7 +247,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
   // vía AVAudioEngine (loop infinito de ruido inaudible). Aquí solo
   // detenemos lo que esté hablando al salir de MyTurn.
   useEffect(() => {
-    return () => { shutUp(); };
+    return () => { posicionRef.current?.cancelar(); shutUp(); };
   }, []);
 
   // Si cambia la fuente (raceInfo) → reset de las guardas.
@@ -244,6 +258,7 @@ export function useVoice(): { settings: VoiceSettings; toggle: (k: keyof VoiceSe
     lastRaceAvgMinuteRef.current = -1;
     bestLapRef.current = null;
     vueltasValidasRef.current = 0;
+    posicionRef.current?.cancelar();
   }, [raceInfo?.source]);
 
   return { settings, toggle, update, ready };
