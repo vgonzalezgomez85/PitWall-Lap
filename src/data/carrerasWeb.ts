@@ -135,6 +135,63 @@ export function filtrarCarreras(
   });
 }
 
+// ── Filtros (los mismos desplegables que la web) ────────────────────────────
+
+export interface FiltrosCarreras {
+  pais?: string;
+  tipo?: TipoCarrera;
+  campeonato?: string;
+}
+
+/** Aplica país, tipo y campeonato; un filtro vacío no filtra. */
+export function aplicarFiltros(carreras: CarreraWeb[], f: FiltrosCarreras): CarreraWeb[] {
+  return carreras.filter(c =>
+    (!f.pais || c.pais === f.pais)
+    && (!f.tipo || c.tipo === f.tipo)
+    && (!f.campeonato || c.campeonato === f.campeonato));
+}
+
+export interface OpcionesFiltros {
+  paises: string[];
+  tipos: TipoCarrera[];
+  campeonatos: string[];
+}
+
+/**
+ * Valores que aparecen en las carreras, como rellena la web sus desplegables:
+ * países por nombre, tipos en su orden fijo, campeonatos alfabéticos.
+ */
+export function opcionesFiltros(
+  carreras: CarreraWeb[],
+  nombrePais: (codigo: string) => string = p => p,
+): OpcionesFiltros {
+  const paises = new Set<string>();
+  const tipos = new Set<TipoCarrera>();
+  const campeonatos = new Set<string>();
+  for (const c of carreras) {
+    if (c.pais) paises.add(c.pais);
+    if (c.tipo) tipos.add(c.tipo);
+    if (c.campeonato) campeonatos.add(c.campeonato);
+  }
+  return {
+    paises: [...paises].sort((a, b) => nombrePais(a).localeCompare(nombrePais(b))),
+    tipos: TIPOS.filter(t => tipos.has(t)),
+    campeonatos: [...campeonatos].sort((a, b) => a.localeCompare(b)),
+  };
+}
+
+/** Nombre del país en el idioma de la app; el código si el motor no trae `Intl.DisplayNames`. */
+export function nombrePais(codigo: string, locale: string): string {
+  try {
+    const DisplayNames = (Intl as unknown as {
+      DisplayNames?: new (l: string[], o: { type: 'region' }) => { of(c: string): string | undefined };
+    }).DisplayNames;
+    return (DisplayNames && new DisplayNames([locale], { type: 'region' }).of(codigo)) || codigo;
+  } catch {
+    return codigo;
+  }
+}
+
 /** Bandera emoji desde el código ISO del país. */
 export function bandera(pais: string | undefined): string {
   if (!pais || !/^[A-Z]{2}$/.test(pais)) return '';

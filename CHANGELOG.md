@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.7] — 2026-10-22
+
+### Mejorado
+- **Carreras de pitwall.es: filtros como en la web.** Además del buscador, tres botones **País**, **Tipo** y **Campeonato** abren la lista de valores que aparecen en las carreras próximas (los mismos desplegables que `carreras.html`) y se combinan con la búsqueda; «Quitar filtros» los borra de golpe. «Seleccionar todas» actúa solo sobre lo filtrado. El buscador también encuentra por el nombre del país.
+
 ## [1.22.6] — 2026-10-21
 
 ### Corregido

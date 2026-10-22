@@ -1,5 +1,6 @@
 import {
-  bandera, carreraAEvento, carrerasProximas, filtrarCarreras, idsYaAnadidas, lugarDe, mezclarCarreras,
+  aplicarFiltros, bandera, carreraAEvento, carrerasProximas, filtrarCarreras, idsYaAnadidas, lugarDe,
+  mezclarCarreras, nombrePais, opcionesFiltros,
 } from './carrerasWeb';
 
 const manuales = {
@@ -69,6 +70,32 @@ test('filtrarCarreras: varias palabras, sin tildes ni mayúsculas', () => {
   expect(filtrarCarreras(todas, 'sprint', c => (c.tipo === 'velocidad' ? 'Sprint' : '')).map(c => c.nombre))
     .toEqual(['GP Navidad']);
   expect(filtrarCarreras(todas, '  ')).toHaveLength(todas.length);
+});
+
+test('opcionesFiltros: solo lo que aparece, tipos en orden fijo y países por nombre', () => {
+  const todas = mezclarCarreras(manuales, auto);
+  const nombres: Record<string, string> = { ES: 'España', FI: 'Finlandia' };
+  expect(opcionesFiltros(todas, p => nombres[p] ?? p)).toEqual({
+    paises: ['ES', 'FI'],
+    tipos: ['resistencia', 'velocidad'],
+    campeonatos: ['Copa', 'Resiscat'],
+  });
+  // Ordena por el nombre, no por el código.
+  expect(opcionesFiltros(todas, p => (p === 'ES' ? 'Zz' : 'Aa')).paises).toEqual(['FI', 'ES']);
+});
+
+test('aplicarFiltros: combina país, tipo y campeonato; vacío no filtra', () => {
+  const todas = mezclarCarreras(manuales, auto);
+  expect(aplicarFiltros(todas, {})).toHaveLength(todas.length);
+  expect(aplicarFiltros(todas, { pais: 'ES' }).map(c => c.nombre)).toEqual(['Resiscat 4h HY · Conferencia Centre']);
+  expect(aplicarFiltros(todas, { tipo: 'velocidad' }).map(c => c.nombre)).toEqual(['GP Navidad']);
+  expect(aplicarFiltros(todas, { campeonato: 'Copa' }).map(c => c.nombre)).toEqual(['Mismo id que la IA']);
+  expect(aplicarFiltros(todas, { pais: 'ES', tipo: 'velocidad' })).toEqual([]);
+});
+
+test('nombrePais: nunca falla, como mucho devuelve el código', () => {
+  expect(nombrePais('ES', 'es')).toMatch(/^(España|ES)$/);
+  expect(nombrePais('ES', 'no-es-un-locale!!')).toBeTruthy();
 });
 
 test('carreraAEvento: 9:00 del primer día, lugar, notas y webId', () => {

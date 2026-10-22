@@ -1,16 +1,17 @@
-// Carreras publicadas en pitwall.es: se ven las próximas y se añaden al
-// calendario de una en una o seleccionando varias. La lógica está en
+// Carreras publicadas en pitwall.es: se ven las próximas, se filtran como en
+// la web (buscador + país, tipo y campeonato) y se añaden al calendario de una
+// en una o seleccionando varias. La lógica está en
 // `carrerasWeb.ts`; aquí solo la descarga, la selección y el guardado.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import {
-  bandera, carreraAEvento, carrerasProximas, filtrarCarreras, idsYaAnadidas, lugarDe,
-  PAGINA_CARRERAS, parsearDia, type CarreraWeb,
+  aplicarFiltros, bandera, carreraAEvento, carrerasProximas, filtrarCarreras, idsYaAnadidas, lugarDe,
+  nombrePais, opcionesFiltros, PAGINA_CARRERAS, parsearDia, type CarreraWeb, type FiltrosCarreras,
 } from '../data/carrerasWeb';
 import { descargarCarrerasWeb } from '../data/carrerasWebRemoto';
 import { guardarCarreras } from '../data/calendarioImportarArchivo';
@@ -22,6 +23,8 @@ import type { RootStackParamList } from '../navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CarrerasWeb'>;
 
+type CampoFiltro = keyof FiltrosCarreras;
+
 export default function CarrerasWebScreen(_props: Props) {
   const { t, locale } = useIdioma();
   const w = t.calendarioWeb;
@@ -31,6 +34,8 @@ export default function CarrerasWebScreen(_props: Props) {
   const [anadidas, setAnadidas] = useState<Set<string>>(new Set());
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
   const [busqueda, setBusqueda] = useState('');
+  const [filtros, setFiltros] = useState<FiltrosCarreras>({});
+  const [eligiendo, setEligiendo] = useState<CampoFiltro | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   const cargar = useCallback(async () => {
@@ -45,10 +50,17 @@ export default function CarrerasWebScreen(_props: Props) {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  const pais = useCallback((p: string) => nombrePais(p, locale), [locale]);
+  const opciones = useMemo(() => opcionesFiltros(carreras ?? [], pais), [carreras, pais]);
   const visibles = useMemo(
-    () => filtrarCarreras(carreras ?? [], busqueda, c => (c.tipo ? w.tipos[c.tipo] : '')),
-    [carreras, busqueda, w],
+    () => filtrarCarreras(
+      aplicarFiltros(carreras ?? [], filtros),
+      busqueda,
+      c => [c.tipo ? w.tipos[c.tipo] : '', c.pais ? pais(c.pais) : ''].join(' '),
+    ),
+    [carreras, filtros, busqueda, w, pais],
   );
+  const hayFiltros = !!(filtros.pais || filtros.tipo || filtros.campeonato);
   const seleccionables = visibles.filter(c => !anadidas.has(c.id));
   const todasMarcadas = seleccionables.length > 0 && seleccionables.every(c => seleccion.has(c.id));
 
@@ -183,6 +195,33 @@ export default function CarrerasWebScreen(_props: Props) {
     );
   };
 
+  function opcionesDe(campo: CampoFiltro): { valor: string; etiqueta: string }[] {
+    const lista = campo === 'pais'
+      ? opciones.paises.map(p => ({ valor: p, etiqueta: `${bandera(p)} ${pais(p)}` }))
+      : campo === 'tipo'
+        ? opciones.tipos.map(k => ({ valor: k, etiqueta: w.tipos[k] }))
+        : opciones.campeonatos.map(c => ({ valor: c, etiqueta: c }));
+    return [{ valor: '', etiqueta: campo === 'campeonato' ? w.todosCampeonatos : w.todos }, ...lista];
+  }
+
+  function elegir(campo: CampoFiltro, valor: string) {
+    setFiltros(prev => ({ ...prev, [campo]: valor || undefined }));
+    setEligiendo(null);
+  }
+
+  const botonFiltro = (campo: CampoFiltro, etiqueta: string, valor: string | undefined) => (
+    <Pressable
+      onPress={() => setEligiendo(campo)}
+      style={({ pressed }) => [styles.filtro, !!valor && styles.filtroActivo, pressed && styles.pulsada]}
+      accessibilityLabel={valor ? `${etiqueta}: ${valor}` : etiqueta}
+    >
+      <Text style={[styles.filtroTexto, !!valor && styles.filtroTextoActivo]} numberOfLines={1}>
+        {valor ?? etiqueta}
+      </Text>
+      <Text style={[styles.filtroFlecha, !!valor && styles.filtroTextoActivo]}>▾</Text>
+    </Pressable>
+  );
+
   const nSel = (carreras ?? []).filter(c => seleccion.has(c.id) && !anadidas.has(c.id)).length;
 
   return (
@@ -217,13 +256,25 @@ export default function CarrerasWebScreen(_props: Props) {
             autoCorrect={false}
             clearButtonMode="while-editing"
           />
-          {seleccionables.length > 0 && (
-            <Pressable onPress={alternarTodas} style={({ pressed }) => [styles.todas, pressed && styles.pulsada]}>
-              <Text style={styles.todasTexto}>
-                {todasMarcadas ? w.quitarSeleccion : w.seleccionarTodas(seleccionables.length)}
-              </Text>
-            </Pressable>
-          )}
+          <View style={styles.filtros}>
+            {botonFiltro('pais', w.pais, filtros.pais && `${bandera(filtros.pais)} ${pais(filtros.pais)}`)}
+            {botonFiltro('tipo', w.tipo, filtros.tipo && w.tipos[filtros.tipo])}
+            {botonFiltro('campeonato', w.campeonato, filtros.campeonato)}
+          </View>
+          <View style={styles.acciones}>
+            {hayFiltros ? (
+              <Pressable onPress={() => setFiltros({})} style={({ pressed }) => [styles.todas, pressed && styles.pulsada]}>
+                <Text style={styles.limpiarTexto}>✕ {w.limpiarFiltros}</Text>
+              </Pressable>
+            ) : <View />}
+            {seleccionables.length > 0 && (
+              <Pressable onPress={alternarTodas} style={({ pressed }) => [styles.todas, pressed && styles.pulsada]}>
+                <Text style={styles.todasTexto}>
+                  {todasMarcadas ? w.quitarSeleccion : w.seleccionarTodas(seleccionables.length)}
+                </Text>
+              </Pressable>
+            )}
+          </View>
 
           {visibles.length === 0 ? (
             <Text style={styles.vacio}>{carreras.length === 0 ? w.nada : w.sinResultados}</Text>
@@ -255,6 +306,31 @@ export default function CarrerasWebScreen(_props: Props) {
           )}
         </>
       )}
+
+      <Modal visible={eligiendo !== null} transparent animationType="slide" onRequestClose={() => setEligiendo(null)}>
+        <Pressable style={styles.hojaFondo} onPress={() => setEligiendo(null)}>
+          <Pressable style={styles.hoja} onPress={() => {}}>
+            <Text style={styles.hojaTitulo}>
+              {eligiendo === 'pais' ? w.pais : eligiendo === 'tipo' ? w.tipo : w.campeonato}
+            </Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {eligiendo && opcionesDe(eligiendo).map(o => {
+                const activa = (filtros[eligiendo] ?? '') === o.valor;
+                return (
+                  <Pressable
+                    key={o.valor || '·'}
+                    onPress={() => elegir(eligiendo, o.valor)}
+                    style={({ pressed }) => [styles.opcion, pressed && styles.pulsada]}
+                  >
+                    <Text style={[styles.opcionTexto, activa && styles.opcionActiva]}>{o.etiqueta}</Text>
+                    {activa && <Text style={styles.opcionActiva}>✓</Text>}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -275,8 +351,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.sm,
     borderColor: colors.border, borderWidth: 1,
   },
-  todas: { alignSelf: 'flex-end', paddingVertical: spacing.sm, minHeight: 36, justifyContent: 'center' },
+  filtros: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  filtro: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 40,
+    paddingHorizontal: 10, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  filtroActivo: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  filtroTexto: { flex: 1, color: colors.textSoft, fontSize: 13, fontWeight: '600' },
+  filtroTextoActivo: { color: colors.text },
+  filtroFlecha: { color: colors.textMuted, fontSize: 12 },
+  acciones: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  todas: { paddingVertical: spacing.sm, minHeight: 36, justifyContent: 'center' },
   todasTexto: { color: colors.accent, fontSize: 14, fontWeight: '600' },
+  limpiarTexto: { color: colors.textMuted, fontSize: 14, fontWeight: '600' },
+  hojaFondo: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  hoja: {
+    maxHeight: '70%', backgroundColor: colors.surface, paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg, paddingBottom: spacing.xl * 1.5,
+    borderTopLeftRadius: radius.sm * 2, borderTopRightRadius: radius.sm * 2,
+  },
+  hojaTitulo: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: spacing.sm },
+  opcion: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft,
+  },
+  opcionTexto: { flex: 1, color: colors.textSoft, fontSize: 16 },
+  opcionActiva: { color: colors.accent, fontWeight: '700', fontSize: 16 },
   lista: { paddingBottom: spacing.xl },
   mes: {
     color: colors.textMuted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase',
