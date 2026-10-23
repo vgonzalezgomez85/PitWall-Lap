@@ -32,7 +32,17 @@ Hace: sync del changelog → `expo prebuild` → `pod install` → archive → s
 App Store Connect. El número de build es la fecha (`aammddhhmm`), único en cada
 ejecución. `-- --sin-subida` deja solo el `.ipa` en el escritorio.
 
-Tras unos minutos de procesado el build aparece en TestFlight:
+Al terminar la subida, `scripts/testflight-grupos.js` espera a que App Store
+Connect procese el build, rellena el «Qué probar» con la entrada del
+`CHANGELOG.md`, lo asigna al grupo interno y a los externos y lo manda a
+revisión beta. Usa la clave de la API (Usuarios y acceso → Integraciones →
+App Store Connect API, rol *Gestor de apps*) guardada en
+`~/.appstoreconnect/private_keys/AuthKey_<ID>.p8`. Con `-- --solo-internos` no
+llega a los externos (builds de prueba, p. ej. `integracion_garage`). A mano:
+`node scripts/testflight-grupos.js <build> [--solo-internos]`.
+
+Si hay que hacerlo desde la web, tras unos minutos de procesado el build
+aparece en TestFlight:
 
 1. **Primera vez:** rellena la información de la beta (descripción, contacto,
    qué probar) y envíalo a revisión de beta. Suele tardar de horas a un par de

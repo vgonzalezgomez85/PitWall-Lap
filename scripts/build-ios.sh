@@ -15,16 +15,23 @@
 # El número de build (CFBundleVersion) se genera con la fecha y la hora, para
 # que cada subida sea única: TestFlight rechaza repetir (versión, build).
 #
-# Uso: APPLE_TEAM_ID=XXXXXXXXXX npm run ios:testflight [-- --sin-subida]
-#   --sin-subida  solo genera el .ipa (en ~/Desktop), sin subirlo.
+# Tras subirlo, scripts/testflight-grupos.js espera a que se procese, rellena
+# el «Qué probar» desde el CHANGELOG y lo asigna a internos y externos (con
+# revisión beta). Necesita la clave de la API en ~/.appstoreconnect.
+#
+# Uso: APPLE_TEAM_ID=XXXXXXXXXX npm run ios:testflight [-- --sin-subida|--solo-internos]
+#   --sin-subida     solo genera el .ipa (en ~/Desktop), sin subirlo.
+#   --solo-internos  sube, pero no lo da a los externos (Donantes).
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SUBIR=1
+GRUPOS=()
 for arg in "$@"; do
   case "$arg" in
     --sin-subida) SUBIR=0 ;;
+    --solo-internos) GRUPOS+=(--solo-internos) ;;
     *) echo "error: argumento desconocido: $arg" >&2; exit 1 ;;
   esac
 done
@@ -102,7 +109,8 @@ xcodebuild -exportArchive \
 echo
 if [ "$SUBIR" = 1 ]; then
   echo "==> Subido a App Store Connect: $VERSION ($BUILD)"
-  echo "    Aparece en TestFlight tras unos minutos de procesado."
+  echo
+  node "$ROOT/scripts/testflight-grupos.js" "$BUILD" ${GRUPOS[@]+"${GRUPOS[@]}"}
 else
   IPA="$(ls "$EXPORT_DIR"/*.ipa)"
   OUT="$HOME/Desktop/pitwall-lap-$VERSION-$BUILD.ipa"
