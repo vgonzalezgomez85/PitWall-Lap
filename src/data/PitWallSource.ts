@@ -763,28 +763,8 @@ export class PitWallSource implements DataSource {
     let pIdx = proj.findIndex(p => String(p.entityId) === this.selectedId);
     if (pIdx < 0) pIdx = proj.findIndex(p => p.name === me.name);
     const myProj = pIdx >= 0 ? proj[pIdx]! : null;
-    const projAhead  = pIdx > 0 ? proj[pIdx - 1]! : undefined;
-    const projBehind = (pIdx >= 0 && pIdx < proj.length - 1) ? proj[pIdx + 1]! : undefined;
-    // Gap por clasificación ESTIMADA (gapV del servidor, redondeado).
-    const pGapAhead  = (myProj && projAhead && myProj.gapV != null) ? Math.round(myProj.gapV) : null;
-    const pGapBehind = (projBehind && projBehind.gapV != null) ? Math.round(projBehind.gapV) : null;
-
-    // Vecinos por ORDEN DE MANGA — fallback cuando la proyección no da valor
-    // (líder sin media aún, o no llega proyección) para no mostrar "—".
-    const sorted = [...payload.standings].sort((a, b) => a.position - b.position);
-    const mIdx = sorted.findIndex(r => r.lane === myLane);
-    const mAhead  = mIdx > 0 ? sorted[mIdx - 1] : undefined;
-    const mBehind = (mIdx >= 0 && mIdx < sorted.length - 1) ? sorted[mIdx + 1] : undefined;
-    const mGapAhead  = mAhead  ? mAhead.lapCount - me.lapCount  : null;
-    const mGapBehind = mBehind ? me.lapCount - mBehind.lapCount : null;
-
-    // Preferimos la clasificación estimada; si no, la manga.
-    const useProjAhead  = pGapAhead  != null;
-    const useProjBehind = pGapBehind != null;
-    const gapAheadLaps  = useProjAhead  ? pGapAhead  : mGapAhead;
-    const gapBehindLaps = useProjBehind ? pGapBehind : mGapBehind;
-    const aheadName  = (useProjAhead  ? projAhead?.name  : mAhead?.name)  ?? null;
-    const behindName = (useProjBehind ? projBehind?.name : mBehind?.name) ?? null;
+    const { gapAheadLaps, gapBehindLaps, aheadName, behindName } =
+      vecinosGap(proj, pIdx, payload.standings, me);
     const gapAheadMs: number | null = null;   // ya no mostramos gap en tiempo
     const gapBehindMs: number | null = null;
 
@@ -1158,6 +1138,45 @@ export class PitWallSource implements DataSource {
   private notifyTracking(): void {
     for (const l of this.trackingListeners) l();
   }
+}
+
+/**
+ * Gap y nombre del de delante y del de detrás. Preferimos la clasificación
+ * ESTIMADA (gapV del servidor, redondeado); el orden de MANGA solo es fallback
+ * cuando la proyección no da valor (sin media aún, o no llega proyección).
+ * Si estoy en la proyección y soy el primero (o el último), NO hay nadie
+ * delante (o detrás): nada de caer a la manga, que daría un rival falso.
+ */
+export function vecinosGap(
+  proj: ProjectionRow[],
+  pIdx: number,
+  standings: Pick<StandingsRow, 'lane' | 'name' | 'lapCount' | 'position'>[],
+  me: Pick<StandingsRow, 'lane' | 'lapCount'>,
+): { gapAheadLaps: number | null; gapBehindLaps: number | null; aheadName: string | null; behindName: string | null } {
+  const myProj = pIdx >= 0 ? proj[pIdx] : undefined;
+  const projAhead  = pIdx > 0 ? proj[pIdx - 1] : undefined;
+  const projBehind = (pIdx >= 0 && pIdx < proj.length - 1) ? proj[pIdx + 1] : undefined;
+  const pGapAhead  = (myProj && projAhead && myProj.gapV != null) ? Math.round(myProj.gapV) : null;
+  const pGapBehind = (projBehind && projBehind.gapV != null) ? Math.round(projBehind.gapV) : null;
+  const primeroEstimada = myProj != null && pIdx === 0;
+  const ultimoEstimada  = myProj != null && pIdx === proj.length - 1;
+
+  const sorted = [...standings].sort((a, b) => a.position - b.position);
+  const mIdx = sorted.findIndex(r => r.lane === me.lane);
+  const mAhead  = mIdx > 0 ? sorted[mIdx - 1] : undefined;
+  const mBehind = (mIdx >= 0 && mIdx < sorted.length - 1) ? sorted[mIdx + 1] : undefined;
+
+  let gapAheadLaps: number | null = null;
+  let aheadName: string | null = null;
+  if (pGapAhead != null) { gapAheadLaps = pGapAhead; aheadName = projAhead?.name ?? null; }
+  else if (!primeroEstimada && mAhead) { gapAheadLaps = mAhead.lapCount - me.lapCount; aheadName = mAhead.name; }
+
+  let gapBehindLaps: number | null = null;
+  let behindName: string | null = null;
+  if (pGapBehind != null) { gapBehindLaps = pGapBehind; behindName = projBehind?.name ?? null; }
+  else if (!ultimoEstimada && mBehind) { gapBehindLaps = me.lapCount - mBehind.lapCount; behindName = mBehind.name; }
+
+  return { gapAheadLaps, gapBehindLaps, aheadName, behindName };
 }
 
 /** Respuesta del Manager → contrato común (avgAllMs = «Media», avgCleanMs = «Limpia»). */

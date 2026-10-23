@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.8] — 2026-10-24
+
+### Corregido
+- **Gaps con PitWall Manager: sin rival falso si vas primero (o último) en la clasificación estimada.** Al no haber nadie delante en la proyección, la app caía al orden de la manga y mostraba y locutaba un «delante a X vueltas» del que te precede en la manga, aunque fueras líder de la carrera. Ahora, si estás en la estimada y no hay nadie delante (o detrás), ese gap queda vacío; el orden de manga solo se usa cuando la proyección no da valor. Lógica en `vecinosGap`.
+
 ## [1.22.7] — 2026-10-22
 
 ### Mejorado
