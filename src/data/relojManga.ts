@@ -1,7 +1,8 @@
 // Reloj de manga del TicTac. Ningún TicTac manda el tiempo restante ni avisa
 // de pausas: la duración la pone el usuario y aquí se lleva la cuenta.
 //
-//   • Arranque: al CONFIG (TicTac nuevo) o con la primera vuelta, descontando
+//   • Arranque: al CONFIG (TicTac nuevo; la primera manga llega sin él y
+//     arranca con la salida) o con la salida o la primera vuelta, descontando
 //     lo que ha tardado en darla (TicTac antiguo).
 //   • Pausa: si ningún carril cruza meta en PAUSA_SIN_VUELTAS_MS, la manga
 //     está parada. El reloj se congela desde la última vuelta y, al volver,
@@ -31,6 +32,16 @@ export class RelojManga {
     return this.pausaDesde != null;
   }
 
+  /** Tiempo sin que cruce nadie (null si aún no ha cruzado nadie). */
+  silencioMs(ahora: number): number | null {
+    return this.ultimaVueltaAt == null ? null : ahora - this.ultimaVueltaAt;
+  }
+
+  /** Tiempo parado acumulado en la manga (pausas ya cerradas). */
+  get tiempoPausadoMs(): number {
+    return this.pausadoMs;
+  }
+
   /** La manga empieza en `ahora` (CONFIG del TicTac nuevo; puede ser un
    *  instante futuro si hay semáforo). */
   iniciar(ahora: number): void {
@@ -49,13 +60,18 @@ export class RelojManga {
   }
 
   /** Vuelta de cualquier carril. Arranca el reloj si no lo estaba
-   *  (`arrancar`, TicTac antiguo) y cierra la pausa en curso. */
-  vuelta(ahora: number, vueltaMs: number, arrancar: boolean): void {
+   *  (`arrancar`, TicTac antiguo) y cierra la pausa en curso.
+   *  `cruceAnteriorAt`: cuándo cruzó antes ESE coche. La vuelta no cuenta lo
+   *  parado, así que lo parado es lo que falta entre ese cruce y el inicio
+   *  de esta vuelta. Sin él, se mide desde la última vuelta de cualquiera,
+   *  que se queda corto si el coche pasó antes. */
+  vuelta(ahora: number, vueltaMs: number, arrancar: boolean, cruceAnteriorAt: number | null = null): void {
     if (this.inicioAt == null) {
       if (!arrancar) return;
       this.inicioAt = ahora - vueltaMs;
     } else if (this.pausaDesde != null) {
-      this.pausadoMs += Math.max(0, ahora - vueltaMs - this.pausaDesde);
+      const desde = cruceAnteriorAt != null ? Math.min(cruceAnteriorAt, this.pausaDesde) : this.pausaDesde;
+      this.pausadoMs += Math.max(0, ahora - vueltaMs - desde);
       this.pausaDesde = null;
     }
     this.ultimaVueltaAt = ahora;

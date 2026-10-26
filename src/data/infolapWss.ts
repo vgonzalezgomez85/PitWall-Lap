@@ -42,6 +42,12 @@
 //     dura la manga contando desde el CONFIG (semáforo). El fin de la última
 //     manga es igual: el TicTac NO avisa del fin de carrera, y entre mangas no
 //     manda nada hasta que se lanza la siguiente a mano.
+//   • Versiones demo/beta de octubre de 2026: la PRIMERA manga llega sin
+//     CONFIG aunque se conecte antes del GO (de la segunda en adelante sí, al
+//     dar el GO). Ni el antiguo ni el nuevo avisan de la pausa: dejan de
+//     llegar vueltas, la vuelta que la contiene no cuenta lo parado (en una
+//     beta anterior sí lo contaba) y el cierre de la manga se retrasa lo que
+//     dure la pausa.
 //   • Rotación: en cada manga los pilotos cambian de carril; con todos los
 //     carriles ocupados, en tantas mangas como carriles cada piloto ha corrido
 //     en todos (6 pilotos / 6 carriles → 6 mangas).

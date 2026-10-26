@@ -46,6 +46,19 @@ describe('RelojManga', () => {
     expect(r.restanteMs(124_000, 5 * MIN)).toBe(5 * MIN - 30_000 - 4_000);
   });
 
+  it('pausa medida desde el cruce anterior del mismo coche', () => {
+    const r = new RelojManga();
+    r.iniciar(0);
+    r.vuelta(20_000, 10_000, false);   // coche A
+    r.vuelta(26_000, 10_000, false);   // coche B, último cruce antes de parar
+    expect(r.comprobarPausa(46_000, MIN)).toBe(true);
+    // A vuelve con una vuelta de 10 s a 49 s: su vuelta empezó a 39 s y su
+    // cruce anterior fue a 20 s → 19 s parados (desde B solo serían 13).
+    r.vuelta(49_000, 10_000, false, 20_000);
+    expect(r.tiempoPausadoMs).toBe(19_000);
+    expect(r.silencioMs(52_000)).toBe(3_000);
+  });
+
   it('con la manga acabada, el silencio no es una pausa', () => {
     const r = new RelojManga();
     r.iniciar(0);

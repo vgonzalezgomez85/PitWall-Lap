@@ -178,7 +178,10 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       rodar(31_000);
       expect(events).not.toContainEqual({ type: 'race-finished' });
       expect(state.remainingMs).toBe(0);
-      rodar(10_000);
+      // Coches parados: el silencio tras el final no es una pausa.
+      jest.advanceTimersByTime(40_000);
+      expect(events).not.toContainEqual({ type: 'race-finished' });
+      jest.advanceTimersByTime(20_000);
       expect(events).toContainEqual({ type: 'race-finished' });
       expect(state.remainingMs).toBe(0);
       expect(state.avgToCatchMs).toBeNull();
@@ -187,7 +190,7 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       src.disconnect();
       expect(snaps).toHaveLength(2);   // al desconectar se vuelve a guardar
       const last = snaps[1] as { standings: { name: string; totalLaps: number }[] };
-      expect(last.standings.map(s => [s.name, s.totalLaps])).toEqual([['Piloto 1', 20], ['Piloto 2', 2]]);
+      expect(last.standings.map(s => [s.name, s.totalLaps])).toEqual([['Piloto 1', 19], ['Piloto 2', 2]]);
     } finally {
       jest.useRealTimers();
     }
@@ -472,6 +475,67 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
       // Reloj de la manga 6 con la duración y el semáforo deducidos de la 5.
       expect(restantes[0]).toBeGreaterThan(0);
       expect(restantes[0]).toBeLessThanOrEqual(2_000);
+      src.disconnect();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('captura real (demo 2026): 1.ª manga sin CONFIG y con pausa, 2.ª con CONFIG', async () => {
+    jest.useFakeTimers();
+    try {
+      const { src, conn } = await connectNew('OK a;#001b;#002c;#003d;#004e;#005f;#006');
+      let state!: LiveState;
+      let t = 0;
+      const events: { t: number; e: SourceEvent }[] = [];
+      src.onStateChange(s => { state = s; });
+      src.onEvent(e => { if (e.type !== 'entity-lap' && e.type !== 'position-changed') events.push({ t, e }); });
+      src.selectParticipant('#004');   // d: carril 4 y luego 2
+      src.setMangaDurationMs(60_000);
+
+      const captura = readFileSync(join(__dirname, 'fixtures', 'tictac-demo-pausa-1min.log'), 'utf8')
+        .split('\n').map(l => l.match(/^\s*([\d.]+)\s+(\{.*\})\s*$/))
+        .filter((m): m is RegExpMatchArray => m != null);
+      // Tiempo restante en ciertos instantes de la captura.
+      const instantes = [20_000, 40_000, 47_000];
+      const restantes = new Map<number, number | null>();
+      const avanzar = (hasta: number) => {
+        for (const i of instantes) {
+          if (t < i && i <= hasta) { jest.advanceTimersByTime(i - t); t = i; restantes.set(i, state.remainingMs); }
+        }
+        jest.advanceTimersByTime(hasta - t);
+        t = hasta;
+      };
+      for (const m of captura) {
+        avanzar(Math.round(Number(m[1]) * 1000));
+        conn.h.onMessage(m[2]!);
+      }
+      avanzar(t + 70_000);
+
+      // Manga 1: sin CONFIG, arranca con la primera salida (14,6 s).
+      expect(events[0]).toEqual({ t: 14_643, e: { type: 'race-started' } });
+      expect(restantes.get(20_000)).toBe(55_000);
+      // Pausa (sin cruces de 26,0 a 48,9 s): a los 20 s de silencio el reloj
+      // vuelve al último cruce y se congela (60 − 11,4 s); mientras tanto los
+      // avisos esperan. El de 30 s llega tras reanudar (el TicTac cierra a 93,2 s).
+      expect(restantes.get(40_000)).toBe(35_000);
+      expect(restantes.get(47_000)).toBe(49_000);
+      const avisos30 = events.filter(x => x.e.type === 'last-30s').map(x => x.t);
+      expect(avisos30).toHaveLength(2);
+      expect(avisos30[0]).toBeGreaterThan(48_907);
+      expect(avisos30[0]).toBeLessThan(63_220);
+      // Fin de cada manga: lo marca el TicTac, con la posición, sin respaldo.
+      expect(events.filter(x => x.e.type === 'race-finished')).toEqual([
+        { t: 93_220, e: { type: 'race-finished', position: 3, raceOver: false } },
+        { t: 167_944, e: { type: 'race-finished', position: 2, raceOver: false } },
+      ]);
+      // Manga 2 con CONFIG: carriles rotados; la carrera ya estaba empezada.
+      expect(events.filter(x => x.e.type === 'race-started')).toHaveLength(1);
+      expect(events).toContainEqual({ t: 104_871, e: { type: 'manga-changed', newMangaNum: 2, newLane: 2 } });
+      // Duración aprendida descontando la pausa; el aviso de 30 s de la
+      // manga 2 cae a ±2 s del real (167,9 − 30).
+      expect(state.detectedMangaMs).toBe(60_000);
+      expect(Math.abs(avisos30[1]! - 137_944)).toBeLessThanOrEqual(2_000);
       src.disconnect();
     } finally {
       jest.useRealTimers();

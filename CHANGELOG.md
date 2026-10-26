@@ -18,6 +18,13 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.10] — 2026-10-26
+
+### Corregido
+- **TicTac nuevo: la primera manga sin `CONFIG` ya tiene reloj.** Las versiones demo y beta no mandan `CONFIG` en la primera manga, aunque se conecte antes del GO, y la app se quedaba sin tiempo restante, sin avisos de mitad/último minuto/30 s y sin nº de manga. Ahora la manga empieza con la primera salida.
+- **TicTac nuevo: pausas.** El TicTac no avisa de la pausa, pero alarga la manga lo que dure; la app seguía contando y adelantaba los avisos y el fin de manga. Ahora detecta la pausa por el silencio (como con el antiguo), congela el reloj y descuenta lo parado, medido desde el cruce anterior del mismo coche. Con más de 12 s sin cruces, los avisos de tiempo esperan, para no decir «30 segundos» con la manga parada.
+- **TicTac nuevo: el fin de manga lo marca el TicTac.** El reloj de la app solo lo da por acabado si el cierre no llega en 60 s (antes 10 s, y una pausa lo adelantaba). Si el cierre real llega después, se anuncia igual, con la posición final.
+
 ## [1.22.9] — 2026-10-26
 
 ### Mejorado
