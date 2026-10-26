@@ -38,18 +38,28 @@ jest.mock('../../modules/infolapws', () => ({
   },
 }));
 
-import { InfolapSource } from './InfolapSource';
+import { InfolapSource, parseDiscoveryResponse, parseStatePacket } from './InfolapSource';
 
-// Paquete de estado de 52 bytes del TicTac antiguo (ver infolapDecode.ts).
-function paqueteUdp(seq: number, lane: number, name: string, ms: number | null, nueva = true): Uint8Array {
+interface OpcionesUdp {
+  /** Cruce de salida (byte 44 = "1"). */
+  salida?: boolean;
+  /** Mejor vuelta personal (byte 37 = "F"). */
+  mejor?: boolean;
+  /** Posición al cruzar (bytes 40-42). */
+  pos?: number;
+}
+
+// Paquete de estado de 52 bytes del TicTac antiguo (ver parseStatePacket).
+function paqueteUdp(seq: number, lane: number, name: string, ms: number | null, o: OpcionesUdp = {}): Uint8Array {
   if (ms == null) return paqueteUdpSinVuelta(seq, lane, name);
   const d = [
     Math.floor(ms / 100) % 10, Math.floor(ms / 10000) % 10, ms % 10,
     Math.floor(ms / 10) % 10, Math.floor(ms / 100000) % 10, Math.floor(ms / 1000) % 10, 0,
   ];
   const tiempo = d.map((x, i) => (x ^ Number('7654321'[i])).toString(16).toUpperCase()).join('');
-  const s = String(seq).padStart(4, '0') + String(lane) + name.padEnd(20) + ' '.repeat(5)
-    + tiempo + ' ' + ' '.repeat(6) + (nueva ? '1' : 'X') + String(lane).padStart(3, '0') + ' '.repeat(4);
+  const s = String(seq).padStart(4, '0') + String(lane) + name.padEnd(25)
+    + tiempo + (o.mejor ? 'F' : ' ') + '  ' + String(o.pos ?? 0).padStart(3, '0') + '4'
+    + (o.salida ? '1' : 'X') + String(lane).padStart(3, '0') + '000P';
   return new Uint8Array(Buffer.from(s, 'ascii'));
 }
 
@@ -386,8 +396,8 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     src.onStateChange(s => { state = s; });
     src.onRaceStatsSnapshot(s => snaps.push(s));
     src.setMangaDurationMs(5 * 60_000);
-    const send = (seq: number, lane: number, name: string, ms: number | null, nueva = true) =>
-      udp.handlers.message!(paqueteUdp(seq, lane, name, ms, nueva), { address: '192.168.10.9' });
+    const send = (seq: number, lane: number, name: string, ms: number | null, o: OpcionesUdp = {}) =>
+      udp.handlers.message!(paqueteUdp(seq, lane, name, ms, o), { address: '192.168.10.9' });
     const restante = () => { jest.advanceTimersByTime(1_000); return state.remainingMs; };
     return { src, info, snaps, send, restante };
   }
@@ -413,7 +423,7 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
 
       // Manga nueva (rotan los pilotos) sin piloto seleccionado: se guarda la
       // anterior y el reloj espera; la repetición de la vuelta vieja no cuenta.
-      send(5, 1, 'Piloto 2', 4000, false);
+      send(5, 1, 'Piloto 2', 4000);
       send(2, 2, 'Piloto 1', null);
       expect(snaps).toHaveLength(1);
       expect(restante()).toBeNull();
@@ -473,14 +483,14 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     try {
       const { src, send, restante } = await connectAntiguo();
       // El Gestor repite la última vuelta de cada carril: manga en marcha.
-      send(40, 1, 'Piloto 1', 3000, false);
-      send(41, 2, 'Piloto 2', 3200, false);
+      send(40, 1, 'Piloto 1', 3000);
+      send(41, 2, 'Piloto 2', 3200);
       send(42, 1, 'Piloto 1', 3100);
       expect(restante()).toBeNull();
 
       // Rotación: la siguiente manga sí se cronometra.
-      send(42, 1, 'Piloto 2', 3100, false);
-      send(41, 2, 'Piloto 1', 3200, false);
+      send(42, 1, 'Piloto 2', 3100);
+      send(41, 2, 'Piloto 1', 3200);
       expect(restante()).toBeNull();
       send(43, 2, 'Piloto 1', 3000);
       expect(restante()).toBe(5 * 60_000 - 4_000);
@@ -541,8 +551,13 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     src.onStateChange(s => { state = s; });
     src.onEvent(e => events.push(e));
     src.selectParticipant('#002');
-    const send = (seq: number, lane: number, name: string, ms: number) =>
-      udp.handlers.message!(paqueteUdp(seq, lane, name, ms), { address: '192.168.10.9' });
+    const send = (seq: number, lane: number, name: string, ms: number, o: OpcionesUdp = {}) =>
+      udp.handlers.message!(paqueteUdp(seq, lane, name, ms, o), { address: '192.168.10.9' });
+
+    // Salida: el campo de tiempo trae basura (1 s) y no es una vuelta.
+    send(0, 1, 'Piloto 1', 1000, { salida: true });
+    send(0, 2, 'Piloto 2', 1000, { salida: true });
+    expect(state.lapCount).toBe(0);
 
     send(1, 1, 'Piloto 1', 3000);
     send(1, 2, 'Piloto 2', 3200);
@@ -566,7 +581,101 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     expect((await src.getTracking())!.teams[0]!.laps).toBe(0);
     send(4, 1, 'Piloto 2', 3300);
     const d = (await src.getTracking())!;
-    expect(d.teams[0]).toMatchObject({ name: 'Piloto 2', laps: 3, bestMs: 2900 });
+    // La salida cuenta como vuelta en el seguimiento (como el TicTac nuevo).
+    expect(d.teams[0]).toMatchObject({ name: 'Piloto 2', laps: 4, bestMs: 2900 });
     src.disconnect();
+  });
+
+  it('TicTac antiguo, captura real: posición oficial, vuelta rápida y salida', async () => {
+    udp.handlers = {}; ws.opened = [];
+    const src = new InfolapSource();
+    const p = src.connect();
+    for (let i = 0; i < 5 && !udp.handlers.message; i++) await Promise.resolve();
+    // El Gestor respondió así, sin ids, justo antes de esta carrera.
+    udp.handlers.message!(new Uint8Array(Buffer.from('OK piloto1;piloto3;piloto4;piloto2;piloto5;piloto6;')),
+      { address: '192.168.10.138' });
+    ws.opened[0]!.h.onClose('ECONNREFUSED');
+    const info = await p;
+    expect(info.participants.map(x => x.name))
+      .toEqual(['piloto1', 'piloto3', 'piloto4', 'piloto2', 'piloto5', 'piloto6']);
+
+    let state!: LiveState;
+    const events: SourceEvent[] = [];
+    src.onStateChange(s => { state = s; });
+    src.onEvent(e => events.push(e));
+    src.selectParticipant('#001');   // piloto1, carril 1
+
+    // Salida y cuatro vueltas, cruzadas con fotos de la pantalla del TicTac.
+    const paquetes = [
+      '12105piloto5                  7654331   00341005000P',
+      '12206piloto6                  7654331   00641006000P',
+      '12302piloto3                  7654331   00141002000P',
+      '12403piloto4                  7654331   00241003000P',
+      '12501piloto1                  7654331   00441001000P',
+      '12604piloto2                  7654331   00541004000P',
+      '12703piloto4                  F6103B1FAV0014X003000P',
+      '12801piloto1                  771D321FRV0024X001000P',
+      '12906piloto6                  572D321FRV0034X006000P',
+      '13005piloto5                  E703321FRV0044X005000P',
+      '13104piloto2                  E730321FVV0054X004000P',
+      '13202piloto3                  E757361FRA0064X002000P',
+      '13301piloto1                  166D3B1FAV0014X001000P',
+      '13404piloto2                  E6143A1FVV0024X004000P',
+      '13503piloto4                  E720321 RR0034X003000P',
+      '13605piloto5                  E63C3B1FVV0044X005000P',
+      '13706piloto6                  1767331 RV0054X006000P',
+      '13802piloto3                  7724321FVA0064X002000P',
+      '13901piloto1                  16443B1FAR0014X001000P',
+      '14004piloto2                  4756331 RR0024X004000P',
+      '14103piloto4                  673C331 VR0034X003000P',
+      '14205piloto5                  4701301 RR0044X005000P',
+      '14306piloto6                  4706331 RV0044X006000P',
+      '14402piloto3                  56653B1FVA0064X002000P',
+      '14501piloto1                  56D23A1FAV0014X001000P',
+    ];
+    const posiciones: (number | null)[] = [];
+    for (const s of paquetes) {
+      udp.handlers.message!(new Uint8Array(Buffer.from(s, 'latin1')), { address: '192.168.10.138' });
+      if (s.slice(4, 5) === '1') posiciones.push(state.position);
+    }
+
+    // La salida (tiempo basura de 1 s) no es una vuelta.
+    const vueltas = events.filter(e => e.type === 'lap-completed');
+    expect(vueltas).toEqual([
+      { type: 'lap-completed', lapTimeMs: 10094, lapCount: 1, isFastest: false },  // la primera no se avisa
+      { type: 'lap-completed', lapTimeMs: 9693, lapCount: 2, isFastest: true },
+      { type: 'lap-completed', lapTimeMs: 9601, lapCount: 3, isFastest: true },
+      { type: 'lap-completed', lapTimeMs: 8268, lapCount: 4, isFastest: true },
+    ]);
+    // Posición del TicTac en cada cruce de piloto1 (salida: aún sin vueltas).
+    expect(posiciones).toEqual([null, 2, 1, 1, 1]);
+    expect(events).toContainEqual({ type: 'position-changed', from: 2, to: 1 });
+    src.disconnect();
+  });
+});
+
+describe('paquetes del TicTac antiguo', () => {
+  it('nombre de más de 20 bytes y campos de la captura real', () => {
+    const s = '00204SLOTMANIA PALMARES GT    E724321FRR00241004000P';
+    const pkt = parseStatePacket(new Uint8Array(Buffer.from(s, 'latin1')))!;
+    expect(pkt).toMatchObject({
+      sequence: 20, lane: 4, driverName: 'SLOTMANIA PALMARES GT',
+      mejorPersonal: true, posicion: 2, esSalida: true, laneCode: 4,
+    });
+  });
+
+  it('sin posición: espacios o ceros', () => {
+    const viejo = '00701Piloto 1                 3627376F  0000X001001P';
+    expect(parseStatePacket(new Uint8Array(Buffer.from(viejo, 'latin1')))!.posicion).toBeNull();
+  });
+
+  it('descubrimiento con y sin ids', () => {
+    expect(parseDiscoveryResponse('OK piloto4;#003piloto1;#001')).toEqual([
+      { id: '#003', name: 'piloto4' }, { id: '#001', name: 'piloto1' },
+    ]);
+    expect(parseDiscoveryResponse('OK APR SPORT GT;NO NAME GT2;')).toEqual([
+      { id: '#001', name: 'APR SPORT GT' }, { id: '#002', name: 'NO NAME GT2' },
+    ]);
+    expect(parseDiscoveryResponse('OK ')).toEqual([]);
   });
 });

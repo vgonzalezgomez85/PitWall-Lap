@@ -18,6 +18,17 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.9] — 2026-10-26
+
+### Mejorado
+- **TicTac antiguo: posición oficial del cronómetro.** El paquete de estado trae la posición de cada coche al cruzar meta (bytes 40–42), descifrada con una simulación real cruzada con la pantalla del TicTac. Ahora la app usa esa posición en vez de la que calculaba en el móvil, que solo era exacta conectando antes de la salida; la calculada queda para vecinos y gaps.
+- **Vuelta rápida según el TicTac (antiguo y nuevo).** Se avisa cuando el cronómetro marca la vuelta como mejor personal de la carrera (`F` en el antiguo, `isFastLap` en el nuevo), salvo la primera vuelta que se ve de cada piloto, que siempre lo es.
+
+### Corregido
+- **TicTac antiguo: la salida ya no se canta como vuelta.** El cruce de salida (byte 44 = `1`, que se leía como «vuelta nueva») trae un tiempo basura de 1–3 s que se locutaba y entraba en la media. Ahora cuenta solo en el seguimiento y arranca el reloj de la manga. Tampoco se pierde la primera vuelta de un carril que antes mandaba «sin vuelta».
+- **TicTac antiguo: descubrimiento sin ids.** El Gestor a veces responde `OK piloto1;piloto3;…;` sin los `#00N` y la app se quedaba sin lista de pilotos; ahora se numeran por orden.
+- **TicTac antiguo: nombres de más de 20 caracteres completos.** «SLOTMANIA PALMARES GT» salía cortado: el nombre invade los espacios de detrás y ahora se leen.
+
 ## [1.22.8] — 2026-10-24
 
 ### Corregido

@@ -69,7 +69,7 @@ export function decodificarTextoTicTac(bytes: Uint8Array): string {
   const b = Buffer.from(bytes);
   const utf8 = b.toString('utf8');
   if (!utf8.includes('\uFFFD')) return utf8;
-  // El nombre del paquete de estado va cortado a 20 bytes: el corte puede
+  // El nombre del paquete de estado va cortado (bytes 5-29): el corte puede
   // partir la última letra. Eso no lo hace Latin-1.
   const sinCorte = utf8.replace(/\uFFFD+$/, '');
   return sinCorte.includes('\uFFFD') ? b.toString('latin1') : sinCorte;

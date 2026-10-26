@@ -19,9 +19,9 @@ export function mediaAnunciable(vueltasValidas: number): boolean {
 }
 
 /** Media de carrera, gaps y media para subir. Con el TicTac antiguo no se
- *  locutan: sale de una clasificación que reconstruye el móvil, no del
- *  cronómetro. Vueltas, posición, vuelta rápida, media de carril y avisos de
- *  tiempo sí. */
+ *  locutan: salen de una clasificación que reconstruye el móvil, no del
+ *  cronómetro. Vueltas, posición (la manda el TicTac al cruzar), vuelta
+ *  rápida, media de carril y avisos de tiempo sí. */
 export function locutaAvisosDeClasificacion(
   raceInfo: { source: string; protocoloTicTac?: 'antiguo' | 'nuevo' } | null | undefined,
   /** El protocolo de ahora (LiveState): manda sobre el de la conexión. */

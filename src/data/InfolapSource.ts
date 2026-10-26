@@ -14,12 +14,13 @@
 // conecta usamos el protocolo nuevo; si no, seguimos con el UDP de siempre.
 //
 // Capacidades: casi lo mismo que PitWall con los dos protocolos. Posición y
-// gaps los manda el TicTac nuevo; con el antiguo se calculan aquí a partir de
-// los tiempos de vuelta (`clasificacionLocal`, exacta solo si conectamos antes
-// de la salida). Además, en cliente: media de carril, gaps en vueltas, tiempo
-// restante y avisos de fin (con la duración de manga que configura el
-// usuario), proyección, media para subir y dossier para el histórico
-// (infolapRace.ts). No hay salidas, pit stops, plan de mangas ni pole.
+// gaps los manda el TicTac nuevo. El antiguo manda la posición de cada coche
+// al cruzar; los gaps se calculan aquí a partir de los tiempos de vuelta
+// (`clasificacionLocal`, exacta solo si conectamos antes de la salida), que
+// también dan la posición mientras el TicTac no la trae. Además, en cliente:
+// media de carril, gaps en vueltas, tiempo restante y avisos de fin (con la
+// duración de manga que configura el usuario), proyección, media para subir y
+// dossier para el histórico (infolapRace.ts). No hay salidas, pit stops, plan de mangas ni pole.
 
 import dgram from 'react-native-udp';
 import { Buffer } from 'buffer';
@@ -119,6 +120,9 @@ const FIN_RESPALDO_MS = 10_000;
  * Es imprescindible fijar el id a `\d{3}`: si el nombre del piloto
  * siguiente es numérico (aquí lo son), un `\d+` codicioso se comería esa
  * cifra y desalinearía toda la lista.
+ *
+ * A veces el Gestor responde sin ids: `"OK piloto1;piloto3;piloto4;"`
+ * (capturado). Entonces los ids se numeran por orden.
  */
 export function parseDiscoveryResponse(payload: string): Participant[] {
   if (!payload.startsWith('OK ')) return [];
@@ -129,35 +133,60 @@ export function parseDiscoveryResponse(payload: string): Participant[] {
   while ((m = re.exec(body)) !== null) {
     out.push({ id: `#${m[2]}`, name: m[1]!.trim() });
   }
-  return out;
+  if (out.length > 0) return out;
+  return body.split(';')
+    .map(n => n.trim())
+    .filter(n => n.length > 0)
+    .map((name, i) => ({ id: `#${String(i + 1).padStart(3, '0')}`, name }));
 }
 
 export interface InfolapStatePacket {
   sequence: number;        // pos 0-3
   lane: number;            // pos 4
-  driverName: string;      // pos 5-24 (trimmed)
+  driverName: string;      // pos 5-29 (trimmed)
   lastLapMs: number | null;
-  /** "1" = primer reporte tras vuelta nueva; "X" = idle. */
-  isNewLap: boolean;       // pos 44
+  /** "F" en el byte 37: mejor vuelta personal de la carrera. */
+  mejorPersonal: boolean;
+  /** Posición oficial del TicTac al cruzar (bytes 40-42); null si no la trae. */
+  posicion: number | null;
+  /** "1" en el byte 44: cruce de salida (su campo de tiempo no es una vuelta). */
+  esSalida: boolean;
   laneCode: number;        // pos 45-47
 }
 
+/**
+ * Paquete de estado de 52 bytes (descifrado con una simulación real del
+ * TicTac antiguo cruzada con su pantalla):
+ *   0-3 secuencia · 4 carril · 5-29 nombre · 30-36 tiempo (infolapDecode)
+ *   37 "F" = mejor vuelta personal de la carrera
+ *   38 / 39 mi vuelta frente a la última del de delante / del de detrás:
+ *      "V" más rápida, "R" más lenta, "A" no hay nadie (líder / último)
+ *   40-42 posición al cruzar ("000" o espacios = sin dato)
+ *   44 "1" = cruce de salida, "X" = resto · 45-47 código de carril
+ */
 export function parseStatePacket(buf: Uint8Array): InfolapStatePacket | null {
   if (buf.length !== 52) return null;
-  // Campos por posición de BYTE: el nombre (bytes 5-24) puede llevar UTF-8
-  // de varios bytes, así que se decodifica aparte.
+  // Campos por posición de BYTE: el nombre puede llevar UTF-8 de varios
+  // bytes, así que se decodifica aparte. Ocupa 20 bytes, pero uno más largo
+  // invade los espacios de detrás («SLOTMANIA PALMARES GT»).
   const s = Buffer.from(buf).toString('latin1');
   const sequence = parseInt(s.slice(0, 4), 10);
   const lane = parseInt(s.slice(4, 5), 10);
-  const driverName = decodificarTextoTicTac(buf.subarray(5, 25)).replace(/\0/g, '').trimEnd();
+  const driverName = decodificarTextoTicTac(buf.subarray(5, 30)).replace(/\0/g, '').trimEnd();
   const timeField = s.slice(30, 37);
   const lastLapMs = decodeLapField(timeField);
-  const isNewLap = s[44] === '1';
+  const posicion = parseInt(s.slice(40, 43), 10);
   const laneCode = parseInt(s.slice(45, 48), 10);
   if (Number.isNaN(sequence) || Number.isNaN(lane) || Number.isNaN(laneCode)) {
     return null;
   }
-  return { sequence, lane, driverName, lastLapMs, isNewLap, laneCode };
+  return {
+    sequence, lane, driverName, lastLapMs,
+    mejorPersonal: s[37] === 'F',
+    posicion: posicion > 0 ? posicion : null,
+    esSalida: s[44] === '1',
+    laneCode,
+  };
 }
 
 // ── Fuente ────────────────────────────────────────────────────────────────
@@ -271,6 +300,9 @@ export class InfolapSource implements DataSource {
   private trackerSavedAt = 0;
   /** Última clasificación oficial recibida (RIVALS_UPDATE). */
   private lastRivals: InfolapRival[] = [];
+  /** TicTac antiguo: posición de mi piloto en su último cruce, según el
+   *  TicTac. Manda sobre la de `clasificacionLocal`. */
+  private posicionOficial: number | null = null;
   private snapshotListeners: ((s: RaceStatsSnapshot) => void)[] = [];
   private sessionStartedAt = new Date();
   private stateListeners: ((s: LiveState) => void)[] = [];
@@ -326,6 +358,7 @@ export class InfolapSource implements DataSource {
     this.pilotStats.clear();
     this.pilotCumMs.clear();
     this.lastRivals = [];
+    this.posicionOficial = null;
     this.sessionStartedAt = new Date();
     void this.restoreTracking();
     // Reloj de manga (tiempo restante y avisos): con los dos protocolos.
@@ -534,6 +567,7 @@ export class InfolapSource implements DataSource {
     this.pilotStats.clear();
     this.pilotCumMs.clear();
     this.lastRivals = [];
+    this.posicionOficial = null;
     this.lastConfigKey = null;
     this.raceLapsSinceConfig = false;
     this.reloj.reiniciar();
@@ -559,6 +593,7 @@ export class InfolapSource implements DataSource {
     const p = this.participants.find(x => x.id === id);
     this.selectedName = p?.name ?? null;
     this.selectedLane = this.laneForName(this.selectedName);
+    this.posicionOficial = null;
     // Al cambiar de piloto propio dejamos de seguir al rival anterior.
     this.rivalLane = null;
     this.rivalSelectedName = null;
@@ -605,7 +640,7 @@ export class InfolapSource implements DataSource {
   }
 
   /** Longitud mínima del nombre corto para aceptar una coincidencia por
-   *  prefijo. El paquete recorta a 20 chars, así que un prefijo solo es
+   *  prefijo. El paquete recorta el nombre, así que un prefijo solo es
    *  fiable si el corto está cerca de esa longitud (fue truncado). Por debajo
    *  exigimos coincidencia EXACTA — si no, "1" emparejaría con "10" y "Juan"
    *  con "Juan Pérez", siguiendo al coche equivocado. */
@@ -1039,18 +1074,15 @@ export class InfolapSource implements DataSource {
     // Tanda libre (`isRace` false): se canta, pero no cuenta para la carrera.
     if (msg.isRace && msg.lapTimeMs != null) this.raceLapsSinceConfig = true;
     if (msg.isRace) this.crossingsSinceConfig = true;
-    // El cruce de salida cuenta como vuelta en el seguimiento (como en el
-    // TicTac y en PitWall), pero sin tiempo. Las vueltas con tiempo entran
-    // por ingestPacket.
-    if (msg.isRace && msg.isFirstLap) {
-      this.trackLap(msg.pilotName || `Carril ${msg.laneId}`, msg.laneId, null);
-    }
     this.ingestPacket({
       sequence: msg.frame,
       lane: msg.laneId,
       driverName: msg.pilotName,
       lastLapMs: msg.lapTimeMs,
-      isNewLap: true,
+      mejorPersonal: msg.isFastLap,
+      // La posición del TicTac nuevo va por applyStanding (con los gaps).
+      posicion: null,
+      esSalida: msg.isFirstLap,
       laneCode: msg.laneId,
     }, true, msg.isRace);
     if (msg.isRace && msg.laneId === this.selectedLane && msg.position != null) {
@@ -1191,7 +1223,16 @@ export class InfolapSource implements DataSource {
     const s = this.selectedLane != null
       ? standingForLane(msg.rivals, this.selectedLane)
       : name ? standingOf(msg.rivals, r => this.nameMatches(r.name, name)) : null;
-    if (s) this.applyStanding(s, deferPosEvent);
+    // TicTac antiguo: la posición la da el TicTac en mi último cruce; la
+    // clasificación local solo aporta vecinos y gaps.
+    const oficial = this.wssMode ? null : this.posicionOficial;
+    if (s) this.applyStanding(oficial != null ? { ...s, position: oficial } : s, deferPosEvent);
+    else if (oficial != null) {
+      this.applyStanding({
+        position: oficial, total: null,
+        aheadName: null, aheadGapMs: null, behindName: null, behindGapMs: null,
+      });
+    }
   }
 
   /** Posición y gaps del piloto propio (en tiempo del TicTac y en vueltas). */
@@ -1499,9 +1540,6 @@ export class InfolapSource implements DataSource {
       this.resolveLanes();
     }
 
-    // Sentinel "EF54AB1" → carril sin vuelta válida todavía. Ignorar.
-    if (pkt.lastLapMs === null) return;
-
     // Cada paquete del Gestor para un carril trae un sequence counter único.
     // Una vuelta nueva → sequence nuevo (aunque el tiempo en ms sea idéntico
     // al de la vuelta anterior). Paquetes con el mismo sequence son
@@ -1509,10 +1547,29 @@ export class InfolapSource implements DataSource {
     const prevSeq = this.laneLastSeq.get(pkt.lane);
     if (prevSeq === pkt.sequence) return;   // duplicado por sequence → ignorar
     this.laneLastSeq.set(pkt.lane, pkt.sequence);
+    const pilot = pkt.driverName || this.laneName.get(pkt.lane) || `Carril ${pkt.lane}`;
+
+    // Cruce de salida: cuenta en el seguimiento (como en el TicTac y en
+    // PitWall), pero no es una vuelta. El TicTac antiguo pone basura en su
+    // campo de tiempo (1.000, 2.000…) y la manga arranca aquí.
+    if (pkt.esSalida) {
+      if (race) this.trackLap(pilot, pkt.lane, null);
+      if (!this.wssMode && !this.reloj.iniciado) {
+        this.relojEnEspera = false;
+        this.reloj.iniciar(Date.now());
+        this.armMangaFlags();
+      }
+      return;
+    }
+
+    // Sentinel "EF54AB1" → carril sin vuelta válida todavía. La secuencia ya
+    // está anotada: el siguiente paquete con tiempo es una vuelta nueva.
+    if (pkt.lastLapMs === null) return;
+
     // TicTac antiguo: el primer paquete de un carril tras conectar suele ser
     // la repetición de una vuelta vieja (el Gestor reenvía el último estado
-    // en bucle). Sirve de referencia, salvo que venga marcado como nuevo.
-    if (!reliable && prevSeq === undefined && !pkt.isNewLap) {
+    // en bucle). Sirve de referencia.
+    if (!reliable && prevSeq === undefined) {
       // Y si ya trae una vuelta, la manga está en marcha (o recién acabada).
       if (!this.wssMode && !this.reloj.iniciado) this.relojEnEspera = true;
       return;
@@ -1540,9 +1597,13 @@ export class InfolapSource implements DataSource {
     this.reloj.vuelta(now, pkt.lastLapMs, !this.wssMode && !this.relojEnEspera);
     if (arrancaba && this.reloj.iniciado) this.armMangaFlags();
 
+    // Vuelta rápida según el TicTac (mejor personal de la carrera). La
+    // primera vuelta que vemos de un piloto siempre lo es: no se avisa.
+    const vueltasPrevias = this.pilotStats.get(normName(pilot))?.laps ?? 0;
+    const isFastest = race ? pkt.mejorPersonal && vueltasPrevias > 0 : undefined;
+
     // Vuelta de CUALQUIER piloto → acumulado de carrera y estrategia de rivales.
     if (race) {
-      const pilot = pkt.driverName || this.laneName.get(pkt.lane) || `Carril ${pkt.lane}`;
       this.recordPilotLap(pilot, pkt.lastLapMs);
       this.trackLap(pilot, pkt.lane, pkt.lastLapMs);
       this.emitEvent({
@@ -1555,6 +1616,7 @@ export class InfolapSource implements DataSource {
     }
 
     if (this.selectedLane === pkt.lane) {
+      if (!this.wssMode && pkt.posicion != null) this.posicionOficial = pkt.posicion;
       const best = this.currentState.bestLapMs;
       const newBest = best === null || pkt.lastLapMs < best ? pkt.lastLapMs : best;
       this.currentState = {
@@ -1567,7 +1629,10 @@ export class InfolapSource implements DataSource {
       this.applyRivalToState();
       this.refreshDerived();
       this.emitState();
-      this.emitEvent({ type: 'lap-completed', lapTimeMs: pkt.lastLapMs, lapCount: newCount });
+      this.emitEvent({
+        type: 'lap-completed', lapTimeMs: pkt.lastLapMs, lapCount: newCount,
+        ...(isFastest != null ? { isFastest } : {}),
+      });
     } else if (this.rivalLane === pkt.lane) {
       // El rival ha cruzado: actualizar el gap aunque no sea mi carril.
       this.applyRivalToState();
