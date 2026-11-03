@@ -1,5 +1,5 @@
 // Voz en malla: cada pareja de participantes tiene su propia conexión WebRTC
-// si al menos uno de los dos habla (piloto o asistente). Así cualquiera que
+// si al menos uno de los dos habla (piloto, asistente o, en entrenos, todos). Así cualquiera que
 // tenga micro llega a todos, esté en el móvil que esté (antes todo pasaba por
 // el hub y, por ejemplo, la voz de un asistente remoto no llegaba al piloto,
 // ni la del piloto a los seguidores). El hub solo reenvía la señalización.
@@ -7,9 +7,9 @@
 
 import type { Participante, Rol } from './mensajes';
 
-/** ¿Este papel habla? (los seguidores solo escuchan). */
+/** ¿Este papel habla? (los seguidores solo escuchan; en entrenos hablan todos). */
 export function tieneMicro(rol: Rol | null | undefined): boolean {
-  return rol === 'piloto' || rol === 'asistente';
+  return rol === 'piloto' || rol === 'asistente' || rol === 'libre';
 }
 
 /** En cada pareja ofrece el de id menor; el otro espera la oferta y responde.

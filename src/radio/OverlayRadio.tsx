@@ -3,7 +3,8 @@
 //   • monta `AudioRemoto` SIEMPRE, para que la voz entrante (RTCView) siga
 //     sonando al navegar fuera de la sala (iOS necesita el RTCView montado);
 //   • dibuja un chip «sala viva» que vuelve a la sala con un toque, y un walkie
-//     pulsar-para-hablar para el asistente (el piloto sigue con micro abierto).
+//     pulsar-para-hablar para el asistente (el piloto sigue con micro abierto)
+//     o, en entrenos, el botón de silenciar.
 
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -13,6 +14,7 @@ import { useIdioma } from '../i18n/IdiomaContext';
 import { navigationRef } from '../navigationRef';
 import { colors, radius, spacing } from '../ui/theme';
 import { AudioRemoto } from './AudioRemoto';
+import { BotonSilenciar } from './BotonSilenciar';
 import { useRadio } from './RadioContext';
 
 export function OverlayRadio() {
@@ -68,6 +70,8 @@ export function OverlayRadio() {
               <Text style={styles.walkieTexto}>{t.radio.hablar}</Text>
             </Pressable>
           )}
+
+          {rol === 'libre' && <BotonSilenciar voz={voz} t={t} compacto />}
         </View>
       )}
     </>

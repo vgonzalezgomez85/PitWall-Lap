@@ -431,6 +431,16 @@ const nl: Textos = {
     codigoPh: 'Code',
     usarSala: 'Deze kamer gebruiken',
     datosManualesNoValidos: 'Controleer het IP (bijv. 192.168.1.34) en de code van 6 tekens.',
+    tipoSala: 'Soort kamer',
+    carrera: 'Race',
+    carreraSub: 'Met rollen: coureur, assistent met stopwatch en volgers.',
+    entrenos: 'Training',
+    entrenosSub: 'Zonder rollen: iedereen praat en luistert.',
+    salaEntrenos: 'Trainingskamer',
+    entrenosEntrarTexto: 'Trainingskamer: zonder rollen, je doet mee om te praten en te luisteren.',
+    comprobandoSala: 'Kamer controleren…',
+    silenciarMicro: 'Micro dempen',
+    activarMicro: 'Micro aan',
   },
 
   calendario: {

@@ -433,6 +433,16 @@ const eu: Textos = {
     codigoPh: 'Kodea',
     usarSala: 'Erabili gela hau',
     datosManualesNoValidos: 'Egiaztatu IPa (adib. 192.168.1.34) eta 6 karaktereko kodea.',
+    tipoSala: 'Gela mota',
+    carrera: 'Lasterketa',
+    carreraSub: 'Rolekin: pilotua, kronometrodun laguntzailea eta jarraitzaileak.',
+    entrenos: 'Entrenamenduak',
+    entrenosSub: 'Rolik gabe: denek hitz egiten eta entzuten dute.',
+    salaEntrenos: 'Entrenamendu gela',
+    entrenosEntrarTexto: 'Entrenamendu gela: rolik gabe, hitz egiteko eta entzuteko sartzen zara.',
+    comprobandoSala: 'Gela egiaztatzen…',
+    silenciarMicro: 'Mikroa isildu',
+    activarMicro: 'Mikroa aktibatu',
   },
 
   calendario: {

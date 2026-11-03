@@ -1,4 +1,4 @@
-import { cambiarRolSala, crearSala, decidirUnion, eliminarParticipante, ID_ASISTENTE, MAX_SEGUIDORES, registrarParticipante, participanteObsoleto } from './sala';
+import { cambiarRolSala, crearSala, decidirUnion, eliminarParticipante, ID_ASISTENTE, MAX_ENTRENOS, MAX_SEGUIDORES, registrarParticipante, participanteObsoleto } from './sala';
 
 const sala = crearSala('K7M-4QX');
 
@@ -105,5 +105,50 @@ describe('participanteObsoleto', () => {
     expect(participanteObsoleto(sala, 'Marta', 'piloto')).toBeNull();
     expect(participanteObsoleto(sala, 'Ana', 'asistente')).toBeNull();
     expect(participanteObsoleto(sala, 'Eva', 'seguidor')).toBeNull();
+  });
+});
+
+describe('sala de entrenos (sin perfiles)', () => {
+  const entrenos = crearSala('K7M-4QX', 'entrenos');
+
+  it('todos entran como libre, pidan el papel que pidan', () => {
+    let s = registrarParticipante(entrenos, { id: ID_ASISTENTE, nombre: 'Hub', rol: 'libre' });
+    for (const [id, rol] of [['a', 'piloto'], ['b', 'piloto'], ['c', 'asistente'], ['d', 'seguidor']] as const) {
+      const r = decidirUnion(s, { id, nombre: id, rol, codigo: 'K7M-4QX' });
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.participante.rol).toBe('libre');
+        s = registrarParticipante(s, r.participante);
+      }
+    }
+  });
+
+  it('limita el total de participantes (contando al hub)', () => {
+    let s = entrenos;
+    for (let i = 0; i < MAX_ENTRENOS; i++) {
+      const r = decidirUnion(s, { id: `p${i}`, nombre: `P${i}`, rol: 'libre', codigo: 'K7M-4QX' });
+      expect(r.ok).toBe(true);
+      if (r.ok) s = registrarParticipante(s, r.participante);
+    }
+    const r = decidirUnion(s, { id: 'x', nombre: 'X', rol: 'libre', codigo: 'K7M-4QX' });
+    expect(r).toEqual({ ok: false, motivo: 'sala-llena' });
+  });
+
+  it('no deja cambiar de papel', () => {
+    const s = registrarParticipante(entrenos, { id: 'a', nombre: 'Ana', rol: 'libre' });
+    expect(cambiarRolSala(s, 'a', 'piloto').ok).toBe(false);
+  });
+
+  it('reconoce a quien vuelve tras perder la conexión', () => {
+    const s = registrarParticipante(entrenos, { id: 'p3', nombre: 'Ana', rol: 'libre' });
+    expect(participanteObsoleto(s, 'Ana', 'libre')).toBe('p3');
+    expect(participanteObsoleto(s, 'Bea', 'libre')).toBeNull();
+  });
+
+  it('en carrera, libre no existe: se entra como seguidor', () => {
+    const r = decidirUnion(sala, { id: 'a', nombre: 'Ana', rol: 'libre', codigo: 'K7M-4QX' });
+    expect(r.ok && r.participante.rol).toBe('seguidor');
+    const conAna = registrarParticipante(sala, { id: 'a', nombre: 'Ana', rol: 'seguidor' });
+    expect(cambiarRolSala(conAna, 'a', 'libre').ok).toBe(false);
   });
 });

@@ -431,6 +431,16 @@ const pt: Textos = {
     codigoPh: 'Código',
     usarSala: 'Usar esta sala',
     datosManualesNoValidos: 'Confirma o IP (p. ex. 192.168.1.34) e o código de 6 caracteres.',
+    tipoSala: 'Tipo de sala',
+    carrera: 'Corrida',
+    carreraSub: 'Com papéis: piloto, assistente com cronómetro e seguidores.',
+    entrenos: 'Treinos',
+    entrenosSub: 'Sem papéis: todos falam e ouvem.',
+    salaEntrenos: 'Sala de treinos',
+    entrenosEntrarTexto: 'Sala de treinos: sem papéis, entras para falar e ouvir.',
+    comprobandoSala: 'A verificar a sala…',
+    silenciarMicro: 'Silenciar micro',
+    activarMicro: 'Ativar micro',
   },
 
   calendario: {

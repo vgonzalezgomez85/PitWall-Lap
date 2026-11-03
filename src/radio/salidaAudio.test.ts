@@ -34,4 +34,10 @@ describe('decidirSalida', () => {
     });
     expect(decidirSalida({ ...base, rol: 'seguidor', altavozPedido: false }).altavoz).toBe(false);
   });
+
+  it('entrenos: como micro abierto (auricular por defecto y aviso sin cascos)', () => {
+    expect(decidirSalida({ ...base, rol: 'libre' })).toEqual({
+      altavoz: false, permiteAltavoz: true, avisoCascos: true, semiduplex: false,
+    });
+  });
 });

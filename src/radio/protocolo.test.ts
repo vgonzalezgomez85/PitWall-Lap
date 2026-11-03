@@ -1,4 +1,4 @@
-import { crearClienteRadio, crearServidorRadio } from './protocolo';
+import { consultarTipoSala, crearClienteRadio, crearServidorRadio } from './protocolo';
 import { crearTransporteMemoria } from './transporte';
 import { ID_ASISTENTE } from './sala';
 import type { MensajeRadio, MensajeSenalizacion, Participante } from './mensajes';
@@ -254,5 +254,40 @@ describe('cambio de rol y cronómetro remoto', () => {
     expect(
       enPiloto.some(m => m.tipo === 'pulso' || m.tipo === 'deshacerPulso' || m.tipo === 'terminarPulso'),
     ).toBe(false);
+  });
+
+  it('sala de entrenos: el hub entra como libre y avisa del tipo al entrar', async () => {
+    const transporte = crearTransporteMemoria();
+    const servidor = crearServidorRadio();
+    await servidor.iniciar(transporte, 'K7M-4QX', { nombre: 'Hub', tipo: 'entrenos' }, () => {});
+    expect(servidor.sala().participantes).toEqual([{ id: ID_ASISTENTE, nombre: 'Hub', rol: 'libre' }]);
+
+    const ana = crearClienteRadio();
+    const r = await ana.unirse(transporte, HOST, PUERTO, { nombre: 'Ana', rol: 'piloto', codigo: 'K7M-4QX' });
+    expect(r).toMatchObject({ ok: true, tipoSala: 'entrenos' });
+    expect(r.lista.map(p => p.rol)).toEqual(['libre', 'libre']);
+    expect(servidor.cambiarRol(ID_ASISTENTE, 'asistente')).toBe(false);
+  });
+
+  it('sala de carrera: el tipo llega como carrera', async () => {
+    const { transporte } = await montar();
+    const ana = crearClienteRadio();
+    const r = await ana.unirse(transporte, HOST, PUERTO, { nombre: 'Ana', rol: 'piloto', codigo: 'K7M-4QX' });
+    expect(r.tipoSala).toBe('carrera');
+  });
+
+  it('consulta del tipo de sala: contesta sin dar de alta y rechaza un código malo', async () => {
+    const transporte = crearTransporteMemoria();
+    const servidor = crearServidorRadio();
+    const listas: Participante[][] = [];
+    await servidor.iniciar(transporte, 'K7M-4QX', { nombre: 'Hub', tipo: 'entrenos' }, l => listas.push(l));
+
+    await expect(consultarTipoSala(transporte, HOST, PUERTO, 'k7m4qx')).resolves.toBe('entrenos');
+    await expect(consultarTipoSala(transporte, HOST, PUERTO, 'AAAA-AA')).resolves.toBeNull();
+    expect(servidor.sala().participantes.map(p => p.nombre)).toEqual(['Hub']);
+    expect(listas).toHaveLength(1);
+
+    const { transporte: tCarrera } = await montar();
+    await expect(consultarTipoSala(tCarrera, HOST, PUERTO, 'K7M-4QX')).resolves.toBe('carrera');
   });
 });

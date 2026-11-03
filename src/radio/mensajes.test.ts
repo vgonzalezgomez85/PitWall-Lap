@@ -78,6 +78,9 @@ describe('mensajes de señalización', () => {
     { tipo: 'candidato', de: 'p1', candidate: 'candidate:1' },
     { tipo: 'renegociar', de: 'asistente' },
     { tipo: 'salir', id: 'p1' },
+    { tipo: 'bienvenido', tuId: 'p2', lista: [{ id: 'p2', nombre: 'Bea', rol: 'libre' }], tipoSala: 'entrenos' },
+    { tipo: 'consultar', codigo: 'K7M-4QX' },
+    { tipo: 'info', tipoSala: 'carrera' },
   ];
 
   it('serializa y deserializa sin pérdida', () => {
@@ -92,6 +95,7 @@ describe('mensajes de señalización', () => {
       validarSenalizacion({ tipo: 'unirse', nombre: 'A', rol: 'entrenador', codigo: 'X' }),
     ).toBeNull();
     expect(validarSenalizacion({ tipo: 'bienvenido', tuId: 'a' })).toBeNull();
+    expect(validarSenalizacion({ tipo: 'info', tipoSala: 'clasificacion' })).toBeNull();
   });
 });
 

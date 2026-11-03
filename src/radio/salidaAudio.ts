@@ -2,7 +2,8 @@
 // El acople aparece cuando lo que sale por el altavoz vuelve a entrar por un
 // micro abierto. Puro, para poder testearlo.
 //
-//   • Micro abierto (piloto, o asistente en modo abierto): auricular por
+//   • Micro abierto (piloto, asistente en modo abierto o cualquiera en una
+//     sala de entrenos, aunque se silencie un momento): auricular por
 //     defecto; puede elegir altavoz bajo su responsabilidad. Sin cascos se
 //     avisa de ponérselos (con altavoz y micro abierto puede acoplarse).
 //   • Asistente en walkie: altavoz opcional. Mientras habla, se silencia lo
@@ -31,7 +32,7 @@ export function decidirSalida(opciones: {
   altavozPedido: boolean | null;
 }): DecisionSalida {
   const { rol, modoAsistente, cascos, altavozPedido } = opciones;
-  const microAbierto = rol === 'piloto' || (rol === 'asistente' && modoAsistente === 'abierto');
+  const microAbierto = rol === 'piloto' || rol === 'libre' || (rol === 'asistente' && modoAsistente === 'abierto');
   if (microAbierto) {
     return { altavoz: altavozPedido ?? false, permiteAltavoz: true, avisoCascos: !cascos, semiduplex: false };
   }

@@ -430,6 +430,16 @@ const es = {
     codigoPh: 'Código',
     usarSala: 'Usar esta sala',
     datosManualesNoValidos: 'Revisa la IP (p. ej. 192.168.1.34) y el código de 6 caracteres.',
+    tipoSala: 'Tipo de sala',
+    carrera: 'Carrera',
+    carreraSub: 'Con papeles: piloto, asistente con cronómetro y seguidores.',
+    entrenos: 'Entrenos',
+    entrenosSub: 'Sin papeles: todos hablan y escuchan.',
+    salaEntrenos: 'Sala de entrenos',
+    entrenosEntrarTexto: 'Sala de entrenos: sin papeles, entras para hablar y escuchar.',
+    comprobandoSala: 'Comprobando la sala…',
+    silenciarMicro: 'Silenciar micro',
+    activarMicro: 'Activar micro',
   },
 
   calendario: {

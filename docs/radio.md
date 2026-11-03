@@ -62,6 +62,25 @@ Notas:
 - Un solo piloto y un solo asistente por sala (de momento). Seguidores: los que
   quepan en la zona WiFi (§5).
 
+### Salas de entrenos (v1.23.0)
+
+Quien crea la sala elige **Carrera** (los perfiles de arriba) o **Entrenos**.
+En entrenos no hay perfiles: todos entran con el papel `libre`, micro abierto
+con puerta de voz y un botón **Silenciar / Activar micro** (en la sala y en el
+botón flotante). La voz va en malla, cada pareja con su conexión: con 6
+personas, cada móvil manda su voz 5 veces. Por eso el máximo es
+`MAX_ENTRENOS` = 6, contando al hub. Falta medir la batería con 5 o 6 móviles.
+
+- El tipo se fija al crear la sala (para cambiarlo, se cierra y se crea otra).
+  Viaja en el anuncio mDNS (`txt.tipo`) y en el `bienvenido`.
+- Con IP o por internet no hay anuncio: «Usar esta sala» abre una conexión
+  corta y manda `consultar` (con el código). El hub contesta `info` con el
+  tipo, o `rechazado` si el código no es el suyo, y cierra sin dar de alta a
+  nadie (`consultarTipoSala` en `protocolo.ts`).
+- Al entrar en una sala de entrenos no se pide papel.
+- Sin asistente no hay cronómetro manual, avisos ni vuelta objetivo. Cada uno
+  oye sus tiempos desde su propia conexión a la pista.
+
 ---
 
 ## 4. Experiencia de uso

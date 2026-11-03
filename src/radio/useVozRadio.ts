@@ -46,6 +46,9 @@ export interface EstadoVozRadio {
   /** Micro abierto: ¿está transmitiendo ahora mismo? (puerta abierta y sin
    *  locución sonando). En walkie siempre coincide con `hablando`. */
   transmitiendo: boolean;
+  /** Entrenos: micro silenciado a mano (no se envía nada hasta activarlo). */
+  silenciado: boolean;
+  fijarSilenciado(s: boolean): void;
   /** Asistente: walkie (pulsar para hablar) o micro abierto (se guarda). */
   modoAsistente: ModoMicroAsistente;
   fijarModoAsistente(m: ModoMicroAsistente): void;
@@ -142,7 +145,16 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     AsyncStorage.setItem(CLAVE_MODO_ASISTENTE, m).catch(() => { /* ignore */ });
   }, []);
 
-  // Solo piloto y asistente abren el micro; el seguidor solo escucha.
+  // Entrenos: botón de silenciar. Cada sala empieza con el micro activo.
+  const [silenciado, setSilenciado] = useState(false);
+  const silenciadoRef = useRef(silenciado);
+  silenciadoRef.current = silenciado;
+  useEffect(() => {
+    if (!enSala) setSilenciado(false);
+  }, [enSala]);
+
+  // Piloto, asistente y (en entrenos) todos abren el micro; el seguidor solo
+  // escucha.
   const conMicro = tieneMicro(rol);
 
   // El micro NO se suelta al rehacer las conexiones: iOS no deja volver a
@@ -157,10 +169,13 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     setNivel(0);
   }, []);
 
-  /** Aplica el modo de micro del rol actual (micro abierto solo en piloto). */
+  /** Aplica el modo de micro del rol actual (micro abierto en piloto, en
+   *  entrenos si no está silenciado y en asistente en modo abierto). */
   const aplicarModoMicro = useCallback(() => {
     const r = rolRef.current;
-    const activo = r === 'piloto' || (r === 'asistente' && modoAsistenteRef.current === 'abierto');
+    const activo = r === 'piloto'
+      || (r === 'libre' && !silenciadoRef.current)
+      || (r === 'asistente' && modoAsistenteRef.current === 'abierto');
     const pista = microRef.current?.getAudioTracks()[0];
     if (pista) pista.enabled = activo;
     hablandoRef.current = activo;
@@ -360,7 +375,7 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
   useEffect(() => {
     if (!tuId) return;
     aplicarModoMicro();
-  }, [rol, tuId, modoAsistente, aplicarModoMicro]);
+  }, [rol, tuId, modoAsistente, silenciado, aplicarModoMicro]);
 
   // ── Micro abierto: puerta de voz + silencio mientras locuta la app ──
   //
@@ -386,7 +401,9 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     AsyncStorage.setItem(CLAVE_PUERTA, s).catch(() => { /* ignore */ });
   }, []);
 
-  const microAbierto = rol === 'piloto' || (rol === 'asistente' && modoAsistente === 'abierto');
+  const microAbierto = rol === 'piloto'
+    || (rol === 'libre' && !silenciado)
+    || (rol === 'asistente' && modoAsistente === 'abierto');
   useEffect(() => {
     // Se silencia la PISTA (`enabled`), no se detiene el envío: WebRTC sigue
     // procesando el micro y midiendo su nivel antes de aplicar el silencio
@@ -572,6 +589,7 @@ export function useVozRadioMotor(config: ConfigVozRadio): EstadoVozRadio {
     pistas, nivel, hablando, fijarMicro, listo,
     nivelMicro, puerta, fijarPuerta,
     transmitiendo: microAbierto ? transmitiendo : hablando,
+    silenciado, fijarSilenciado: setSilenciado,
     modoAsistente, fijarModoAsistente,
     ruta, salida, fijarAltavoz,
     reiniciarVoz, verDiagnostico, fijarVerDiagnostico: setVerDiagnostico, diagnostico,

@@ -12,6 +12,8 @@
 //     reciben los mensajes que el hub envía a todos. El rol se puede cambiar en
 //     vivo (máx. 1 piloto + 1 asistente); el cronómetro siempre vive en el hub y
 //     un asistente remoto lo gobierna con `pulso`/`deshacerPulso`/`terminarPulso`.
+//   • Sala de entrenos: sin perfiles. Todos entran como `libre` (hablan y
+//     escuchan, con botón de silenciar); no hay cronómetro manual ni avisos.
 
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
@@ -23,8 +25,8 @@ import * as Network from 'expo-network';
 import { emitirMensajeRadio } from './bus';
 import { generarCodigo } from './codigo';
 import { crearCronometro, type Vuelta } from './cronometro';
-import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol, ClaveAviso } from './mensajes';
-import { crearClienteRadio, crearServidorRadio, type ResultadoUnionCliente } from './protocolo';
+import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol, ClaveAviso, TipoSala } from './mensajes';
+import { consultarTipoSala, crearClienteRadio, crearServidorRadio, type ResultadoUnionCliente } from './protocolo';
 import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta, type DiagnosticoBusqueda, type EstadoAnuncio, type ModoSala } from './red';
 import { ID_ASISTENTE } from './sala';
 import type { TransporteRadio } from './transporte';
@@ -39,6 +41,8 @@ interface RadioContextValue {
   rol: Rol | null;
   /** ¿Somos el hub (creador de la sala)? */
   esHub: boolean;
+  /** Carrera (con perfiles) o entrenos (todos hablan y escuchan). */
+  tipoSala: TipoSala;
   /** ¿Hay una sala activa (hub escuchando o participante dentro)? */
   conectado: boolean;
   codigo: string;
@@ -71,9 +75,12 @@ interface RadioContextValue {
   voz: EstadoVozRadio;
 
   // Acciones.
-  crearSala: (nombre: string, modo?: ModoSala) => Promise<void>;
+  crearSala: (nombre: string, modo?: ModoSala, tipo?: TipoSala) => Promise<void>;
   unirse: (sala: SalaDescubierta, rol: Rol, nombre: string) => Promise<MotivoRechazo | 'entradaFallida' | null>;
   salir: () => void;
+  /** Pregunta al hub el tipo de su sala sin entrar (entrada con IP o por
+   *  internet). `null` = código incorrecto; lanza si no contesta. */
+  consultarTipo: (sala: SalaDescubierta) => Promise<TipoSala | null>;
   buscarSalas: () => void;
   detenerBusqueda: () => void;
 
@@ -168,6 +175,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   const [reconectando, setReconectando] = useState(false);
   const [objetivoMs, setObjetivoMs] = useState<number | null>(null);
   const [modoSala, setModoSala] = useState<ModoSala>('local');
+  const [tipoSala, setTipoSala] = useState<TipoSala>('carrera');
   const reconectarRef = useRef<() => void>(() => {});
   const esHub = tuId === ID_ASISTENTE;
 
@@ -198,6 +206,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     setDiagnostico(null);
     setObjetivoMs(null);
     setModoSala('local');
+    setTipoSala('carrera');
     fijarServidoresIce(null);
   }, [cronometro]);
 
@@ -309,16 +318,19 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const crearSala = useCallback(async (nombreHub: string, modo: ModoSala = 'local') => {
+  const crearSala = useCallback(async (
+    nombreHub: string, modo: ModoSala = 'local', tipo: TipoSala = 'carrera',
+  ) => {
     limpiar();
     const codigoNuevo = generarCodigo();
     const transporte = crearTransporte(modo, codigoNuevo);
     await prepararVoz(modo);
     const servidor = crearServidorRadio();
-    // `iniciar` registra el hub como participante (rol asistente inicial) y
-    // notifica a `setParticipantes` con la lista ya completa.
+    // `iniciar` registra el hub como participante (rol asistente inicial, o
+    // `libre` en entrenos) y notifica a `setParticipantes` con la lista ya
+    // completa.
     try {
-      await servidor.iniciar(transporte, codigoNuevo, { nombre: nombreHub }, lista => setParticipantes(lista));
+      await servidor.iniciar(transporte, codigoNuevo, { nombre: nombreHub, tipo }, lista => setParticipantes(lista));
     } catch (e) {
       // No se pudo abrir el servidor TCP (puerto ocupado, permiso de red…):
       // liberamos lo abierto y dejamos que la UI muestre el error.
@@ -328,9 +340,10 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     transporteRef.current = transporte;
     servidorRef.current = servidor;
     setModoSala(modo);
+    setTipoSala(tipo);
     if (modo === 'local') {
       setAnuncio(null);
-      anuncioRef.current = publicarSala(codigoNuevo, setAnuncio);
+      anuncioRef.current = publicarSala(codigoNuevo, tipo, setAnuncio);
     } else {
       // Por internet no hay anuncio en la red: se entra con el código.
       setAnuncio({ ok: true });
@@ -364,6 +377,7 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     });
     offCierreRef.current = cliente.onCerrar(() => reconectarRef.current());
     setParticipantes(resultado.lista);
+    setTipoSala(resultado.tipoSala);
     setTuId(resultado.tuId);
   }, [alMensajeActual]);
 
@@ -473,6 +487,15 @@ export function RadioProvider({ children }: { children: ReactNode }) {
     })();
   };
 
+  const consultarTipo = useCallback(async (sala: SalaDescubierta) => {
+    const transporte = crearTransporte(sala.modo ?? 'local', sala.codigo);
+    try {
+      return await consultarTipoSala(transporte, sala.host, sala.puerto, sala.codigo);
+    } finally {
+      try { transporte.cerrar(); } catch { /* ignore */ }
+    }
+  }, []);
+
   const salir = useCallback(() => {
     ultimaUnionRef.current = null;
     limpiar();
@@ -562,20 +585,20 @@ export function RadioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<RadioContextValue>(() => ({
-    rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
+    rol, esHub, tipoSala, conectado, codigo, nombre, participantes, error, diagnostico,
     salas, descubriendo, diagBusqueda, anuncio, reconectando, modoSala,
     vueltas, mejor, tandaIniciada,
     voz,
-    crearSala, unirse, salir, buscarSalas, detenerBusqueda,
+    crearSala, unirse, salir, consultarTipo, buscarSalas, detenerBusqueda,
     cambiarRol,
     pulsarVuelta, deshacerVuelta, terminarTanda, enviarAviso, fijarObjetivo, objetivoMs,
     onMensaje,
     tuId, onSenalizacion, enviarSenalizacionPara,
   }), [
-    rol, esHub, conectado, codigo, nombre, participantes, error, diagnostico,
+    rol, esHub, tipoSala, conectado, codigo, nombre, participantes, error, diagnostico,
     salas, descubriendo, diagBusqueda, anuncio, reconectando, modoSala, vueltas, mejor, tandaIniciada,
     voz,
-    crearSala, unirse, salir, buscarSalas, detenerBusqueda,
+    crearSala, unirse, salir, consultarTipo, buscarSalas, detenerBusqueda,
     cambiarRol,
     pulsarVuelta, deshacerVuelta, terminarTanda, enviarAviso, fijarObjetivo, objetivoMs, onMensaje,
     tuId, onSenalizacion, enviarSenalizacionPara,

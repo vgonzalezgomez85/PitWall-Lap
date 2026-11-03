@@ -5,12 +5,19 @@
 // Reglas (del diseño, §3): un solo piloto y un solo asistente por sala; los
 // seguidores, los que quepan en la zona WiFi. El código corto evita que se
 // cuele alguien que esté en la misma red.
+//
+// En una sala de entrenos no hay perfiles: todos entran como `libre` (hablan y
+// escuchan) y solo se limita cuántos caben.
 
 import { codigosIguales } from './codigo';
-import type { MotivoRechazo, Participante, Rol } from './mensajes';
+import type { MotivoRechazo, Participante, Rol, TipoSala } from './mensajes';
 
 /** Límite de seguidores: la zona WiFi de un iPhone aguanta ~5 conectados. */
 export const MAX_SEGUIDORES = 6;
+
+/** Límite de una sala de entrenos (contando a quien la crea). Todos hablan y
+ *  cada móvil manda su voz a cada uno de los demás: con 6 son 5 envíos. */
+export const MAX_ENTRENOS = 6;
 
 /** Id estable del hub (el móvil que crea la sala) dentro de la lista de
  *  participantes. En señalización WebRTC `de: 'asistente'` ya se usaba como
@@ -22,21 +29,31 @@ export interface EstadoSala {
   codigo: string;
   /** Participantes conectados (asistente, piloto y seguidores). */
   participantes: Participante[];
+  /** Se fija al crearla y no cambia. */
+  tipo: TipoSala;
 }
 
-export function crearSala(codigo: string): EstadoSala {
-  return { codigo, participantes: [] };
+export function crearSala(codigo: string, tipo: TipoSala = 'carrera'): EstadoSala {
+  return { codigo, participantes: [], tipo };
+}
+
+/** Papel con el que entra quien pide `rol`: en entrenos, siempre `libre`; en
+ *  carrera, `libre` no existe y se entra como seguidor. */
+export function rolEfectivo(sala: EstadoSala, rol: Rol): Rol {
+  if (sala.tipo === 'entrenos') return 'libre';
+  return rol === 'libre' ? 'seguidor' : rol;
 }
 
 /** ¿Ese rol ya está ocupado en la sala? (solo uno de piloto/asistente). */
 export function rolOcupado(sala: EstadoSala, rol: Rol): boolean {
   // Los seguidores no tienen cupo por rol (los limita `salaLlena`).
-  if (rol === 'seguidor') return false;
+  if (rol === 'seguidor' || rol === 'libre') return false;
   return sala.participantes.some(p => p.rol === rol);
 }
 
-/** ¿La sala está llena? (solo limita a los seguidores). */
+/** ¿La sala está llena? (en carrera solo limita a los seguidores). */
 export function salaLlena(sala: EstadoSala, rol: Rol): boolean {
+  if (sala.tipo === 'entrenos') return sala.participantes.length >= MAX_ENTRENOS;
   if (rol !== 'seguidor') return false;
   return sala.participantes.filter(p => p.rol === 'seguidor').length >= MAX_SEGUIDORES;
 }
@@ -59,9 +76,10 @@ export type ResultadoUnion =
  */
 export function decidirUnion(sala: EstadoSala, p: PeticionUnion): ResultadoUnion {
   if (!codigosIguales(sala.codigo, p.codigo)) return { ok: false, motivo: 'codigo' };
-  if (rolOcupado(sala, p.rol)) return { ok: false, motivo: 'rol-ocupado' };
-  if (salaLlena(sala, p.rol)) return { ok: false, motivo: 'sala-llena' };
-  return { ok: true, participante: { id: p.id, nombre: p.nombre, rol: p.rol } };
+  const rol = rolEfectivo(sala, p.rol);
+  if (rolOcupado(sala, rol)) return { ok: false, motivo: 'rol-ocupado' };
+  if (salaLlena(sala, rol)) return { ok: false, motivo: 'sala-llena' };
+  return { ok: true, participante: { id: p.id, nombre: p.nombre, rol } };
 }
 
 /**
@@ -70,7 +88,8 @@ export function decidirUnion(sala: EstadoSala, p: PeticionUnion): ResultadoUnion
  * perder la conexión y el asistente aún no se ha enterado de que se cayó. Se
  * devuelve el id de esa conexión vieja para descartarla; si no, `null`.
  */
-export function participanteObsoleto(sala: EstadoSala, nombre: string, rol: Rol): string | null {
+export function participanteObsoleto(sala: EstadoSala, nombre: string, rolPedido: Rol): string | null {
+  const rol = rolEfectivo(sala, rolPedido);
   if (rol === 'seguidor') return null;
   const viejo = sala.participantes.find(
     p => p.id !== ID_ASISTENTE && p.rol === rol && p.nombre === nombre,
@@ -103,6 +122,8 @@ export type ResultadoCambioRol =
 export function cambiarRolSala(sala: EstadoSala, id: string, rol: Rol): ResultadoCambioRol {
   const participante = sala.participantes.find(p => p.id === id);
   if (!participante) return { ok: false, motivo: 'codigo' };
+  // En entrenos no hay papeles que cambiar; en carrera, `libre` no existe.
+  if (sala.tipo === 'entrenos' || rol === 'libre') return { ok: false, motivo: 'rol-ocupado' };
   if (participante.rol === rol) return { ok: true, sala };
 
   if (rol !== 'seguidor') {

@@ -1,7 +1,9 @@
 // Pantalla «Radio»: punto de entrada a la capa de voz y tiempos entre el
 // piloto y su equipo (D2/D4/D12). Aquí el usuario:
-//   • crea la sala (se convierte en asistente: cronómetro + centro de la sala)
-//   • o se une a una sala descubierta (piloto o seguidor)
+//   • crea la sala (se convierte en asistente: cronómetro + centro de la sala),
+//     de carrera (con papeles) o de entrenos (sin papeles: todos hablan)
+//   • o se une a una sala descubierta (piloto o seguidor; en entrenos, sin
+//     elegir papel)
 //
 // La sala vive en el `RadioProvider` global; esta pantalla solo recoge nombre
 // y papel y delega en `crearSala` / `unirse`. Al entrar, se sustituye por la
@@ -16,7 +18,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIdioma } from '../i18n/IdiomaContext';
 import type { Textos } from '../i18n';
 import { useRadio } from '../radio/RadioContext';
-import type { Rol } from '../radio/mensajes';
+import type { Rol, TipoSala } from '../radio/mensajes';
 import type { SalaDescubierta } from '../radio/red';
 import { salaInternet, salaManual } from '../radio/salaManual';
 import type { ModoSala } from '../radio/red';
@@ -50,6 +52,7 @@ export default function RadioScreen({ navigation }: Props) {
   const [salaElegida, setSalaElegida] = useState<SalaDescubierta | null>(null);
   const [papel, setPapel] = useState<Rol | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [tipoNueva, setTipoNueva] = useState<TipoSala>('carrera');
 
   // Si ya estamos dentro de una sala (volvimos sin salir), vamos a su pantalla.
   useEffect(() => {
@@ -68,14 +71,34 @@ export default function RadioScreen({ navigation }: Props) {
 
   const [codigoInternet, setCodigoInternet] = useState('');
 
+  const [consultando, setConsultando] = useState(false);
+
+  /** Con IP o por internet no hay anuncio que diga el tipo de sala: se le
+   *  pregunta al hub antes de enseñar los papeles. */
+  async function elegirConConsulta(sala: SalaDescubierta) {
+    setConsultando(true);
+    try {
+      const tipo = await radio.consultarTipo(sala);
+      if (!tipo) {
+        Alert.alert(t.comun.error, t.radio.codigoIncorrecto);
+        return;
+      }
+      setSalaElegida({ ...sala, tipo });
+      setPapel(null);
+    } catch {
+      Alert.alert(t.comun.error, t.radio.entradaFallida);
+    } finally {
+      setConsultando(false);
+    }
+  }
+
   function usarSalaInternet() {
     const sala = salaInternet(codigoInternet);
     if (!sala) {
       Alert.alert(t.comun.error, t.radio.codigoNoValido);
       return;
     }
-    setSalaElegida(sala);
-    setPapel(null);
+    void elegirConConsulta(sala);
   }
 
   function usarSalaManual() {
@@ -84,17 +107,18 @@ export default function RadioScreen({ navigation }: Props) {
       Alert.alert(t.comun.error, t.radio.datosManualesNoValidos);
       return;
     }
-    setSalaElegida(sala);
-    setPapel(null);
+    void elegirConConsulta(sala);
   }
 
-  const puedeEntrar = !!nombre.trim() && !!papel && !!salaElegida && !ocupado;
+  // Sala de entrenos: no hay papel que elegir.
+  const elegidaEntrenos = salaElegida?.tipo === 'entrenos';
+  const puedeEntrar = !!nombre.trim() && (!!papel || elegidaEntrenos) && !!salaElegida && !ocupado;
   const puedeCrear = !!nombre.trim() && !ocupado;
 
   async function crear(modo: ModoSala = 'local') {
     setOcupado(true);
     try {
-      await radio.crearSala(nombre.trim(), modo);
+      await radio.crearSala(nombre.trim(), modo, tipoNueva);
       // El estado `conectado` dispara el redirect hacia RadioAsistente.
     } catch (e) {
       setOcupado(false);
@@ -103,10 +127,11 @@ export default function RadioScreen({ navigation }: Props) {
   }
 
   async function entrar() {
-    if (!salaElegida || !papel) return;
+    const rol: Rol | null = elegidaEntrenos ? 'libre' : papel;
+    if (!salaElegida || !rol) return;
     setOcupado(true);
     try {
-      const motivo = await radio.unirse(salaElegida, papel, nombre.trim());
+      const motivo = await radio.unirse(salaElegida, rol, nombre.trim());
       if (motivo) {
         // El motivo ya está en radio.error y se muestra arriba; volvemos a dejar
         // elegir papel sin perder lo tecleado.
@@ -163,6 +188,19 @@ export default function RadioScreen({ navigation }: Props) {
       <Section title={t.radio.crear}>
         <Card>
           <Text style={styles.cardSub}>{t.radio.crearSub}</Text>
+          <Text style={[type.label, styles.mt]}>{t.radio.tipoSala}</Text>
+          <RolCard
+            titulo={t.radio.carrera}
+            sub={t.radio.carreraSub}
+            activo={tipoNueva === 'carrera'}
+            onPress={() => setTipoNueva('carrera')}
+          />
+          <RolCard
+            titulo={t.radio.entrenos}
+            sub={t.radio.entrenosSub}
+            activo={tipoNueva === 'entrenos'}
+            onPress={() => setTipoNueva('entrenos')}
+          />
           <Button
             label={t.radio.crearLocal}
             onPress={() => crear('local')}
@@ -224,7 +262,10 @@ export default function RadioScreen({ navigation }: Props) {
                 ]}
               >
                 <Text style={styles.salaNombre}>{sala.nombre}</Text>
-                <Text style={styles.salaCodigo}>{t.radio.sala(sala.codigo)}</Text>
+                <Text style={styles.salaCodigo}>
+                  {t.radio.sala(sala.codigo)}
+                  {sala.tipo ? ` · ${sala.tipo === 'entrenos' ? t.radio.entrenos : t.radio.carrera}` : ''}
+                </Text>
                 <Text style={styles.salaHost}>{sala.host}:{sala.puerto}</Text>
               </Pressable>
             );
@@ -246,10 +287,10 @@ export default function RadioScreen({ navigation }: Props) {
                 maxLength={7}
               />
               <Button
-                label={t.radio.usarSala}
+                label={consultando ? t.radio.comprobandoSala : t.radio.usarSala}
                 variant="outline"
                 onPress={usarSalaInternet}
-                disabled={!codigoInternet.trim()}
+                disabled={!codigoInternet.trim() || consultando}
               />
             </View>
           </View>
@@ -281,30 +322,36 @@ export default function RadioScreen({ navigation }: Props) {
               />
             </View>
             <Button
-              label={t.radio.usarSala}
+              label={consultando ? t.radio.comprobandoSala : t.radio.usarSala}
               variant="outline"
               onPress={usarSalaManual}
-              disabled={!ipManual.trim() || !codigoManual.trim()}
+              disabled={!ipManual.trim() || !codigoManual.trim() || consultando}
               style={styles.mt}
             />
           </View>
 
-          {/* Papel dentro de la sala elegida. */}
+          {/* Papel dentro de la sala elegida (en entrenos no hay). */}
           {!!salaElegida && (
             <View style={styles.papel}>
-              <Text style={[type.label, styles.papelLabel]}>{t.radio.elegirPapel}</Text>
-              <RolCard
-                titulo={t.radio.piloto}
-                sub={t.radio.pilotoSub}
-                activo={papel === 'piloto'}
-                onPress={() => setPapel('piloto')}
-              />
-              <RolCard
-                titulo={t.radio.seguidor}
-                sub={t.radio.seguidorSub}
-                activo={papel === 'seguidor'}
-                onPress={() => setPapel('seguidor')}
-              />
+              {elegidaEntrenos ? (
+                <Text style={styles.cardSub}>{t.radio.entrenosEntrarTexto}</Text>
+              ) : (
+                <>
+                  <Text style={[type.label, styles.papelLabel]}>{t.radio.elegirPapel}</Text>
+                  <RolCard
+                    titulo={t.radio.piloto}
+                    sub={t.radio.pilotoSub}
+                    activo={papel === 'piloto'}
+                    onPress={() => setPapel('piloto')}
+                  />
+                  <RolCard
+                    titulo={t.radio.seguidor}
+                    sub={t.radio.seguidorSub}
+                    activo={papel === 'seguidor'}
+                    onPress={() => setPapel('seguidor')}
+                  />
+                </>
+              )}
               <Button
                 label={ocupado ? t.radio.entrando : t.radio.entrar}
                 onPress={entrar}
@@ -319,7 +366,7 @@ export default function RadioScreen({ navigation }: Props) {
   );
 }
 
-/** Tarjeta de elección de papel (piloto / seguidor). */
+/** Tarjeta de elección (papel al entrar o tipo de sala al crearla). */
 function RolCard({ titulo, sub, activo, onPress }: {
   titulo: string;
   sub: string;

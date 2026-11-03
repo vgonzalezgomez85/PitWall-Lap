@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.23.0] — 2026-11-03
+
+### Añadido
+- **Radio: salas de entrenos.** Al crear la sala se elige **Carrera** o **Entrenos**. Carrera funciona como hasta ahora (piloto, asistente con cronómetro y seguidores). En entrenos no hay papeles: todos entran igual, hablan y escuchan, con un botón grande de **Silenciar micro / Activar micro** en la sala y en el botón flotante. Máximo 6 personas por sala de entrenos, contando a quien la crea. El tipo se fija al crearla y la búsqueda de salas lo muestra. Al entrar con IP o por internet, la app pregunta el tipo a la sala antes de enseñar los papeles. En una de entrenos no se pide papel. Sin asistente no hay cronómetro manual ni mensajes al piloto: cada uno oye sus tiempos desde su conexión a la pista.
+
 ## [1.22.11] — 2026-11-02
 
 ### Mejorado

@@ -431,6 +431,16 @@ const ca: Textos = {
     codigoPh: 'Codi',
     usarSala: 'Fer servir aquesta sala',
     datosManualesNoValidos: 'Revisa la IP (p. ex. 192.168.1.34) i el codi de 6 caràcters.',
+    tipoSala: 'Tipus de sala',
+    carrera: 'Cursa',
+    carreraSub: 'Amb papers: pilot, assistent amb cronòmetre i seguidors.',
+    entrenos: 'Entrenaments',
+    entrenosSub: 'Sense papers: tothom parla i escolta.',
+    salaEntrenos: "Sala d'entrenaments",
+    entrenosEntrarTexto: "Sala d'entrenaments: sense papers, hi entres per parlar i escoltar.",
+    comprobandoSala: 'Comprovant la sala…',
+    silenciarMicro: 'Silenciar micro',
+    activarMicro: 'Activar micro',
   },
 
   calendario: {

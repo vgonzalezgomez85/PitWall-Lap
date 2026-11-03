@@ -41,4 +41,12 @@ describe('malla de voz', () => {
     const sala = [p('a', 'seguidor'), p('b', 'seguidor')];
     expect(planificarMalla('a', sala, new Map([['b', 'm-']]))).toEqual({ cerrar: ['b'], ofrecer: [] });
   });
+
+  it('entrenos: todos hablan y cada pareja tiene su conexión', () => {
+    expect(tieneMicro('libre')).toBe(true);
+    const sala = [p('a', 'libre'), p('b', 'libre'), p('c', 'libre')];
+    expect(planificarMalla('a', sala, new Map())).toEqual({ cerrar: [], ofrecer: ['b', 'c'] });
+    expect(planificarMalla('b', sala, new Map())).toEqual({ cerrar: [], ofrecer: ['c'] });
+    expect(planificarMalla('c', sala, new Map())).toEqual({ cerrar: [], ofrecer: [] });
+  });
 });

@@ -431,6 +431,16 @@ const it: Textos = {
     codigoPh: 'Codice',
     usarSala: 'Usa questa stanza',
     datosManualesNoValidos: "Controlla l'IP (es. 192.168.1.34) e il codice di 6 caratteri.",
+    tipoSala: 'Tipo di sala',
+    carrera: 'Gara',
+    carreraSub: 'Con ruoli: pilota, assistente con cronometro e follower.',
+    entrenos: 'Prove',
+    entrenosSub: 'Senza ruoli: tutti parlano e ascoltano.',
+    salaEntrenos: 'Sala prove',
+    entrenosEntrarTexto: 'Sala prove: senza ruoli, entri per parlare e ascoltare.',
+    comprobandoSala: 'Verifica della sala…',
+    silenciarMicro: 'Silenzia microfono',
+    activarMicro: 'Attiva microfono',
   },
 
   calendario: {

@@ -6,6 +6,7 @@
 
 import { Platform } from 'react-native';
 import Zeroconf from 'react-native-zeroconf';
+import { esTipoSala, type TipoSala } from './mensajes';
 import { PUERTO_RADIO } from './tcp';
 
 export const RADIO_SERVICIO = 'pitwall-radio';
@@ -47,6 +48,9 @@ export interface SalaDescubierta {
   nombre: string;
   /** Sin indicar = local. */
   modo?: ModoSala;
+  /** Lo dice el anuncio mDNS; sin indicar (entrada con IP o por internet), no
+   *  se sabe hasta entrar. */
+  tipo?: TipoSala;
 }
 
 /** Publica una sala (lado asistente). `onEstado` avisa de si el anuncio
@@ -54,6 +58,7 @@ export interface SalaDescubierta {
  *  modo de detenerlo. */
 export function publicarSala(
   codigo: string,
+  tipo: TipoSala,
   onEstado: (e: EstadoAnuncio) => void = () => {},
 ): { detener: () => void } {
   const zc = new Zeroconf();
@@ -69,7 +74,7 @@ export function publicarSala(
         'local.',
         `Radio ${codigo}`,
         PUERTO_RADIO,
-        { codigo },
+        { codigo, tipo },
         IMPL_MDNS,
       );
   } catch (e) {
@@ -123,6 +128,7 @@ export function buscarSalas(
     const host = ip ?? servicio.host;
     if (!host) return;
     const codigo = String(servicio.txt?.codigo ?? '');
+    const tipo = servicio.txt?.tipo;
     const clave = `${host}:${codigo}`;
     if (vistos.has(clave)) return;
     vistos.add(clave);
@@ -135,6 +141,7 @@ export function buscarSalas(
       puerto: PUERTO_RADIO,
       codigo,
       nombre: servicio.name ?? `Radio ${codigo}`,
+      ...(esTipoSala(tipo) ? { tipo } : {}),
     });
   });
 

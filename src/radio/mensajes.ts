@@ -7,7 +7,12 @@
 //  2. Los **mensajes de datos** (vueltas, estado de habla, participantes…)
 //     viajan por el `RTCDataChannel` de cada conexión, ya con WebRTC levantado.
 
-export type Rol = 'piloto' | 'asistente' | 'seguidor';
+// En salas de entrenos no hay perfiles: todos entran como `libre` (hablan y
+// escuchan, con su botón de silenciar).
+export type Rol = 'piloto' | 'asistente' | 'seguidor' | 'libre';
+
+/** Carrera: perfiles de piloto/asistente/seguidor. Entrenos: todos iguales. */
+export type TipoSala = 'carrera' | 'entrenos';
 
 export interface Participante {
   id: string;
@@ -69,8 +74,13 @@ export type MensajeRadio =
 export type MensajeSenalizacion =
   // Alta de un participante. El asistente responde `bienvenido` o `rechazado`.
   | { tipo: 'unirse'; nombre: string; rol: Rol; codigo: string }
-  | { tipo: 'bienvenido'; tuId: string; lista: Participante[] }
+  | { tipo: 'bienvenido'; tuId: string; lista: Participante[]; tipoSala?: TipoSala }
   | { tipo: 'rechazado'; motivo: MotivoRechazo }
+  // Consulta previa (entrada con IP o por internet, donde no hay anuncio mDNS
+  // que diga el tipo): el hub contesta `info` (o `rechazado` si el código no
+  // es el suyo) y cierra, sin dar de alta a nadie.
+  | { tipo: 'consultar'; codigo: string }
+  | { tipo: 'info'; tipoSala: TipoSala }
   // Intercambio SDP/ICE de WebRTC. La voz va en malla (cada pareja con su
   // conexión) y estos mensajes viajan por el hub: `de` es el emisor (lo
   // reescribe el hub al reenviar) y `para` el destinatario (sin `para`, o
@@ -105,13 +115,19 @@ const TIPOS_SENALIZACION: string[] = [
   'unirse',
   'bienvenido',
   'rechazado',
+  'consultar',
+  'info',
   'oferta',
   'respuesta',
   'candidato',
   'salir',
 ];
 
-const ROLES: Rol[] = ['piloto', 'asistente', 'seguidor'];
+const ROLES: Rol[] = ['piloto', 'asistente', 'seguidor', 'libre'];
+
+export function esTipoSala(v: unknown): v is TipoSala {
+  return v === 'carrera' || v === 'entrenos';
+}
 
 function esRol(v: unknown): v is Rol {
   return typeof v === 'string' && (ROLES as string[]).includes(v);
@@ -205,13 +221,20 @@ export function validarSenalizacion(v: unknown): MensajeSenalizacion | null {
       return typeof o.tuId === 'string' &&
         Array.isArray(o.lista) &&
         o.lista.every(esParticipante)
-        ? { tipo: 'bienvenido', tuId: o.tuId, lista: o.lista as Participante[] }
+        ? {
+          tipo: 'bienvenido', tuId: o.tuId, lista: o.lista as Participante[],
+          ...(esTipoSala(o.tipoSala) ? { tipoSala: o.tipoSala } : {}),
+        }
         : null;
     case 'rechazado':
       return typeof o.motivo === 'string' &&
         (['codigo', 'rol-ocupado', 'sala-llena'] as string[]).includes(o.motivo)
         ? { tipo: 'rechazado', motivo: o.motivo as MotivoRechazo }
         : null;
+    case 'consultar':
+      return typeof o.codigo === 'string' ? { tipo: 'consultar', codigo: o.codigo } : null;
+    case 'info':
+      return esTipoSala(o.tipoSala) ? { tipo: 'info', tipoSala: o.tipoSala } : null;
     case 'oferta':
       return typeof o.de === 'string' && typeof o.sdp === 'string'
         ? { tipo: 'oferta', de: o.de, sdp: o.sdp, ...conPara(o) }

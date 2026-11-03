@@ -431,6 +431,16 @@ const en: Textos = {
     codigoPh: 'Code',
     usarSala: 'Use this room',
     datosManualesNoValidos: 'Check the IP (e.g. 192.168.1.34) and the 6-character code.',
+    tipoSala: 'Room type',
+    carrera: 'Race',
+    carreraSub: 'With roles: driver, assistant with stopwatch and followers.',
+    entrenos: 'Practice',
+    entrenosSub: 'No roles: everyone talks and listens.',
+    salaEntrenos: 'Practice room',
+    entrenosEntrarTexto: 'Practice room: no roles, you join to talk and listen.',
+    comprobandoSala: 'Checking the room…',
+    silenciarMicro: 'Mute mic',
+    activarMicro: 'Unmute mic',
   },
 
   calendario: {

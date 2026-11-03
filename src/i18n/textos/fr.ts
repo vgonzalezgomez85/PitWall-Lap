@@ -431,6 +431,16 @@ const fr: Textos = {
     codigoPh: 'Code',
     usarSala: 'Utiliser cette salle',
     datosManualesNoValidos: "Vérifie l'IP (ex. 192.168.1.34) et le code à 6 caractères.",
+    tipoSala: 'Type de salle',
+    carrera: 'Course',
+    carreraSub: 'Avec rôles : pilote, assistant avec chrono et suiveurs.',
+    entrenos: 'Essais',
+    entrenosSub: 'Sans rôles : tout le monde parle et écoute.',
+    salaEntrenos: "Salle d'essais",
+    entrenosEntrarTexto: "Salle d'essais : sans rôles, tu entres pour parler et écouter.",
+    comprobandoSala: 'Vérification de la salle…',
+    silenciarMicro: 'Couper le micro',
+    activarMicro: 'Activer le micro',
   },
 
   calendario: {

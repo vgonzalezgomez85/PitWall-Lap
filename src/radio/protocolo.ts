@@ -9,28 +9,34 @@
 // le dejan entrar, recibe/envía mensajes de datos.
 
 import { deserializar, deserializarSenalizacion, serializar, serializarSenalizacion } from './mensajes';
-import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol } from './mensajes';
-import { cambiarRolSala, decidirUnion, eliminarParticipante, ID_ASISTENTE, listaDeParticipantes, registrarParticipante, crearSala, type EstadoSala, participanteObsoleto } from './sala';
+import type { MensajeRadio, MensajeSenalizacion, MotivoRechazo, Participante, Rol, TipoSala } from './mensajes';
+import { codigosIguales } from './codigo';
+import { cambiarRolSala, decidirUnion, eliminarParticipante, ID_ASISTENTE, listaDeParticipantes, registrarParticipante, crearSala, type EstadoSala, participanteObsoleto, rolEfectivo } from './sala';
 import type { Canal, TransporteRadio } from './transporte';
 
 /** Tiempo máximo que el participante espera la respuesta del asistente
  *  (`bienvenido`/`rechazado`) tras presentarse. */
 const BIENVENIDA_TIMEOUT_MS = 8000;
 
+/** Tiempo máximo de la consulta del tipo de sala. */
+const CONSULTA_TIMEOUT_MS = 5000;
+
 export interface ResultadoUnionCliente {
   ok: boolean;
   tuId: string;
   lista: Participante[];
+  /** Tipo de sala que dice el hub (carrera si no lo dice). */
+  tipoSala: TipoSala;
   motivo?: MotivoRechazo;
 }
 
 export interface ServidorRadio {
   /** Empieza a escuchar y registra el hub como participante (`ID_ASISTENTE`).
-   *  `onParticipantes` avisa cada vez que cambia la sala. */
+   *  `onParticipantes` avisa cada vez que cambia la sala. Sin `tipo`, carrera. */
   iniciar(
     transporte: TransporteRadio,
     codigo: string,
-    hub: { nombre: string },
+    hub: { nombre: string; tipo?: TipoSala },
     onParticipantes: (lista: Participante[]) => void,
   ): Promise<void>;
   /** Envía un mensaje de datos a todos los participantes. */
@@ -121,6 +127,16 @@ export function crearServidorRadio(
     const offMensaje = canal.onMensaje((texto) => {
       const sig = deserializarSenalizacion(texto);
 
+      // Consulta del tipo de sala: se contesta y se cierra, sin alta.
+      if (sig?.tipo === 'consultar' && id === null) {
+        const respuesta: MensajeSenalizacion = codigosIguales(sala.codigo, sig.codigo)
+          ? { tipo: 'info', tipoSala: sala.tipo }
+          : { tipo: 'rechazado', motivo: 'codigo' };
+        try { canal.enviar(serializarSenalizacion(respuesta)); } catch { /* ignore */ }
+        canal.cerrar();
+        return;
+      }
+
       if (sig?.tipo === 'unirse' && id === null) {
         // Él mismo reconectando: se descarta su conexión vieja (medio muerta)
         // para que su papel quede libre.
@@ -144,7 +160,7 @@ export function crearServidorRadio(
         canales.set(id, canal);
         try {
           canal.enviar(serializarSenalizacion({
-            tipo: 'bienvenido', tuId: id, lista: listaDeParticipantes(sala),
+            tipo: 'bienvenido', tuId: id, lista: listaDeParticipantes(sala), tipoSala: sala.tipo,
           }));
         } catch { /* ignore */ }
         notificar();
@@ -192,9 +208,11 @@ export function crearServidorRadio(
       transporte = t;
       onParticipantes = cb;
       // El hub (creador) entra como participante con id estable y rol asistente
-      // inicial; podrá cambiarlo después con `cambiarRol`.
-      sala = registrarParticipante(crearSala(codigo), {
-        id: ID_ASISTENTE, nombre: hub.nombre, rol: 'asistente',
+      // inicial (en entrenos, `libre`); en carrera podrá cambiarlo después con
+      // `cambiarRol`.
+      const nueva = crearSala(codigo, hub.tipo ?? 'carrera');
+      sala = registrarParticipante(nueva, {
+        id: ID_ASISTENTE, nombre: hub.nombre, rol: rolEfectivo(nueva, 'asistente'),
       });
       notificar();
       await t.escuchar(presentar);
@@ -332,14 +350,14 @@ export function crearClienteRadio(): ClienteRadio {
             offCierreEntrada();
             offRespuesta();
             tuId = sig.tuId;
-            resolve({ ok: true, tuId: sig.tuId, lista: sig.lista });
+            resolve({ ok: true, tuId: sig.tuId, lista: sig.lista, tipoSala: sig.tipoSala ?? 'carrera' });
           } else if (sig.tipo === 'rechazado') {
             if (asentado) return;
             asentado = true;
             clearTimeout(temporizador);
             offCierreEntrada();
             offRespuesta();
-            resolve({ ok: false, tuId: '', lista: [], motivo: sig.motivo });
+            resolve({ ok: false, tuId: '', lista: [], tipoSala: 'carrera', motivo: sig.motivo });
           }
         });
         offs.push(offRespuesta);
@@ -352,7 +370,7 @@ export function crearClienteRadio(): ClienteRadio {
           clearTimeout(temporizador);
           offCierreEntrada();
           offRespuesta();
-          resolve({ ok: false, tuId: '', lista: [], motivo: 'codigo' });
+          resolve({ ok: false, tuId: '', lista: [], tipoSala: 'carrera', motivo: 'codigo' });
         }
       });
     },
@@ -393,6 +411,47 @@ export function crearClienteRadio(): ClienteRadio {
       tuId = '';
     },
   };
+}
+
+/**
+ * Pregunta al hub de qué tipo es su sala sin entrar en ella (entrada con IP o
+ * por internet, donde no hay anuncio que lo diga). Devuelve `null` si el código
+ * no es el de la sala; lanza si no hay conexión o no contesta a tiempo.
+ */
+export async function consultarTipoSala(
+  transporte: TransporteRadio,
+  host: string,
+  puerto: number,
+  codigo: string,
+): Promise<TipoSala | null> {
+  const c = await transporte.conectar(host, puerto);
+  return new Promise<TipoSala | null>((resolve, reject) => {
+    let asentado = false;
+    const offs: (() => void)[] = [];
+    const terminar = (fn: () => void) => {
+      if (asentado) return;
+      asentado = true;
+      clearTimeout(temporizador);
+      for (const off of offs) off();
+      try { c.cerrar(); } catch { /* ignore */ }
+      fn();
+    };
+    const temporizador = setTimeout(
+      () => terminar(() => reject(new Error('timeout esperando la respuesta de la sala'))),
+      CONSULTA_TIMEOUT_MS,
+    );
+    offs.push(c.onMensaje((texto) => {
+      const sig = deserializarSenalizacion(texto);
+      if (sig?.tipo === 'info') terminar(() => resolve(sig.tipoSala));
+      else if (sig?.tipo === 'rechazado') terminar(() => resolve(null));
+    }));
+    offs.push(c.onCerrar(() => terminar(() => reject(new Error('conexión cerrada durante la consulta')))));
+    try {
+      c.enviar(serializarSenalizacion({ tipo: 'consultar', codigo }));
+    } catch (e) {
+      terminar(() => reject(e instanceof Error ? e : new Error(String(e))));
+    }
+  });
 }
 
 /** Generador de ids cortos y únicos (`p1`, `p2`, …). */

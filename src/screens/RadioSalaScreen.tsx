@@ -1,7 +1,8 @@
 // Pantalla única de sala de Radio: se adapta al rol en vivo (piloto, asistente
 // o seguidor). Sustituye a las antiguas RadioAsistente / RadioPiloto /
 // RadioSeguidor para que el rol pueda cambiarse durante la carrera sin cambiar
-// de pantalla.
+// de pantalla. En una sala de entrenos no hay papeles: todos hablan y escuchan,
+// con un botón para silenciar el micro.
 //
 // La sala (TCP + WebRTC + participantes) vive en el `RadioProvider` global:
 // salir hacia atrás solo navega y NO la deshace; únicamente el botón «Salir» (o
@@ -17,6 +18,7 @@ import { esFuentePista } from '../data/types';
 import { useIdioma } from '../i18n/IdiomaContext';
 import type { Textos } from '../i18n';
 import { mostrarModosMicro } from '../../modules/backgroundtts';
+import { BotonSilenciar } from '../radio/BotonSilenciar';
 import { MedidorNivel } from '../radio/MedidorNivel';
 import { UMBRAL_PUERTA, type CalidadConexion, type SensibilidadPuerta } from '../radio/vozPura';
 import { useRadio } from '../radio/RadioContext';
@@ -39,6 +41,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'RadioSala'>;
 function papelTexto(rol: Rol, t: Textos): string {
   if (rol === 'piloto') return t.radio.piloto;
   if (rol === 'asistente') return t.radio.asistente;
+  if (rol === 'libre') return t.radio.entrenos;
   return t.radio.seguidor;
 }
 
@@ -68,17 +71,19 @@ function textoSensibilidad(s: SensibilidadPuerta, t: Textos): string {
 export default function RadioSalaScreen({ navigation }: Props) {
   const { t } = useIdioma();
   const {
-    rol, esHub, codigo, nombre, participantes, conectado, salir,
+    rol, esHub, tipoSala, codigo, nombre, participantes, conectado, salir,
     cambiarRol, pulsarVuelta, deshacerVuelta, terminarTanda,
     tandaIniciada, vueltas, voz, tuId, anuncio, reconectando, modoSala,
     enviarAviso, fijarObjetivo, objetivoMs,
   } = useRadio();
   const { source, state } = useDataSource();
   const hayPista = esFuentePista(source?.kind);
+  const entrenos = tipoSala === 'entrenos';
 
   // Tiempos por la fuente «Asistente» (igual para hub y remotos) y locución.
   // Con «la pista manda», no instalamos el cronómetro propio si ya hay pista.
-  useAsistenteSource(nombre, !hayPista);
+  // En entrenos no hay asistente que marque vueltas: cada uno, su pista.
+  useAsistenteSource(nombre, !hayPista && !entrenos);
   useVoice();
 
   const esAsistente = rol === 'asistente';
@@ -121,7 +126,7 @@ export default function RadioSalaScreen({ navigation }: Props) {
         <Text style={type.label}>{t.radio.titulo}</Text>
         <Text style={type.heading}>{t.radio.sala(codigo)}</Text>
         <Text style={styles.conectadoComo}>
-          {rol ? t.radio.conectadoComo(papelTexto(rol, t)) : ''} · {nombre}
+          {entrenos ? t.radio.salaEntrenos : rol ? t.radio.conectadoComo(papelTexto(rol, t)) : ''} · {nombre}
           {modoSala === 'internet' ? ` · ${t.radio.porInternet}` : ''}
         </Text>
         {!!voz.calidad && !reconectando && (
@@ -164,8 +169,21 @@ export default function RadioSalaScreen({ navigation }: Props) {
         </Card>
       )}
 
+      {/* Entrenos: todos hablan; cada uno puede silenciarse. */}
+      {rol === 'libre' && (
+        <Card style={styles.rolCard}>
+          <Text style={type.label}>{t.radio.tuMicro}</Text>
+          <BotonSilenciar voz={voz} t={t} style={styles.puertaLabel} />
+          {!voz.silenciado && (
+            <View style={styles.puertaLabel}>
+              <ControlesMicroAbierto voz={voz} t={t} />
+            </View>
+          )}
+        </Card>
+      )}
+
       {/* Selector de rol en vivo (máx. 1 piloto + 1 asistente). */}
-      <Card style={styles.rolCard}>
+      {!entrenos && <Card style={styles.rolCard}>
         <Text style={type.label}>{t.radio.elegirPapel}</Text>
         <View style={styles.roles}>
           {ROLES.map(r => {
@@ -188,7 +206,7 @@ export default function RadioSalaScreen({ navigation }: Props) {
             );
           })}
         </View>
-      </Card>
+      </Card>}
 
       {/* Contenido según el rol. */}
       {esAsistente && (
@@ -289,8 +307,9 @@ export default function RadioSalaScreen({ navigation }: Props) {
         </>
       )}
 
-      {/* Tiempos (unificados: hub y remotos leen la fuente Asistente). */}
-      <Card style={styles.tiempos}>
+      {/* Tiempos (unificados: hub y remotos leen la fuente Asistente). En
+          entrenos, solo si cada uno está conectado a la pista. */}
+      {(!entrenos || hayPista) && <Card style={styles.tiempos}>
         {state.lapCount === 0 ? (
           <Text style={styles.esperando}>{t.radio.esperandoTiempos}</Text>
         ) : (
@@ -310,7 +329,7 @@ export default function RadioSalaScreen({ navigation }: Props) {
             </View>
           </>
         )}
-      </Card>
+      </Card>}
 
       {/* Piloto: micro abierto, con medidor para calibrar la puerta de voz. */}
       {rol === 'piloto' && (
@@ -331,7 +350,7 @@ export default function RadioSalaScreen({ navigation }: Props) {
           participantes.map(p => (
             <View key={p.id} style={styles.participante}>
               <Text style={styles.participanteNombre}>{p.nombre}</Text>
-              <Text style={styles.participanteRol}>{papelTexto(p.rol, t)}</Text>
+              {!entrenos && <Text style={styles.participanteRol}>{papelTexto(p.rol, t)}</Text>}
             </View>
           ))
         )}
@@ -615,6 +634,7 @@ const styles = StyleSheet.create({
   walkieTexto: {
     color: colors.onAccent, fontSize: 18, fontWeight: '700',
   },
+
 
   acciones: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   flex: { flex: 1 },
