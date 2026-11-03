@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.22.11] — 2026-11-02
+
+### Mejorado
+- **Radio: los avisos de equipo (Box, Push, Gomas…) suenan más alto en iPhone.** Con la voz activa, el procesado de voz del sistema atenúa todo el audio que no es la llamada, también la locución, y los avisos apenas se oían. Ahora, dentro de Radio, la frase se sintetiza a memoria, se normaliza y se comprime (≈ +8 dB en las partes flojas, sin saturar) y suena amplificada. Vale también para los tiempos que se locutan durante Radio. Fuera de Radio la locución no cambia.
+
 ## [1.22.10] — 2026-10-26
 
 ### Corregido

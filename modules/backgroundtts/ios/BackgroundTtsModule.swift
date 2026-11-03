@@ -30,9 +30,65 @@ private final class DelegadoLocucion: NSObject, AVSpeechSynthesizerDelegate {
   }
   func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { terminada() }
   func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { terminada() }
-  private func terminada() {
+  /// También los usa la locución amplificada de Radio, que no pasa por el
+  /// sintetizador que tiene este delegado. Siempre desde el hilo principal.
+  func empezada() {
+    enCurso += 1
+    if enCurso == 1 { alCambiar?(true) }
+  }
+  func terminada() {
     enCurso = max(0, enCurso - 1)
     if enCurso == 0 { alCambiar?(false) }
+  }
+}
+
+/// Locución de Radio amplificada. Con la voz activa, el procesado de voz de
+/// WebRTC (modo voiceChat) atenúa todo el audio que no pasa por él, también la
+/// locución de la app, y los avisos de equipo (Box, Push…) se oían muy flojos.
+/// El WebRTC que usamos no deja quitar esa atenuación, así que se compensa
+/// subiendo la señal: la frase se sintetiza a memoria, se normaliza y se
+/// comprime (más volumen percibido sin recortar) y suena por un AVAudioEngine.
+private enum Amplificador {
+  /// Ganancia máxima al normalizar (×8 ≈ +18 dB): que una frase casi muda no
+  /// convierta el ruido de fondo en estruendo.
+  static let gananciaMaxima: Float = 8
+  /// Compresión suave (tanh): las partes flojas suben ≈ k/tanh(k) (×2,6 ≈
+  /// +8 dB) y los picos se quedan en su sitio.
+  static let compresion: Float = 2.5
+  /// Pico final, con un poco de margen para no saturar.
+  static let pico: Float = 0.97
+
+  /// Une los trozos que entrega el sintetizador en un único buffer mono
+  /// Float32 y lo amplifica. `nil` si no hay audio o el formato no se conoce.
+  static func procesar(_ trozos: [AVAudioPCMBuffer]) -> AVAudioPCMBuffer? {
+    guard let primero = trozos.first else { return nil }
+    let total = trozos.reduce(0) { $0 + Int($1.frameLength) }
+    guard total > 0,
+          let formato = AVAudioFormat(standardFormatWithSampleRate: primero.format.sampleRate, channels: 1),
+          let salida = AVAudioPCMBuffer(pcmFormat: formato, frameCapacity: AVAudioFrameCount(total)),
+          let destino = salida.floatChannelData?[0] else { return nil }
+    var n = 0
+    for trozo in trozos {
+      let frames = Int(trozo.frameLength)
+      if let f = trozo.floatChannelData?[0] {
+        for i in 0..<frames { destino[n + i] = f[i] }
+      } else if let e = trozo.int16ChannelData?[0] {
+        for i in 0..<frames { destino[n + i] = Float(e[i]) / 32768 }
+      } else if let e = trozo.int32ChannelData?[0] {
+        for i in 0..<frames { destino[n + i] = Float(e[i]) / 2147483648 }
+      } else {
+        return nil
+      }
+      n += frames
+    }
+    salida.frameLength = AVAudioFrameCount(n)
+    var maximo: Float = 0
+    for i in 0..<n { maximo = max(maximo, abs(destino[i])) }
+    guard maximo > 0 else { return salida }
+    let normal = min(gananciaMaxima, 1 / maximo)
+    let escala = pico / tanh(compresion)
+    for i in 0..<n { destino[i] = tanh(compresion * destino[i] * normal) * escala }
+    return salida
   }
 }
 
@@ -50,6 +106,17 @@ public class BackgroundTtsModule: Module {
   /// cada `setCategory` borra el override. Con cascos, iOS los prefiere igual.
   private var altavoz = false
   private var observadorRuta: NSObjectProtocol?
+  /// Locución amplificada de Radio (ver `Amplificador`). Sintetizador aparte,
+  /// sin delegado: el inicio y el fin los marca la reproducción.
+  private let synthRadio = AVSpeechSynthesizer()
+  private let motor = AVAudioEngine()
+  private let reproductor = AVAudioPlayerNode()
+  private var formatoMotor: AVAudioFormat?
+  /// Frases amplificadas que están sonando (o en cola). Hilo principal.
+  private var amplificadasSonando = 0
+  /// Sube al callar: las frases de antes que aún se estén sintetizando o
+  /// acaben de sonar ya no cuentan.
+  private var generacion = 0
 
   public func definition() -> ModuleDefinition {
     Name("BackgroundTts")
@@ -167,6 +234,7 @@ public class BackgroundTtsModule: Module {
     // Usar al desconectar de la carrera.
     Function("stop") { () -> Void in
       self.synth.stopSpeaking(at: .immediate)
+      self.callarAmplificada()
       // Con Radio activa NO se libera la sesión: la usa la voz y, desactivada,
       // iOS suspendía la app en cuanto se bloqueaba la pantalla.
       if !self.modoVoz { self.stopKeepAlive() }
@@ -175,6 +243,7 @@ public class BackgroundTtsModule: Module {
     // Interrumpe solo el habla en curso, manteniendo viva la sesión.
     Function("shutUp") { () -> Void in
       self.synth.stopSpeaking(at: .immediate)
+      self.callarAmplificada()
     }
 
     Function("speak") { (text: String, language: String, rate: Double) -> String in
@@ -183,11 +252,11 @@ public class BackgroundTtsModule: Module {
       if !(self.keepAlivePlayer?.isPlaying ?? false) {
         self.startKeepAlive()
       }
-      let utterance = AVSpeechUtterance(string: text)
-      utterance.voice = self.vozPara(language)
-      utterance.rate = Float(rate)
-      utterance.volume = 1.0
-      self.synth.speak(utterance)
+      if self.modoVoz {
+        self.hablarAmplificada(text, language: language, rate: rate)
+      } else {
+        self.synth.speak(self.frase(text, language: language, rate: rate))
+      }
       return ok ? "ok" : "session-failed"
     }
 
@@ -205,6 +274,85 @@ public class BackgroundTtsModule: Module {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
+
+  private func frase(_ text: String, language: String, rate: Double) -> AVSpeechUtterance {
+    let utterance = AVSpeechUtterance(string: text)
+    utterance.voice = self.vozPara(language)
+    utterance.rate = Float(rate)
+    utterance.volume = 1.0
+    return utterance
+  }
+
+  /// Radio: sintetiza la frase a memoria, la amplifica y la reproduce. Si algo
+  /// falla, cae a la locución normal (más baja, pero se oye).
+  private func hablarAmplificada(_ text: String, language: String, rate: Double) {
+    DispatchQueue.main.async {
+      let gen = self.generacion
+      var trozos: [AVAudioPCMBuffer] = []
+      var terminado = false
+      self.synthRadio.write(self.frase(text, language: language, rate: rate)) { [weak self] buffer in
+        guard let self = self, !terminado else { return }
+        if let pcm = buffer as? AVAudioPCMBuffer, pcm.frameLength > 0 {
+          trozos.append(pcm)
+          return
+        }
+        // Buffer vacío = fin de la frase.
+        terminado = true
+        let audio = Amplificador.procesar(trozos)
+        DispatchQueue.main.async {
+          guard gen == self.generacion else { return }
+          if let audio = audio, self.reproducir(audio, gen: gen) { return }
+          NSLog("[BackgroundTts] amplificada falló; locución normal")
+          self.synth.speak(self.frase(text, language: language, rate: rate))
+        }
+      }
+    }
+  }
+
+  /// Encola el audio en el motor. Hilo principal.
+  private func reproducir(_ audio: AVAudioPCMBuffer, gen: Int) -> Bool {
+    if reproductor.engine == nil { motor.attach(reproductor) }
+    if formatoMotor != audio.format {
+      // Cambio de formato (otra voz): reconectar con el motor parado.
+      if motor.isRunning { reproductor.stop(); motor.stop() }
+      motor.connect(reproductor, to: motor.mainMixerNode, format: audio.format)
+      formatoMotor = audio.format
+    }
+    if !motor.isRunning {
+      // Se para solo al cambiar la ruta (cascos) o tras una interrupción.
+      do {
+        motor.prepare()
+        try motor.start()
+      } catch {
+        NSLog("[BackgroundTts] motor de audio no arranca: \(error)")
+        return false
+      }
+    }
+    amplificadasSonando += 1
+    delegado.empezada()
+    reproductor.scheduleBuffer(audio, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+      DispatchQueue.main.async {
+        guard let self = self, gen == self.generacion else { return }
+        self.amplificadasSonando = max(0, self.amplificadasSonando - 1)
+        self.delegado.terminada()
+      }
+    }
+    if !reproductor.isPlaying { reproductor.play() }
+    return true
+  }
+
+  /// Corta la locución amplificada en curso y la que esté por llegar.
+  private func callarAmplificada() {
+    DispatchQueue.main.async {
+      self.generacion += 1
+      self.synthRadio.stopSpeaking(at: .immediate)
+      if self.reproductor.engine != nil { self.reproductor.stop() }
+      while self.amplificadasSonando > 0 {
+        self.amplificadasSonando -= 1
+        self.delegado.terminada()
+      }
+    }
+  }
 
   private func rutaSalida() -> String {
     let cascos: [AVAudioSession.Port] = [
