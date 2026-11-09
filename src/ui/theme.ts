@@ -31,6 +31,9 @@ export const colors = {
   best: '#c084fc',      // morado: mejor vuelta propia
   good: '#4ade80',      // verde: cerca de la mejor
   slow: '#fb923c',      // ámbar: claramente más lento
+  // Escala de la tabla vuelta a vuelta de los entrenos (rápida → muy lenta).
+  regular: '#facc15',   // amarillo: algo más lenta que la mejor
+  verySlow: '#f87171',  // rojo: salida, toque o atasco
 
   danger: '#ff6b6b',
   dangerSoft: '#7a2230',

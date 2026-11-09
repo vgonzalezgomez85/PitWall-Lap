@@ -302,6 +302,10 @@ const en: Textos = {
     consistencia: '±  = consistency (spread of lap times; lower is better)',
     datosCoche: 'Car details',
     editarDatos: 'Edit car details',
+    vueltaAVuelta: 'Lap by lap',
+    colVuelta: 'Lap',
+    notaVueltaAVuelta: 'Compared with the best lap of each stint: fast up to +2%, average up to +5%, slow up to +10% and very slow beyond that (deslots, knocks).',
+    niveles: { mejor: 'Best', rapida: 'Fast', regular: 'Average', lenta: 'Slow', muyLenta: 'Very slow' },
   },
 
   menu: {

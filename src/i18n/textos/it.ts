@@ -302,6 +302,10 @@ const it: Textos = {
     consistencia: '±  = costanza (scarto dei tempi; più basso è meglio)',
     datosCoche: 'Dati dell\'auto',
     editarDatos: 'Modifica dati dell\'auto',
+    vueltaAVuelta: 'Giro per giro',
+    colVuelta: 'Giro',
+    notaVueltaAVuelta: 'Rispetto al giro migliore di ogni stint: veloce fino a +2%, regolare fino a +5%, lento fino a +10% e molto lento oltre (uscite, contatti).',
+    niveles: { mejor: 'Migliore', rapida: 'Veloce', regular: 'Regolare', lenta: 'Lento', muyLenta: 'Molto lento' },
   },
 
   menu: {

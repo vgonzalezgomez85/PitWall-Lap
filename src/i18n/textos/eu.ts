@@ -304,6 +304,10 @@ const eu: Textos = {
     consistencia: '±  = koherentzia (denboren desbideratzea; txikiagoa hobea)',
     datosCoche: 'Autoaren datuak',
     editarDatos: 'Editatu autoaren datuak',
+    vueltaAVuelta: 'Itzulika',
+    colVuelta: 'Itz',
+    notaVueltaAVuelta: 'Stint bakoitzeko itzulirik onenarekiko: azkarra +% 2 arte, erdipurdikoa +% 5 arte, motela +% 10 arte eta oso motela hortik gora (irteerak, ukituak).',
+    niveles: { mejor: 'Onena', rapida: 'Azkarra', regular: 'Erdipurdikoa', lenta: 'Motela', muyLenta: 'Oso motela' },
   },
 
   menu: {

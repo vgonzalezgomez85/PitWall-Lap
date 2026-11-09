@@ -1,6 +1,7 @@
 // Detalle de un stint de entrenamiento: gráfica de tiempos de vuelta
-// (con media móvil) y estadísticas. Si llegan `compareIds`, superpone
-// esos stints en la misma gráfica para comparar.
+// (con media móvil), estadísticas y la tabla vuelta a vuelta. Si llegan
+// `compareIds`, superpone esos stints en la gráfica y los pone lado a lado
+// en la tabla para comparar.
 
 import { useCallback, useState } from 'react';
 import {
@@ -15,6 +16,8 @@ import {
   type Stint, type StintSetup,
 } from '../data/trainingStore';
 import LapChart, { type ChartSeries } from '../ui/LapChart';
+import { NIVELES, tablaVueltaAVuelta, type NivelVuelta } from '../data/vueltaAVuelta';
+import { fmtDelta } from '../ui/lapTone';
 import { useIdioma } from '../i18n/IdiomaContext';
 import BackButton from '../ui/BackButton';
 import type { Textos } from '../i18n';
@@ -25,6 +28,15 @@ type Props = NativeStackScreenProps<RootStackParamList, 'StintDetail'>;
 
 // Paleta para las series de la gráfica (el primero es el stint principal).
 const PALETTE = [colors.accent, '#4ea1f6', '#5ec27a', '#f6c90e'];
+
+// Color de cada nivel de vuelta (morado = mejor, como en «Mi turno»).
+const NIVEL_COLOR: Record<NivelVuelta, string> = {
+  mejor: colors.best,
+  rapida: colors.good,
+  regular: colors.regular,
+  lenta: colors.slow,
+  muyLenta: colors.verySlow,
+};
 
 function fmt(ms: number | null): string {
   if (ms == null) return '—';
@@ -115,6 +127,7 @@ export default function StintDetailScreen({ route, navigation }: Props) {
     laps: s.lapTimes,
   }));
   const comparing = others.length > 0;
+  const filas = tablaVueltaAVuelta(allStints.map(s => s.lapTimes));
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ paddingBottom: 32 }}>
@@ -149,6 +162,49 @@ export default function StintDetailScreen({ route, navigation }: Props) {
         })}
       </View>
       <Text style={styles.note}>{t.stint.consistencia}</Text>
+
+      {/* Vuelta a vuelta: una columna por stint */}
+      {filas.length > 0 && (
+        <>
+          <Text style={styles.section}>{t.stint.vueltaAVuelta}</Text>
+          <View style={styles.legend}>
+            {NIVELES.map(n => (
+              <View key={n} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: NIVEL_COLOR[n] }]} />
+                <Text style={styles.legendText}>{t.stint.niveles[n]}</Text>
+              </View>
+            ))}
+          </View>
+          {comparing && (
+            <View style={styles.lapHeader}>
+              <Text style={[styles.lapNum, styles.lapHeaderText]}>{t.stint.colVuelta}</Text>
+              {allStints.map((s, i) => (
+                <View key={s.id} style={styles.lapCell}>
+                  <View style={[styles.dot, { backgroundColor: (PALETTE[i % PALETTE.length] ?? colors.accent) }]} />
+                </View>
+              ))}
+            </View>
+          )}
+          {filas.map(f => (
+            <View key={f.vuelta} style={styles.lapRow}>
+              <Text style={styles.lapNum}>{f.vuelta}</Text>
+              {f.celdas.map((c, i) => (
+                <View key={i} style={styles.lapCell}>
+                  {c ? (
+                    <>
+                      <Text style={[styles.lapTime, { color: NIVEL_COLOR[c.nivel] }]}>{fmt(c.ms)}</Text>
+                      <Text style={styles.lapDelta}>{c.nivel === 'mejor' ? '★' : fmtDelta(c.difMejorMs)}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.lapDelta}>—</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          ))}
+          <Text style={styles.note}>{t.stint.notaVueltaAVuelta}</Text>
+        </>
+      )}
 
       {!comparing && (
         <>
@@ -248,6 +304,26 @@ const styles = StyleSheet.create({
   statsName: { color: '#fff', fontSize: 15, fontWeight: '600' },
   statsLine: { color: '#9aa3ad', fontSize: 12, marginTop: 3 },
   note: { color: '#6b7480', fontSize: 11, marginTop: 8 },
+
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 8 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendText: { color: '#9aa3ad', fontSize: 12 },
+  lapHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#1c2330',
+  },
+  lapHeaderText: { color: '#9aa3ad', fontSize: 12 },
+  lapRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#141923',
+  },
+  lapNum: { width: 40, color: '#6b7480', fontSize: 13, fontVariant: ['tabular-nums'] },
+  lapCell: {
+    flex: 1, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'flex-end', gap: 6,
+  },
+  lapTime: { fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  lapDelta: { color: '#6b7480', fontSize: 11, minWidth: 34, textAlign: 'right', fontVariant: ['tabular-nums'] },
 
   section: {
     color: '#9aa3ad', fontSize: 12, marginTop: 28, marginBottom: 4,

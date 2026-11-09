@@ -302,6 +302,10 @@ const ca: Textos = {
     consistencia: '±  = consistència (desviació dels temps; com menys, millor)',
     datosCoche: 'Dades del cotxe',
     editarDatos: 'Edita les dades del cotxe',
+    vueltaAVuelta: 'Volta a volta',
+    colVuelta: 'Vta',
+    notaVueltaAVuelta: 'Respecte a la millor volta de cada stint: ràpida fins a +2 %, regular fins a +5 %, lenta fins a +10 % i molt lenta per sobre (sortides, tocs).',
+    niveles: { mejor: 'Millor', rapida: 'Ràpida', regular: 'Regular', lenta: 'Lenta', muyLenta: 'Molt lenta' },
   },
 
   menu: {

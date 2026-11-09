@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.24.0] — 2026-11-09
+
+### Añadido
+- **Entrenamientos: tabla vuelta a vuelta.** En el detalle de un stint grabado, debajo del gráfico, salen todas las vueltas en orden con su tiempo y la diferencia con la mejor del stint. Cada vuelta va en color según cuánto se aleja de la mejor del stint: morado la mejor (★), verde rápida (hasta +2 %), amarillo regular (hasta +5 %), naranja lenta (hasta +10 %) y rojo muy lenta (salidas, toques), con leyenda encima. Los umbrales están calibrados con una carrera real capturada, en la que las vueltas limpias quedan a menos de un 5 % de la mejor y las salidas pasan del +15 %. Al comparar varios stints, van lado a lado, una columna por stint con su color del gráfico. Vale también para los stints ya guardados: los tiempos ya se guardaban, solo faltaba enseñarlos.
+
 ## [1.23.1] — 2026-11-08
 
 ### Corregido

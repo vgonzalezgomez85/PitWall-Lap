@@ -302,6 +302,10 @@ const pt: Textos = {
     consistencia: '±  = consistência (desvio dos tempos; menor é melhor)',
     datosCoche: 'Dados do carro',
     editarDatos: 'Editar dados do carro',
+    vueltaAVuelta: 'Volta a volta',
+    colVuelta: 'Vta',
+    notaVueltaAVuelta: 'Em relação à melhor volta de cada stint: rápida até +2 %, regular até +5 %, lenta até +10 % e muito lenta acima disso (saídas, toques).',
+    niveles: { mejor: 'Melhor', rapida: 'Rápida', regular: 'Regular', lenta: 'Lenta', muyLenta: 'Muito lenta' },
   },
 
   menu: {

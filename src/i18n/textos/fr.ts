@@ -302,6 +302,10 @@ const fr: Textos = {
     consistencia: '±  = régularité (écart des temps ; plus bas est meilleur)',
     datosCoche: 'Données de la voiture',
     editarDatos: 'Modifier les données de la voiture',
+    vueltaAVuelta: 'Tour par tour',
+    colVuelta: 'Tour',
+    notaVueltaAVuelta: 'Par rapport au meilleur tour de chaque relais : rapide jusqu\'à +2 %, moyen jusqu\'à +5 %, lent jusqu\'à +10 % et très lent au-delà (sorties, accrochages).',
+    niveles: { mejor: 'Meilleur', rapida: 'Rapide', regular: 'Moyen', lenta: 'Lent', muyLenta: 'Très lent' },
   },
 
   menu: {

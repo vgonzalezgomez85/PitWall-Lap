@@ -302,6 +302,10 @@ const nl: Textos = {
     consistencia: '±  = constantheid (spreiding van de tijden; lager is beter)',
     datosCoche: 'Autogegevens',
     editarDatos: 'Autogegevens bewerken',
+    vueltaAVuelta: 'Ronde per ronde',
+    colVuelta: 'Rnd',
+    notaVueltaAVuelta: 'Ten opzichte van de snelste ronde van elke stint: snel tot +2%, gemiddeld tot +5%, traag tot +10% en zeer traag daarboven (uit de baan, tikken).',
+    niveles: { mejor: 'Snelste', rapida: 'Snel', regular: 'Gemiddeld', lenta: 'Traag', muyLenta: 'Zeer traag' },
   },
 
   menu: {
