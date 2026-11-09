@@ -18,6 +18,12 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.24.1] — 2026-11-09
+
+### Corregido
+- **Android: lo último de cada pantalla ya no queda tapado por la barra de navegación.** Con la app en modo borde a borde, el contenido se dibujaba bajo la barra de botones de Android, y en el detalle de un entreno el botón **Borrar stint** quedaba escondido debajo. Ahora todas las pantallas dejan abajo el margen del sistema (en iPhone, el de la barra de inicio).
+- **Entrenamientos: los datos del coche, «Editar» y «Borrar stint» van antes de la tabla vuelta a vuelta.** Con una tanda larga quedaban muy abajo, y parecía que no había botón de borrar.
+
 ## [1.24.0] — 2026-11-09
 
 ### Añadido

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setAudioModeAsync } from 'expo-audio';
 
 import { SourceProvider } from './src/data/sourceContext';
@@ -53,6 +53,11 @@ function AppInner() {
   // Hook que escucha snapshots de fin de carrera y los persiste localmente.
   // Tiene que ir DENTRO de SourceProvider para acceder al subscribe.
   useAutoSaveHistory();
+  // Margen inferior del sistema para TODAS las pantallas. Con edge-to-edge en
+  // Android el contenido se dibuja bajo la barra de navegación, y lo último de
+  // una pantalla con scroll (p. ej. «Borrar stint») quedaba tapado por ella.
+  // Inicio ya lo aplica por su cuenta (su fondo llega hasta abajo).
+  const insets = useSafeAreaInsets();
   return (
     <>
       <NavigationContainer ref={navigationRef}>
@@ -61,11 +66,12 @@ function AppInner() {
           initialRouteName="Home"
           screenOptions={{
             headerShown: false,
-            contentStyle: { backgroundColor: '#0a0d13' },
+            contentStyle: { backgroundColor: '#0a0d13', paddingBottom: insets.bottom },
             animation: 'slide_from_right',
           }}
         >
-          <Stack.Screen name="Home"          component={HomeScreen} />
+          <Stack.Screen name="Home"          component={HomeScreen}
+            options={{ contentStyle: { backgroundColor: '#0a0d13' } }} />
           <Stack.Screen name="Calendario"    component={CalendarioScreen} />
           <Stack.Screen name="Evento"        component={EventoScreen} />
           <Stack.Screen name="CarrerasWeb"   component={CarrerasWebScreen} />

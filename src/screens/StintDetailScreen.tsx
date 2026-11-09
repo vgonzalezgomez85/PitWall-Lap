@@ -163,6 +163,32 @@ export default function StintDetailScreen({ route, navigation }: Props) {
       </View>
       <Text style={styles.note}>{t.stint.consistencia}</Text>
 
+      {/* Datos del coche y acciones ANTES de la tabla vuelta a vuelta: con una
+          tanda larga, al final quedaban muy abajo y parecía que no había botón
+          de borrar. */}
+      {!comparing && (
+        <>
+          {/* Datos del coche */}
+          <Text style={styles.section}>{t.stint.datosCoche}</Text>
+          <SetupRow label={t.coche.modelo} value={main.setup.carModel} />
+          <SetupRow label={t.coche.motor} value={main.setup.motor} />
+          <SetupRow label={t.coche.neumatico} value={main.setup.tire} />
+          <SetupRow label={t.coche.llanta} value={main.setup.rim} />
+          <SetupRow label={t.coche.corona} value={main.setup.crown} />
+          <SetupRow label={t.coche.pinon} value={main.setup.pinion} />
+
+          <TouchableOpacity
+            style={styles.editBtn}
+            onPress={() => { setSetup(main.setup); setEditing(true); }}
+          >
+            <Text style={styles.editBtnText}>{t.stint.editarDatos}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete}>
+            <Text style={styles.deleteBtnText}>{t.stint.borrarStint}</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
       {/* Vuelta a vuelta: una columna por stint */}
       {filas.length > 0 && (
         <>
@@ -203,29 +229,6 @@ export default function StintDetailScreen({ route, navigation }: Props) {
             </View>
           ))}
           <Text style={styles.note}>{t.stint.notaVueltaAVuelta}</Text>
-        </>
-      )}
-
-      {!comparing && (
-        <>
-          {/* Datos del coche */}
-          <Text style={styles.section}>{t.stint.datosCoche}</Text>
-          <SetupRow label={t.coche.modelo} value={main.setup.carModel} />
-          <SetupRow label={t.coche.motor} value={main.setup.motor} />
-          <SetupRow label={t.coche.neumatico} value={main.setup.tire} />
-          <SetupRow label={t.coche.llanta} value={main.setup.rim} />
-          <SetupRow label={t.coche.corona} value={main.setup.crown} />
-          <SetupRow label={t.coche.pinon} value={main.setup.pinion} />
-
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => { setSetup(main.setup); setEditing(true); }}
-          >
-            <Text style={styles.editBtnText}>{t.stint.editarDatos}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete}>
-            <Text style={styles.deleteBtnText}>{t.stint.borrarStint}</Text>
-          </TouchableOpacity>
         </>
       )}
 

@@ -16,7 +16,6 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { discover, type SourceKind } from '../data/discovery';
 import { useDataSource } from '../data/sourceContext';
@@ -71,7 +70,6 @@ function Fuente({ titulo, subtitulo, marca, fondo, tinta, borde, chip, onPress }
 
 export default function DiscoveryScreen({ navigation }: Props) {
   const { setSource, clearSource } = useDataSource();
-  const insets = useSafeAreaInsets();
   const { t } = useIdioma();
   const tRef = useRef(t);
   tRef.current = t;
@@ -191,7 +189,7 @@ export default function DiscoveryScreen({ navigation }: Props) {
     // Solo volver y las dos fuentes: cada una ocupa media pantalla, así el
     // toque en pista es grande y no hay nada más que mirar.
     return (
-      <View style={[styles.chooseRoot, { paddingBottom: insets.bottom + 20 }]}>
+      <View style={[styles.chooseRoot, { paddingBottom: 20 }]}>
         <BackButton />
         <View style={styles.fuentes}>
           <Fuente
