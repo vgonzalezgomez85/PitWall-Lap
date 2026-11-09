@@ -879,6 +879,9 @@ export class PitWallSource implements DataSource {
     socket.on('training:lap', (payload: {
       lane: number; participantName?: string | null;
       lapTimeMs: number; bestMs: number | null; avgMs: number | null; count: number;
+      // Historial del carril: `pace` cronológico (hasta 120) y `laps`, las
+      // últimas 20 de la más nueva a la más vieja.
+      pace?: number[]; laps?: number[];
     }) => {
       if (this.trainingCompetition) {
         // Se sigue por nombre: el carril puede haber cambiado desde la última vez.
@@ -898,10 +901,14 @@ export class PitWallSource implements DataSource {
         avgLapMs: payload.avgMs,
       };
       this.emitState();
+      const historialMs = Array.isArray(payload.pace) && payload.pace.length > 0
+        ? payload.pace
+        : Array.isArray(payload.laps) ? [...payload.laps].reverse() : undefined;
       this.emitEvent({
         type: 'lap-completed',
         lapTimeMs: payload.lapTimeMs,
         lapCount: payload.count,
+        ...(historialMs ? { historialMs } : {}),
       });
     });
 

@@ -18,6 +18,13 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.23.1] — 2026-11-08
+
+### Corregido
+- **Android: la app sigue viva con la pantalla apagada, como en iPhone.** Al apagar la pantalla, Android dormía la app y el WiFi: se dejaban de recibir vueltas (grabar entreno guardaba 4 de 20 vueltas que contaba PitWall Manager) y no se locutaba nada. Ahora, mientras hay conexión con la pista, corre un servicio en primer plano (como Spotify con la música), con notificación fija y el procesador y el WiFi despiertos. Es el mismo servicio que ya usaba Radio, ahora `ServicioPrimerPlano`, que sigue activo mientras quede la pista o Radio.
+- **Android: la conexión con la pista va siempre por el WiFi, aunque no tenga internet.** En casi todas las pistas el WiFi no tiene internet. Con los datos móviles activos, Android podía mandar el tráfico por los datos y la IP del PC de la pista dejaba de ser alcanzable, sobre todo al alejarse del WiFi y volver: la app no se reconectaba. Ahora las conexiones a IPs locales (PitWall Manager y TicTac nuevo) se atan al WiFi, y el resto sigue por donde decida Android, así que Radio por internet sigue saliendo por los datos. Está en `modules/infolapws/android/.../RedLocal.kt`. El UDP (TicTac antiguo y búsqueda automática) aún no está cubierto.
+- **Grabar entreno: se recuperan las vueltas perdidas en un corte.** Si se corta la conexión, la siguiente vuelta trae el contador y el historial del carril (`pace`, hasta 120 vueltas) y la app rellena las que faltaban. Se ignoran las vueltas repetidas y las anteriores al GO. Mientras se graba, la pantalla no se apaga.
+
 ## [1.23.0] — 2026-11-03
 
 ### Añadido

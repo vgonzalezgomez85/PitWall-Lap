@@ -12,6 +12,7 @@ interface BackgroundTtsNative {
   shutUp(): void;
   getStatus(): string;
   modoVoz?(activo: boolean): void;
+  conexionPista?(activo: boolean): void;
   altavoz?(activo: boolean): void;
   rutaSalida?(): string;
   diagnosticoAudio?(): string;
@@ -83,21 +84,35 @@ export function onLocucionNativa(cb: (hablando: boolean) => void): () => void {
 }
 
 /**
- * Activa el keep-alive de audio (loop silente) que mantiene viva la app en
- * background para que la voz suene con la pantalla bloqueada. Llamar SOLO al
- * conectar con una carrera; mientras está activo iOS no suspende la app.
+ * Mantiene viva la app con la pantalla bloqueada mientras hay conexión con la
+ * pista, para que sigan llegando las vueltas y suene la voz. Llamar SOLO al
+ * conectar con una carrera o entreno.
+ *   - iOS: keep-alive de audio (loop silente); iOS no suspende la app.
+ *   - Android: servicio en primer plano con notificación fija, procesador y
+ *     WiFi despiertos (como Spotify con la música).
  */
 export function startKeepAlive(): void {
-  if (Platform.OS !== 'ios' || !native) return;
+  if (!native) return;
+  if (Platform.OS === 'android') {
+    try { native.conexionPista?.(true); } catch (e) { console.log('[BackgroundTts] conexionPista err:', e); }
+    return;
+  }
+  if (Platform.OS !== 'ios') return;
   try { native.start(); } catch (e) { console.log('[BackgroundTts] start err:', e); }
 }
 
 /**
- * Para el keep-alive y libera la sesión de audio para que iOS pueda suspender
- * la app. Llamar al desconectar de la carrera (ahorra batería).
+ * Para el keep-alive para que el sistema pueda dormir la app (ahorra batería).
+ * Llamar al desconectar de la carrera. En Android, si Radio sigue activa, el
+ * servicio continúa por ella.
  */
 export function stopKeepAlive(): void {
-  if (Platform.OS !== 'ios' || !native) return;
+  if (!native) return;
+  if (Platform.OS === 'android') {
+    try { native.conexionPista?.(false); } catch (e) { console.log('[BackgroundTts] conexionPista err:', e); }
+    return;
+  }
+  if (Platform.OS !== 'ios') return;
   try { native.stop(); } catch (e) { console.log('[BackgroundTts] stop err:', e); }
 }
 

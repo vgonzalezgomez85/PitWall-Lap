@@ -202,7 +202,9 @@ export interface LiveState {
 
 /** Eventos discretos. La capa de voz los traduce a locuciones. */
 export type SourceEvent =
-  | { type: 'lap-completed';     lapTimeMs: number | null; lapCount: number; isExit?: boolean; isFirstCrossing?: boolean; isFastest?: boolean }
+  // `historialMs`: tiempos recientes del carril en orden (PitWall, entreno) para
+  // que el grabador de stints recupere las vueltas perdidas durante un corte.
+  | { type: 'lap-completed';     lapTimeMs: number | null; lapCount: number; isExit?: boolean; isFirstCrossing?: boolean; isFastest?: boolean; historialMs?: number[] }
   // Vuelta de CUALQUIER entidad (no solo el seguido). La usa la estrategia de
   // neumáticos para modelar la goma de los rivales (Fase 2).
   | { type: 'entity-lap';        lane: number; name: string; lapTimeMs: number | null; lapNumber: number; isExit?: boolean; isFirstCrossing?: boolean }

@@ -1,7 +1,10 @@
 // Parte Android del módulo BackgroundTts. En Android la locución va por
-// react-native-tts (no hace falta sesión de audio especial), así que aquí solo
-// vive lo que necesita Radio: por dónde sale el sonido.
+// react-native-tts (no hace falta sesión de audio especial), así que aquí
+// viven el servicio en primer plano y lo que necesita Radio: por dónde sale el
+// sonido.
 //
+//   • conexionPista(activo): mantener viva la app mientras hay conexión con la
+//     pista (equivale al keep-alive de audio de iOS). Ver ServicioPrimerPlano.
 //   • modoVoz(true): modo comunicación (MODE_IN_COMMUNICATION). Es el que
 //     activa el cancelador de eco y la supresión de ruido del hardware, y por
 //     defecto saca la voz por el auricular del móvil, no por el altavoz.
@@ -30,6 +33,9 @@ class BackgroundTtsModule : Module() {
   private var callback: AudioDeviceCallback? = null
   private var modoVoz = false
   private var altavoz = false
+  // Motivos del servicio en primer plano; corre mientras quede alguno.
+  private var motivoPista = false
+  private var motivoRadio = false
 
   private val audio: AudioManager?
     get() = appContext.reactContext?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -60,12 +66,20 @@ class BackgroundTtsModule : Module() {
       if (activo) {
         am.mode = AudioManager.MODE_IN_COMMUNICATION
         aplicarAltavoz()
-        servicio(true)
+        motivoRadio = true
+        actualizarServicio()
       } else {
         limpiarDispositivo(am)
         am.mode = AudioManager.MODE_NORMAL
-        servicio(false)
+        motivoRadio = false
+        actualizarServicio()
       }
+    }
+
+    Function("conexionPista") { activo: Boolean ->
+      if (motivoPista == activo) return@Function
+      motivoPista = activo
+      actualizarServicio()
     }
 
     Function("altavoz") { activo: Boolean ->
@@ -88,19 +102,21 @@ class BackgroundTtsModule : Module() {
     }
   }
 
-  /** Arranca (o actualiza) o para el servicio en primer plano de Radio. */
-  private fun servicio(activo: Boolean) {
+  /** Arranca (o actualiza) el servicio en primer plano si queda algún motivo; si no, lo para. */
+  private fun actualizarServicio() {
     val ctx = appContext.reactContext ?: return
-    val intent = Intent(ctx, ServicioRadio::class.java)
+    val intent = Intent(ctx, ServicioPrimerPlano::class.java)
+      .putExtra(ServicioPrimerPlano.EXTRA_PISTA, motivoPista)
+      .putExtra(ServicioPrimerPlano.EXTRA_RADIO, motivoRadio)
     try {
-      if (activo) {
+      if (motivoPista || motivoRadio) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(intent)
         else ctx.startService(intent)
       } else {
         ctx.stopService(intent)
       }
     } catch (e: Exception) {
-      // Sin servicio la radio sigue funcionando con la pantalla encendida.
+      // Sin servicio todo sigue funcionando con la pantalla encendida.
     }
   }
 

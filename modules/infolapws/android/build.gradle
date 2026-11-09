@@ -17,4 +17,6 @@ android {
 dependencies {
   // OkHttp ya lo trae React Native; lo declaramos para compilar contra él.
   implementation 'com.squareup.okhttp3:okhttp:4.9.2'
+  // RedLocal.kt engancha su SocketFactory al WebSocket y al fetch de React Native.
+  implementation 'com.facebook.react:react-android'
 }

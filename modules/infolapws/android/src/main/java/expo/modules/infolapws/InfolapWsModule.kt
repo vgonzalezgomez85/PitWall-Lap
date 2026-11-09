@@ -35,6 +35,17 @@ class InfolapWsModule : Module() {
 
     Events("onOpen", "onMessage", "onClose", "onError")
 
+    // Tráfico a IPs locales siempre por el WiFi (ver RedLocal.kt). Se instala
+    // al crear el módulo y JS lo vuelve a pedir al arrancar, por si acaso.
+    OnCreate {
+      appContext.reactContext?.let { RedLocal.instalar(it) }
+    }
+
+    Function("activarRedLocal") {
+      appContext.reactContext?.let { RedLocal.instalar(it) }
+      Unit
+    }
+
     // Abre la conexión `id`. Los eventos llevan ese id para que la capa JS
     // descarte los de conexiones anteriores.
     Function("connect") { id: Int, url: String ->
@@ -92,6 +103,8 @@ class InfolapWsModule : Module() {
     val ssl = SSLContext.getInstance("TLS")
     ssl.init(null, arrayOf<TrustManager>(trustAll), SecureRandom())
     return OkHttpClient.Builder()
+      // La IP del PC del TicTac siempre por el WiFi (ver RedLocal.kt).
+      .socketFactory(FabricaSocketsLan)
       .sslSocketFactory(ssl.socketFactory, trustAll)
       // El certificado va a nombre de "InfoLapServer", no de la IP del PC.
       .hostnameVerifier { _, _ -> true }

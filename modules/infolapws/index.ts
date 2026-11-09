@@ -13,6 +13,7 @@ interface Subscription { remove(): void }
 interface InfolapWsNative {
   connect(id: number, url: string): void;
   close(id: number): void;
+  activarRedLocal?(): void;
   addListener(event: 'onOpen', cb: (e: { id: number }) => void): Subscription;
   addListener(event: 'onMessage', cb: (e: { id: number; data: string }) => void): Subscription;
   addListener(event: 'onClose', cb: (e: { id: number; code: number; reason: string }) => void): Subscription;
@@ -33,6 +34,16 @@ export interface InfolapWsConnection {
 }
 
 let nextId = 1;
+
+/**
+ * Android: las conexiones a IPs locales (PC de la pista) van siempre por el
+ * WiFi aunque no tenga internet y haya datos móviles; el resto sigue por la
+ * red que elija Android (Radio por internet). Ver RedLocal.kt. Llamar al
+ * arrancar la app, antes de conectar a nada. En iOS no hace nada.
+ */
+export function activarRedLocal(): void {
+  try { native?.activarRedLocal?.(); } catch (e) { console.log('[InfolapWs] activarRedLocal err:', e); }
+}
 
 export function isNativeAvailable(): boolean {
   return !!native;

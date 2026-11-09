@@ -10,6 +10,7 @@ import { TireStrategyProvider } from './src/strategy/useTireStrategy';
 import { useAutoSaveHistory } from './src/data/useAutoSaveHistory';
 import { migrateLegacyStorage } from './src/data/migrateStorage';
 import { prewarmLocalNetworkPermission } from './src/data/discovery';
+import { activarRedLocal } from './modules/infolapws';
 import HomeScreen        from './src/screens/HomeScreen';
 import CalendarioScreen from './src/screens/CalendarioScreen';
 import EventoScreen     from './src/screens/EventoScreen';
@@ -43,6 +44,10 @@ import type { RootStackParamList } from './src/navigation';
 import { navigationRef } from './src/navigationRef';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+// Android: el tráfico al PC de la pista siempre por el WiFi, aunque no tenga
+// internet (casi nunca lo tiene) y haya datos móviles. Antes de cualquier conexión.
+activarRedLocal();
 
 function AppInner() {
   // Hook que escucha snapshots de fin de carrera y los persiste localmente.

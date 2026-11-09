@@ -1,14 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  <!-- Radio con la pantalla apagada: Android solo deja usar el micro en
-       segundo plano desde un servicio en primer plano (con notificación). -->
+  <!-- Servicio en primer plano (ServicioPrimerPlano): mantiene viva la app
+       con la pantalla apagada mientras hay conexión con la pista o Radio.
+       Android solo deja usar el micro en segundo plano desde uno de estos.
+       WAKE_LOCK: procesador y WiFi despiertos con la pantalla apagada. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
 
   <application>
     <service
-      android:name="expo.modules.backgroundtts.ServicioRadio"
+      android:name="expo.modules.backgroundtts.ServicioPrimerPlano"
       android:exported="false"
       android:foregroundServiceType="microphone|mediaPlayback" />
   </application>
