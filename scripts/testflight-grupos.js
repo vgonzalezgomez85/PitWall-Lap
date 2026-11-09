@@ -57,6 +57,10 @@ function queProbar(version) {
   return bloque.split('\n')
     .filter(l => l.startsWith('- '))
     .map(l => l.replace(/\*\*|`/g, '').replace(/\s*\([^)]*\.(ts|tsx|js)[^)]*\)/g, ''))
+    // App Store Connect rechaza símbolos y emojis en «Qué probar» (409
+    // INVALID_TEXT con «★»): fuera los bloques de símbolos varios, dingbats,
+    // emojis y selectores de variante. Flechas, «», — y ≈ sí los acepta.
+    .map(l => l.replace(/\s*[☀-➿\u{1F000}-\u{1FAFF}️]/gu, ''))
     .join('\n')
     .slice(0, 4000);
 }
