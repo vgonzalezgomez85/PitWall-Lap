@@ -60,7 +60,7 @@ function queProbar(version) {
     // App Store Connect rechaza símbolos y emojis en «Qué probar» (409
     // INVALID_TEXT con «★»): fuera los bloques de símbolos varios, dingbats,
     // emojis y selectores de variante. Flechas, «», — y ≈ sí los acepta.
-    .map(l => l.replace(/\s*[☀-➿\u{1F000}-\u{1FAFF}️]/gu, ''))
+    .map(l => l.replace(/\s*[\u2600-\u27BF\u{1F000}-\u{1FAFF}\uFE0F]/gu, '').replace(/\s*\(\s*\)/g, ''))
     .join('\n')
     .slice(0, 4000);
 }
