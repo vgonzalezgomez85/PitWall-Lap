@@ -19,6 +19,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="${1:-$HOME/Desktop}"
 
+# Radio por internet: solo si se compila con la dirección del relé (si no, el
+# build no la lleva y no enseña ese modo). Ej.: EXPO_PUBLIC_RADIO_RELAY_URL=wss://…
+if [ -n "${EXPO_PUBLIC_RADIO_RELAY_URL:-}" ]; then
+  echo "==> Radio por internet: SÍ ($EXPO_PUBLIC_RADIO_RELAY_URL) — no se copia a la web"
+else
+  echo "==> Radio por internet: no (build público)"
+fi
+
+
 # Java: JAVA_HOME si está definido; si no, el JDK de Homebrew (no está
 # enlazado al PATH en esta máquina).
 if [ -z "${JAVA_HOME:-}" ]; then
@@ -63,7 +72,8 @@ echo "sha256: $(shasum -a 256 "$OUT" | cut -d' ' -f1)"
 
 # ── Publicar en la carpeta de la web (sin desplegar) ──────────────────────────
 LANDING="${LANDING_DIR:-$HOME/PitWall Landing}"
-if [ "$LANDING" != "-" ] && [ -d "$LANDING" ]; then
+# Un APK con el relé es de pruebas: nunca va a la web.
+if [ "$LANDING" != "-" ] && [ -d "$LANDING" ] && [ -z "${EXPO_PUBLIC_RADIO_RELAY_URL:-}" ]; then
   WEB="$LANDING/software/pitwall-lap"
   mkdir -p "$WEB"
   cp "$OUT" "$WEB/PitWallLap.apk"

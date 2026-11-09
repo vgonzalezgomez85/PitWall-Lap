@@ -1,4 +1,4 @@
-import { crearTransporteRelay, motivoCierre, type SocketMin } from './transporteRelay';
+import { crearTransporteRelay, motivoCierre, RADIO_INTERNET_DISPONIBLE, RELAY_URL, type SocketMin } from './transporteRelay';
 
 /** WebSocket de mentira: guarda lo enviado y deja simular lo que llega. */
 function socketFalso(url: string) {
@@ -68,5 +68,12 @@ describe('transporte por el relé', () => {
   it('traduce los códigos de cierre', () => {
     expect(motivoCierre(4429)).toContain('llena');
     expect(motivoCierre(1006)).toContain('1006');
+  });
+});
+
+describe('relé solo si el build lo trae', () => {
+  it('sin EXPO_PUBLIC_RADIO_RELAY_URL no hay dirección ni modo por internet', () => {
+    expect(RELAY_URL).toBe('');
+    expect(RADIO_INTERNET_DISPONIBLE).toBe(false);
   });
 });

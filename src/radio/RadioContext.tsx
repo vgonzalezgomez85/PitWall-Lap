@@ -30,7 +30,7 @@ import { consultarTipoSala, crearClienteRadio, crearServidorRadio, type Resultad
 import { buscarSalas as buscarSalasEnRed, publicarSala, type SalaDescubierta, type DiagnosticoBusqueda, type EstadoAnuncio, type ModoSala } from './red';
 import { ID_ASISTENTE } from './sala';
 import type { TransporteRadio } from './transporte';
-import { crearTransporteRelay, obtenerServidoresIce } from './transporteRelay';
+import { crearTransporteRelay, obtenerServidoresIce, RADIO_INTERNET_DISPONIBLE } from './transporteRelay';
 import { fijarServidoresIce } from './voz';
 import { crearTransporteTcp } from './tcp';
 import { useVozRadioMotor, type EstadoVozRadio } from './useVozRadio';
@@ -114,6 +114,9 @@ interface RadioContextValue {
 
 /** Transporte de la sala según el modo: TCP local o relé por internet. */
 function crearTransporte(modo: ModoSala, codigo: string): TransporteRadio {
+  if (modo === 'internet' && !RADIO_INTERNET_DISPONIBLE) {
+    throw new Error('este build no tiene Radio por internet');
+  }
   return modo === 'internet' ? crearTransporteRelay(codigo) : crearTransporteTcp();
 }
 

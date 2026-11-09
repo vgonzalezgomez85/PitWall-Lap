@@ -23,6 +23,7 @@ import type { SalaDescubierta } from '../radio/red';
 import { salaInternet, salaManual } from '../radio/salaManual';
 import type { ModoSala } from '../radio/red';
 import { PUERTO_RADIO } from '../radio/tcp';
+import { RADIO_INTERNET_DISPONIBLE } from '../radio/transporteRelay';
 import BackButton from '../ui/BackButton';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
@@ -207,14 +208,19 @@ export default function RadioScreen({ navigation }: Props) {
             disabled={!puedeCrear}
             style={styles.mt}
           />
-          <Button
-            label={t.radio.crearInternet}
-            variant="outline"
-            onPress={() => crear('internet')}
-            disabled={!puedeCrear}
-            style={styles.mtSm}
-          />
-          <Text style={styles.manualTexto}>{t.radio.crearModosTexto}</Text>
+          {/* Por internet solo si el build trae el relé (builds de prueba). */}
+          {RADIO_INTERNET_DISPONIBLE && (
+            <>
+              <Button
+                label={t.radio.crearInternet}
+                variant="outline"
+                onPress={() => crear('internet')}
+                disabled={!puedeCrear}
+                style={styles.mtSm}
+              />
+              <Text style={styles.manualTexto}>{t.radio.crearModosTexto}</Text>
+            </>
+          )}
         </Card>
       </Section>
 
@@ -272,7 +278,7 @@ export default function RadioScreen({ navigation }: Props) {
           })}
 
           {/* Por internet: solo el código (no hace falta estar en la misma red). */}
-          <View style={styles.manual}>
+          {RADIO_INTERNET_DISPONIBLE && <View style={styles.manual}>
             <Text style={type.label}>{t.radio.entrarInternet}</Text>
             <Text style={styles.manualTexto}>{t.radio.entrarInternetTexto}</Text>
             <View style={styles.manualFila}>
@@ -293,7 +299,7 @@ export default function RadioScreen({ navigation }: Props) {
                 disabled={!codigoInternet.trim() || consultando}
               />
             </View>
-          </View>
+          </View>}
 
           {/* Entrada manual: si la búsqueda no encuentra la sala. */}
           <View style={styles.manual}>

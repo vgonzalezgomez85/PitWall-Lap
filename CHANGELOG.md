@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [1.24.2] — 2026-11-09
+
+### Mejorado
+- **Radio por internet, solo en builds de prueba.** La dirección del relé ya no va en el código: se pasa al compilar con `EXPO_PUBLIC_RADIO_RELAY_URL`. Sin ella, la app no enseña «Crear sala por internet» ni «Entrar por internet», y Radio funciona solo por WiFi local (carrera y entrenos). Con ella, `npm run ios:testflight` sube el build solo a internos y `npm run apk` no lo copia a la web.
+
 ## [1.24.1] — 2026-11-09
 
 ### Corregido

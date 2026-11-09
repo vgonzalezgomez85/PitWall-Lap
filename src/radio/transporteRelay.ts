@@ -12,10 +12,16 @@
 
 import type { Canal, TransporteRadio } from './transporte';
 
-/** Dirección del relé desplegado (relay/README.md). */
-export const RELAY_URL = 'wss://pitwall-radio-relay.victorggomez.workers.dev';
+/** Dirección del relé desplegado (relay/README.md). No va en el código: se
+ *  pasa al compilar con `EXPO_PUBLIC_RADIO_RELAY_URL=wss://…` (Metro la
+ *  incrusta en el bundle). Sin ella, la app no tiene modo por internet: así
+ *  los builds públicos no gastan el relé ni el TURN de nadie. */
+export const RELAY_URL = (process.env.EXPO_PUBLIC_RADIO_RELAY_URL ?? '').trim().replace(/\/+$/, '');
 /** La misma, por HTTPS (credenciales TURN). */
 export const RELAY_HTTP = RELAY_URL.replace(/^wss:/, 'https:');
+
+/** ¿Este build trae modo por internet? (solo si se compiló con el relé). */
+export const RADIO_INTERNET_DISPONIBLE = RELAY_URL.startsWith('wss://');
 
 /** Lo mínimo de un WebSocket que usamos (el de React Native o uno de test). */
 export interface SocketMin {

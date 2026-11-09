@@ -266,6 +266,10 @@ falta, indicador en la baldosa, guía de uso.
   conexión directa entre móviles). Opciones sin servidor propio: señalización
   por servicios públicos (Nostr / MQTT / trackers) + TURN de Cloudflare; o un
   servicio gestionado (LiveKit Cloud…). Decidir si llega a hacer falta.
+  **Hecho en v1.21.0** con un relé propio en Cloudflare (`relay/`). Desde la
+  v1.24.2 solo lo traen los builds compilados con
+  `EXPO_PUBLIC_RADIO_RELAY_URL` (de prueba, solo a internos). Los públicos
+  no enseñan el modo por internet (ver `relay/README.md`).
 
 Cada fase que se mergee sigue la regla de versionado de `AGENTS.md` (versión en
 `app.json` + `package.json`, entrada en `CHANGELOG.md`, `changelog:sync`).

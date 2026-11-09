@@ -47,6 +47,16 @@ ARCHIVE="$ROOT/ios/build/PitWallLap.xcarchive"
 EXPORT_DIR="$ROOT/ios/build/export"
 OPCIONES="$ROOT/ios/build/ExportOptions.plist"
 
+# Radio por internet: solo si se compila con la dirección del relé (si no, el
+# build no la lleva y no enseña ese modo). Ej.: EXPO_PUBLIC_RADIO_RELAY_URL=wss://…
+if [ -n "${EXPO_PUBLIC_RADIO_RELAY_URL:-}" ]; then
+  echo "==> Radio por internet: SÍ ($EXPO_PUBLIC_RADIO_RELAY_URL) — solo a internos"
+  # Un build con el relé es de pruebas: nunca a los externos.
+  GRUPOS=(--solo-internos)
+else
+  echo "==> Radio por internet: no (build público)"
+fi
+
 echo "==> Changelog embebido"
 node "$ROOT/scripts/sync-changelog.js"
 
