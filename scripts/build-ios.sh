@@ -16,12 +16,14 @@
 # que cada subida sea única: TestFlight rechaza repetir (versión, build).
 #
 # Tras subirlo, scripts/testflight-grupos.js espera a que se procese, rellena
-# el «Qué probar» desde el CHANGELOG y lo asigna a internos y externos (con
-# revisión beta). Necesita la clave de la API en ~/.appstoreconnect.
+# el «Qué probar» desde el CHANGELOG y lo asigna a los internos y a los
+# externos de su línea (scripts/testflight-grupos.json; con revisión beta):
+# pública 2.x, o 1.x si se compila con EXPO_PUBLIC_RADIO_RELAY_URL. Necesita
+# la clave de la API en ~/.appstoreconnect.
 #
 # Uso: APPLE_TEAM_ID=XXXXXXXXXX npm run ios:testflight [-- --sin-subida|--solo-internos]
 #   --sin-subida     solo genera el .ipa (en ~/Desktop), sin subirlo.
-#   --solo-internos  sube, pero no lo da a los externos (Donantes).
+#   --solo-internos  sube, pero no lo da a los externos.
 
 set -euo pipefail
 
@@ -41,7 +43,7 @@ if [ -z "${APPLE_TEAM_ID:-}" ]; then
   exit 1
 fi
 
-VERSION="$(node -e "process.stdout.write(require('$ROOT/app.json').expo.version)")"
+VERSION="$(node -e "process.stdout.write(require('$ROOT/scripts/version-linea').versionDelBuild(require('$ROOT/app.json').expo.version, process.env.EXPO_PUBLIC_RADIO_RELAY_URL))")"
 BUILD="$(date +%y%m%d%H%M)"
 ARCHIVE="$ROOT/ios/build/PitWallLap.xcarchive"
 EXPORT_DIR="$ROOT/ios/build/export"
@@ -50,11 +52,11 @@ OPCIONES="$ROOT/ios/build/ExportOptions.plist"
 # Radio por internet: solo si se compila con la dirección del relé (si no, el
 # build no la lleva y no enseña ese modo). Ej.: EXPO_PUBLIC_RADIO_RELAY_URL=wss://…
 if [ -n "${EXPO_PUBLIC_RADIO_RELAY_URL:-}" ]; then
-  echo "==> Radio por internet: SÍ ($EXPO_PUBLIC_RADIO_RELAY_URL) — solo a internos"
-  # Un build con el relé es de pruebas: nunca a los externos.
-  GRUPOS=(--solo-internos)
+  echo "==> Radio por internet: SÍ ($EXPO_PUBLIC_RADIO_RELAY_URL) — línea 1.x ($VERSION)"
+  LINEA=internet
 else
-  echo "==> Radio por internet: no (build público)"
+  echo "==> Radio por internet: no — línea pública ($VERSION)"
+  LINEA=publica
 fi
 
 echo "==> Changelog embebido"
@@ -120,7 +122,7 @@ echo
 if [ "$SUBIR" = 1 ]; then
   echo "==> Subido a App Store Connect: $VERSION ($BUILD)"
   echo
-  node "$ROOT/scripts/testflight-grupos.js" "$BUILD" ${GRUPOS[@]+"${GRUPOS[@]}"}
+  node "$ROOT/scripts/testflight-grupos.js" "$BUILD" "--linea=$LINEA" ${GRUPOS[@]+"${GRUPOS[@]}"}
 else
   IPA="$(ls "$EXPORT_DIR"/*.ipa)"
   OUT="$HOME/Desktop/pitwall-lap-$VERSION-$BUILD.ipa"

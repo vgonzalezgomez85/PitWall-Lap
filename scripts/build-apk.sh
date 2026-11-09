@@ -45,7 +45,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 # lo escribimos si prebuild lo regeneró sin él).
 export ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
 
-VERSION="$(node -e "process.stdout.write(require('$ROOT/app.json').expo.version)")"
+VERSION="$(node -e "process.stdout.write(require('$ROOT/scripts/version-linea').versionDelBuild(require('$ROOT/app.json').expo.version, process.env.EXPO_PUBLIC_RADIO_RELAY_URL))")"
 OUT="$DEST/pitwall-lap-$VERSION.apk"
 
 echo "==> Changelog embebido"

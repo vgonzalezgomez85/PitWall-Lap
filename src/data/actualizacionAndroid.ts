@@ -10,6 +10,7 @@ import { Linking } from 'react-native';
 import {
   estaAtascada, hayVersionNueva, leerManifiesto, LIMITE_DESCARGA_MS, porcentaje, urlDelApk,
 } from './actualizacion';
+import { RADIO_INTERNET_DISPONIBLE } from '../radio/transporteRelay';
 
 /** Carpeta de la web donde están el APK y su `version.json`. */
 export const CARPETA_WEB = 'https://www.pitwall.es/software/pitwall-lap/';
@@ -32,6 +33,9 @@ export type ResultadoBusqueda =
 
 /** Pregunta a la web (con un límite de 6 s para toda la petición). Nunca lanza. */
 export async function comprobarActualizacion(actual: string): Promise<ResultadoBusqueda> {
+  // Un APK con Radio por internet es de la línea 1.x (de pruebas): la web
+  // publica la 2.x pública, que le quitaría esa función. No se ofrece.
+  if (RADIO_INTERNET_DISPONIBLE) return { estado: 'alDia' };
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), ESPERA_MS);
   try {

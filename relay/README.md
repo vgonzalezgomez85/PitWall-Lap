@@ -37,3 +37,8 @@ EXPO_PUBLIC_RADIO_RELAY_URL=wss://… npm run apk   # no se copia a la web
 
 Sin la variable (builds públicos de TestFlight y APK de la web), Radio solo
 funciona por WiFi local.
+
+Desde la 2.0.0 cada build lleva su línea de versión (`scripts/version-linea.js`):
+la pública es la de `app.json` (2.x) y la del relé, la misma con mayor 1
+(2.M.P → 1.(25+M).P). En TestFlight cada línea va a sus grupos externos
+(`scripts/testflight-grupos.json`).

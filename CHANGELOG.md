@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [2.0.0] — 2026-11-09
+
+### Mejorado
+- **Dos líneas de versiones con el mismo código.** La versión pública pasa a la **2.x** y no trae Radio por internet: Radio funciona por WiFi local, con salas de carrera y de entrenos. Los builds compilados con `EXPO_PUBLIC_RADIO_RELAY_URL` siguen en la **1.x** (2.0.0 → 1.25.0, 2.1.0 → 1.26.0), con Radio por internet; en Android no avisan de la 2.x de la web como actualización. Cada línea va en TestFlight a sus grupos externos (`scripts/testflight-grupos.json`).
+
 ## [1.24.2] — 2026-11-09
 
 ### Mejorado

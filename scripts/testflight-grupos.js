@@ -7,10 +7,13 @@
 //   ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8
 // ASC_KEY_ID y ASC_ISSUER_ID se pueden cambiar por entorno.
 //
-// Uso: node scripts/testflight-grupos.js <build> [--solo-internos]
+// Uso: node scripts/testflight-grupos.js <build> --linea=publica|internet [--solo-internos]
 //   <build>          número de build (CFBundleVersion), p. ej. 2610211046
-//   --solo-internos  no lo da a los externos (Donantes): builds de prueba
-//                    como los de la rama integracion_garage.
+//   --linea          a qué grupos externos va: los de esa línea en
+//                    scripts/testflight-grupos.json (pública 2.x o con Radio
+//                    por internet 1.x, ver scripts/version-linea.js).
+//   --solo-internos  no lo da a los externos: builds de prueba como los de la
+//                    rama integracion_garage.
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -18,6 +21,8 @@ const os = require('os');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
+const { versionPublica } = require('./version-linea');
+const GRUPOS_POR_LINEA = require('./testflight-grupos.json');
 const KEY_ID = process.env.ASC_KEY_ID || 'NVR82983JB';
 const ISSUER_ID = process.env.ASC_ISSUER_ID || '2387001d-c998-4ac9-aaf6-caee2cbf1d0a';
 const BUNDLE_ID = require(path.join(ROOT, 'app.json')).expo.ios.bundleIdentifier;
@@ -71,10 +76,12 @@ async function main() {
   const args = process.argv.slice(2);
   const numero = args.find(a => !a.startsWith('--'));
   const soloInternos = args.includes('--solo-internos');
-  if (!numero) {
-    console.error('uso: node scripts/testflight-grupos.js <build> [--solo-internos]');
+  const linea = args.find(a => a.startsWith('--linea='))?.slice('--linea='.length);
+  if (!numero || (linea !== 'publica' && linea !== 'internet')) {
+    console.error('uso: node scripts/testflight-grupos.js <build> --linea=publica|internet [--solo-internos]');
     process.exit(1);
   }
+  const externosDeLinea = GRUPOS_POR_LINEA[linea] ?? [];
 
   const app = (await api('GET', `/apps?filter[bundleId]=${BUNDLE_ID}`)).data[0];
   if (!app) throw new Error(`no encuentro la app ${BUNDLE_ID}`);
@@ -106,7 +113,9 @@ async function main() {
     });
   }
 
-  const texto = build.version ? queProbar(build.version) : null;
+  // Un build 1.x de la línea con Radio por internet usa la entrada de su
+  // versión pública (la que tiene el CHANGELOG).
+  const texto = build.version ? queProbar(versionPublica(build.version)) : null;
   if (texto) {
     const locs = (await api('GET', `/builds/${build.id}/betaBuildLocalizations`)).data;
     const es = locs.find(l => l.attributes.locale.startsWith('es')) ?? locs[0];
@@ -126,8 +135,17 @@ async function main() {
     console.log('==> «Qué probar» rellenado desde el CHANGELOG');
   }
 
-  const grupos = (await api('GET', `/apps/${app.id}/betaGroups?limit=50`)).data
-    .filter(g => soloInternos ? g.attributes.isInternalGroup : true);
+  const todos = (await api('GET', `/apps/${app.id}/betaGroups?limit=50`)).data;
+  // Cada línea, a sus externos: un nombre que no existe es un error (mejor
+  // parar que repartir mal), y sin ninguno solo lo reciben los internos.
+  const faltan = externosDeLinea.filter(n => !todos.some(g => !g.attributes.isInternalGroup && g.attributes.name === n));
+  if (faltan.length > 0) {
+    const hay = todos.filter(g => !g.attributes.isInternalGroup).map(g => `«${g.attributes.name}»`).join(', ');
+    throw new Error(`grupos de la línea ${linea} que no existen: ${faltan.join(', ')} (hay: ${hay})`);
+  }
+  const grupos = todos.filter(g => g.attributes.isInternalGroup
+    || (!soloInternos && externosDeLinea.includes(g.attributes.name)));
+  console.log(`==> Línea ${linea}${externosDeLinea.length === 0 ? ' (sin grupos externos en testflight-grupos.json)' : ''}`);
   for (const g of grupos) {
     const tipo = g.attributes.isInternalGroup ? 'interno' : 'externo';
     // Los internos con acceso a todos los builds ya lo reciben solos.
