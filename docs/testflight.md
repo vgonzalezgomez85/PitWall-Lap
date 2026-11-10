@@ -34,12 +34,16 @@ ejecución. `-- --sin-subida` deja solo el `.ipa` en el escritorio.
 
 Al terminar la subida, `scripts/testflight-grupos.js` espera a que App Store
 Connect procese el build, rellena el «Qué probar» con la entrada del
-`CHANGELOG.md`, lo asigna al grupo interno y a los externos y lo manda a
-revisión beta. Usa la clave de la API (Usuarios y acceso → Integraciones →
+`CHANGELOG.md`, lo asigna a los grupos de su línea (internos y externos,
+`scripts/testflight-grupos.json`: la pública 2.x a «Pitwall usuarios»; la 1.x
+con el relé a «PitWall testers» y «Pitwall testers ext») y lo manda a
+revisión beta. Los grupos internos deben tener la «Distribución automática»
+desactivada: si no, reciben también los builds de la otra línea (la API no
+deja cambiarla; el script avisa). Usa la clave de la API (Usuarios y acceso → Integraciones →
 App Store Connect API, rol *Gestor de apps*) guardada en
-`~/.appstoreconnect/private_keys/AuthKey_<ID>.p8`. Con `-- --solo-internos` no
-llega a los externos (builds de prueba, p. ej. `integracion_garage`). A mano:
-`node scripts/testflight-grupos.js <build> [--solo-internos]`.
+`~/.appstoreconnect/private_keys/AuthKey_<ID>.p8`. Con `-- --solo-internos` solo
+llega a los internos de la línea (builds de prueba, p. ej. `integracion_garage`).
+A mano: `node scripts/testflight-grupos.js <build> --linea=publica|internet [--solo-internos]`.
 
 Si hay que hacerlo desde la web, tras unos minutos de procesado el build
 aparece en TestFlight:

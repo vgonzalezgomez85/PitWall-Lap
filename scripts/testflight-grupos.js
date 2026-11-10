@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Reparte un build ya subido a TestFlight: espera a que App Store Connect lo
 // procese, rellena el «Qué probar» con la entrada del CHANGELOG, lo asigna a
-// los grupos de probadores y, si alguno es externo, lo manda a revisión beta.
+// los grupos de su línea y, si alguno es externo, lo manda a revisión beta.
 //
 // Usa la API de App Store Connect con una clave de equipo (rol Gestor de apps):
 //   ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8
@@ -9,11 +9,11 @@
 //
 // Uso: node scripts/testflight-grupos.js <build> --linea=publica|internet [--solo-internos]
 //   <build>          número de build (CFBundleVersion), p. ej. 2610211046
-//   --linea          a qué grupos externos va: los de esa línea en
-//                    scripts/testflight-grupos.json (pública 2.x o con Radio
-//                    por internet 1.x, ver scripts/version-linea.js).
-//   --solo-internos  no lo da a los externos: builds de prueba como los de la
-//                    rama integracion_garage.
+//   --linea          a qué grupos va (internos y externos): los de esa línea
+//                    en scripts/testflight-grupos.json (pública 2.x o con
+//                    Radio por internet 1.x, ver scripts/version-linea.js).
+//   --solo-internos  solo a los internos de la línea: builds de prueba como
+//                    los de la rama integracion_garage.
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -81,7 +81,7 @@ async function main() {
     console.error('uso: node scripts/testflight-grupos.js <build> --linea=publica|internet [--solo-internos]');
     process.exit(1);
   }
-  const externosDeLinea = GRUPOS_POR_LINEA[linea] ?? [];
+  const gruposDeLinea = GRUPOS_POR_LINEA[linea] ?? [];
 
   const app = (await api('GET', `/apps?filter[bundleId]=${BUNDLE_ID}`)).data[0];
   if (!app) throw new Error(`no encuentro la app ${BUNDLE_ID}`);
@@ -136,19 +136,19 @@ async function main() {
   }
 
   const todos = (await api('GET', `/apps/${app.id}/betaGroups?limit=50`)).data;
-  // Cada línea, a sus externos: un nombre que no existe es un error (mejor
-  // parar que repartir mal), y sin ninguno solo lo reciben los internos.
-  const faltan = externosDeLinea.filter(n => !todos.some(g => !g.attributes.isInternalGroup && g.attributes.name === n));
+  // Cada línea, a sus grupos (internos y externos): un nombre que no existe es
+  // un error (mejor parar que repartir mal).
+  const faltan = gruposDeLinea.filter(n => !todos.some(g => g.attributes.name === n));
   if (faltan.length > 0) {
-    const hay = todos.filter(g => !g.attributes.isInternalGroup).map(g => `«${g.attributes.name}»`).join(', ');
+    const hay = todos.map(g => `«${g.attributes.name}»`).join(', ');
     throw new Error(`grupos de la línea ${linea} que no existen: ${faltan.join(', ')} (hay: ${hay})`);
   }
-  const grupos = todos.filter(g => g.attributes.isInternalGroup
-    || (!soloInternos && externosDeLinea.includes(g.attributes.name)));
-  console.log(`==> Línea ${linea}${externosDeLinea.length === 0 ? ' (sin grupos externos en testflight-grupos.json)' : ''}`);
+  const grupos = todos.filter(g => gruposDeLinea.includes(g.attributes.name)
+    && (g.attributes.isInternalGroup || !soloInternos));
+  console.log(`==> Línea ${linea}`);
   for (const g of grupos) {
     const tipo = g.attributes.isInternalGroup ? 'interno' : 'externo';
-    // Los internos con acceso a todos los builds ya lo reciben solos.
+    // Los internos con distribución automática ya lo reciben solos.
     if (g.attributes.isInternalGroup && g.attributes.hasAccessToAllBuilds) {
       console.log(`==> ${g.attributes.name} (${tipo}): ya recibe todos los builds`);
       continue;
@@ -157,6 +157,16 @@ async function main() {
       data: [{ type: 'builds', id: build.id }],
     });
     console.log(`==> ${g.attributes.name} (${tipo}): asignado`);
+  }
+  if (grupos.length === 0) console.log('==> Ningún grupo de la línea lo recibe');
+  // Un interno con distribución automática fuera de la línea lo recibe igual
+  // (la API no deja desactivarla: es en la web, en el grupo).
+  for (const g of todos) {
+    if (g.attributes.isInternalGroup && g.attributes.hasAccessToAllBuilds
+      && !gruposDeLinea.includes(g.attributes.name)) {
+      console.log(`AVISO: «${g.attributes.name}» no es de la línea ${linea} pero tiene la distribución `
+        + 'automática activada y también lo recibe. Desactívala en App Store Connect → TestFlight → el grupo.');
+    }
   }
 
   if (grupos.some(g => !g.attributes.isInternalGroup)) {

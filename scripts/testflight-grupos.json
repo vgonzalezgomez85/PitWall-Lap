@@ -1,5 +1,5 @@
 {
-  "_comentario": "Grupos EXTERNOS de TestFlight de cada línea (los internos con acceso a todos los builds reciben las dos). publica = 2.x sin Radio por internet; internet = 1.x con el relé. Nombres exactos de App Store Connect.",
+  "_comentario": "Grupos de TestFlight (internos y externos) de cada línea: publica = 2.x sin Radio por internet; internet = 1.x con el relé. Nombres exactos de App Store Connect. Un grupo interno con «Distribución automática» recibe todos los builds aunque no esté en su línea: desactívala en los internos.",
   "publica": ["Pitwall usuarios"],
-  "internet": ["Pitwall testers ext"]
+  "internet": ["PitWall testers", "Pitwall testers ext"]
 }

@@ -31,7 +31,7 @@ compilan con ella traen el modo por internet:
 
 ```
 EXPO_PUBLIC_RADIO_RELAY_URL=wss://pitwall-radio-relay.<cuenta>.workers.dev \
-  APPLE_TEAM_ID=… npm run ios:testflight     # sube solo a internos
+  APPLE_TEAM_ID=… npm run ios:testflight     # va a los grupos de la línea internet
 EXPO_PUBLIC_RADIO_RELAY_URL=wss://… npm run apk   # no se copia a la web
 ```
 
@@ -40,5 +40,5 @@ funciona por WiFi local.
 
 Desde la 2.0.0 cada build lleva su línea de versión (`scripts/version-linea.js`):
 la pública es la de `app.json` (2.x) y la del relé, la misma con mayor 1
-(2.M.P → 1.(25+M).P). En TestFlight cada línea va a sus grupos externos
-(`scripts/testflight-grupos.json`).
+(2.M.P → 1.(25+M).P). En TestFlight cada línea va a sus grupos, internos y
+externos (`scripts/testflight-grupos.json`).

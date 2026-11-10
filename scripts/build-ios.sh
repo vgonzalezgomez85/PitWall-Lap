@@ -16,14 +16,14 @@
 # que cada subida sea única: TestFlight rechaza repetir (versión, build).
 #
 # Tras subirlo, scripts/testflight-grupos.js espera a que se procese, rellena
-# el «Qué probar» desde el CHANGELOG y lo asigna a los internos y a los
+# el «Qué probar» desde el CHANGELOG y lo asigna a los grupos internos y
 # externos de su línea (scripts/testflight-grupos.json; con revisión beta):
 # pública 2.x, o 1.x si se compila con EXPO_PUBLIC_RADIO_RELAY_URL. Necesita
 # la clave de la API en ~/.appstoreconnect.
 #
 # Uso: APPLE_TEAM_ID=XXXXXXXXXX npm run ios:testflight [-- --sin-subida|--solo-internos]
 #   --sin-subida     solo genera el .ipa (en ~/Desktop), sin subirlo.
-#   --solo-internos  sube, pero no lo da a los externos.
+#   --solo-internos  sube, pero solo lo da a los internos de la línea.
 
 set -euo pipefail
 
