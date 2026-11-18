@@ -18,6 +18,11 @@ para lo importante y `código` para rutas, flags e identificadores.
 
 ---
 
+## [2.0.1] — 2026-11-18
+
+### Corregido
+- **TicTac antiguo: con más pilotos que carriles, la app sigue al piloto y no al carril.** El TicTac antiguo no dice quién corre cada manga y la app se quedaba en el carril del piloto: mientras descansaba, cantaba como suyas las vueltas del que entraba en su lugar, y si volvía al mismo carril no avisaba de su turno y mezclaba sus vueltas con las del otro. Ahora, si aparece otro nombre en su carril, pasa a descanso y se calla; cuando su nombre vuelve a cualquier carril (también el mismo), dice «tu turno, carril N» y empieza la manga de cero.
+
 ## [2.0.0] — 2026-11-09
 
 ### Mejorado

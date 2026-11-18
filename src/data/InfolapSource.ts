@@ -312,6 +312,10 @@ export class InfolapSource implements DataSource {
   /** TicTac antiguo: posición de mi piloto en su último cruce, según el
    *  TicTac. Manda sobre la de `clasificacionLocal`. */
   private posicionOficial: number | null = null;
+  /** TicTac antiguo: mi piloto ha dejado su carril (otro nombre en él) y aún
+   *  no ha aparecido en ninguno. El antiguo no manda quién corre cada manga:
+   *  se sigue al piloto por el nombre de los paquetes. */
+  private descansaAntiguo = false;
   private snapshotListeners: ((s: RaceStatsSnapshot) => void)[] = [];
   private sessionStartedAt = new Date();
   private stateListeners: ((s: LiveState) => void)[] = [];
@@ -578,6 +582,7 @@ export class InfolapSource implements DataSource {
     this.pilotCumMs.clear();
     this.lastRivals = [];
     this.posicionOficial = null;
+    this.descansaAntiguo = false;
     this.lastConfigKey = null;
     this.raceLapsSinceConfig = false;
     this.reloj.reiniciar();
@@ -604,6 +609,7 @@ export class InfolapSource implements DataSource {
     this.selectedName = p?.name ?? null;
     this.selectedLane = this.laneForName(this.selectedName);
     this.posicionOficial = null;
+    this.descansaAntiguo = false;
     // Al cambiar de piloto propio dejamos de seguir al rival anterior.
     this.rivalLane = null;
     this.rivalSelectedName = null;
@@ -701,17 +707,44 @@ export class InfolapSource implements DataSource {
     this.laneLastMs.clear();
     this.laneLastIngestAt.clear();
     this.selectedLane = newLane;
+    this.descansaAntiguo = false;
     // El carril del rival se re-resolverá cuando llegue su paquete.
     this.rivalLane = this.laneForName(this.rivalSelectedName);
     this.currentState = {
       ...this.currentState,
+      // Vuelve a correr (también tras descansar con el TicTac antiguo).
+      status: 'my-turn',
       myLane: newLane,
       lapCount: 0,
       lastLapMs: null,
       bestLapMs: null,
+      avgLapMs: null,
     };
     this.applyRivalToState();
     this.emitEvent({ type: 'manga-changed', newMangaNum: this.mangaCount, newLane });
+    this.emitState();
+  }
+
+  /** TicTac antiguo: otro piloto ocupa mi carril → mi piloto descansa. Se
+   *  deja de seguir el carril para no cantar las vueltas del que entra; al
+   *  reaparecer su nombre en cualquier carril (también el mismo) vuelve con
+   *  `handleLaneRotation`. En una rotación normal también pasa por aquí un
+   *  instante, si llega antes el carril viejo que el nuevo. */
+  private pasarADescansoAntiguo(): void {
+    this.descansaAntiguo = true;
+    this.selectedLane = null;
+    this.posicionOficial = null;
+    this.currentState = {
+      ...this.currentState,
+      status: 'resting',
+      myLane: null,
+      lapCount: 0,
+      lastLapMs: null,
+      bestLapMs: null,
+      avgLapMs: null,
+    };
+    this.applyRivalToState();
+    this.refreshDerived();
     this.emitState();
   }
 
@@ -719,7 +752,8 @@ export class InfolapSource implements DataSource {
    *  todavía no se conocía el carril de alguno de ellos. */
   private resolveLanes(): void {
     let changed = false;
-    if (this.selectedLane == null && this.selectedName) {
+    // Descansando (TicTac antiguo), la vuelta la marca su paquete.
+    if (this.selectedLane == null && this.selectedName && !this.descansaAntiguo) {
       const lane = this.laneForName(this.selectedName);
       if (lane != null) {
         this.selectedLane = lane;
@@ -1582,6 +1616,17 @@ export class InfolapSource implements DataSource {
         this.nuevaMangaAntiguo();
       }
       this.laneName.set(pkt.lane, pkt.driverName);
+
+      // TicTac antiguo: se sigue al piloto, no al carril. Otro nombre en mi
+      // carril = descanso; mi nombre de vuelta en un carril = mi turno.
+      if (!this.wssMode && this.selectedName) {
+        const soyYo = this.nameMatches(pkt.driverName, this.selectedName);
+        if (soyYo && this.descansaAntiguo) {
+          this.handleLaneRotation(pkt.lane);
+        } else if (!soyYo && this.selectedLane === pkt.lane) {
+          this.pasarADescansoAntiguo();
+        }
+      }
 
       // Mi piloto ha aparecido en otro carril → rotación de carriles
       // (nueva manga). Le seguimos a su carril nuevo.

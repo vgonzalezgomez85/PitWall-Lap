@@ -564,6 +564,99 @@ describe('InfolapSource con TicTac nuevo (WSS)', () => {
     }
   });
 
+  describe('TicTac antiguo con más pilotos que carriles: se sigue al piloto', () => {
+    async function conPiloto1() {
+      const c = await connectAntiguo();
+      const events: SourceEvent[] = [];
+      let state!: LiveState;
+      c.src.onEvent(e => events.push(e));
+      c.src.onStateChange(s => { state = s; });
+      c.src.selectParticipant('#001');
+      const vueltas = () => events.flatMap(e => e.type === 'lap-completed' ? [e.lapTimeMs] : []);
+      const turnos = () => events.filter(e => e.type === 'manga-changed');
+      // Manga 1: Piloto 1 en el carril 1, Piloto 2 en el 2.
+      c.send(1, 1, 'Piloto 1', null); c.send(2, 2, 'Piloto 2', null);
+      c.send(3, 1, 'Piloto 1', 3000); c.send(4, 2, 'Piloto 2', 3100);
+      expect(vueltas()).toEqual([3000]);
+      return { ...c, estado: () => state, vueltas, turnos };
+    }
+
+    it('descansa: no canta las vueltas del que entra en su carril', async () => {
+      jest.useFakeTimers();
+      try {
+        const { src, send, estado, vueltas } = await conPiloto1();
+        jest.advanceTimersByTime(60_000);
+        send(5, 1, 'Piloto 3', null); send(6, 2, 'Piloto 2', null);
+        expect(estado()).toMatchObject({ status: 'resting', myLane: null, lapCount: 0 });
+        send(7, 1, 'Piloto 3', 3200); send(8, 2, 'Piloto 2', 3300);
+        expect(vueltas()).toEqual([3000]);
+        expect(estado().lastLapMs).toBeNull();
+        src.disconnect();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('vuelve al mismo carril: «tu turno» y contadores de cero', async () => {
+      jest.useFakeTimers();
+      try {
+        const { src, send, estado, vueltas, turnos } = await conPiloto1();
+        jest.advanceTimersByTime(60_000);
+        send(5, 1, 'Piloto 3', null); send(6, 2, 'Piloto 2', null);
+        send(7, 1, 'Piloto 3', 3200); send(8, 2, 'Piloto 2', 3300);
+        jest.advanceTimersByTime(60_000);
+        send(9, 1, 'Piloto 1', null); send(10, 2, 'Piloto 3', null);
+        expect(estado()).toMatchObject({ status: 'my-turn', myLane: 1, lapCount: 0, bestLapMs: null });
+        expect(turnos()).toHaveLength(1);
+        expect(turnos()[0]).toMatchObject({ newLane: 1 });
+        send(11, 1, 'Piloto 1', 3400); send(12, 2, 'Piloto 3', 3500);
+        expect(vueltas()).toEqual([3000, 3400]);
+        expect(estado().lapCount).toBe(1);
+        src.disconnect();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('vuelve a otro carril, con la repetición de la vuelta vieja por delante', async () => {
+      jest.useFakeTimers();
+      try {
+        const { src, send, estado, vueltas, turnos } = await conPiloto1();
+        jest.advanceTimersByTime(60_000);
+        send(4, 2, 'Piloto 3', 3100); send(3, 1, 'Piloto 2', 3000);
+        send(5, 1, 'Piloto 2', 3200); send(6, 2, 'Piloto 3', 3300);
+        expect(estado().status).toBe('resting');
+        jest.advanceTimersByTime(60_000);
+        // El Gestor repite la última vuelta del carril con el nombre nuevo.
+        send(6, 2, 'Piloto 1', 3300); send(5, 1, 'Piloto 3', 3200);
+        expect(estado()).toMatchObject({ status: 'my-turn', myLane: 2 });
+        expect(turnos()).toEqual([expect.objectContaining({ newLane: 2 })]);
+        send(7, 2, 'Piloto 1', 3600);
+        expect(vueltas()).toEqual([3000, 3600]);
+        src.disconnect();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('rotación normal sin descanso: un solo «tu turno»', async () => {
+      jest.useFakeTimers();
+      try {
+        const { src, send, estado, vueltas, turnos } = await conPiloto1();
+        jest.advanceTimersByTime(60_000);
+        // Llega antes el carril viejo (con otro) que el nuevo (conmigo).
+        send(3, 1, 'Piloto 2', 3000); send(4, 2, 'Piloto 1', 3100);
+        expect(estado()).toMatchObject({ status: 'my-turn', myLane: 2 });
+        expect(turnos()).toHaveLength(1);
+        send(5, 2, 'Piloto 1', 2900);
+        expect(vueltas()).toEqual([3000, 2900]);
+        src.disconnect();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
   it('TicTac nuevo que abre el WSS tarde: se reintenta y se pasa a él', async () => {
     jest.useFakeTimers();
     try {
